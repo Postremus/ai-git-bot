@@ -19,7 +19,7 @@
 - 📝 Keep documentation in sync with the code
 - 🌍 Keep translations in sync across locale files
 - 💬 Answer questions inside code reviews
-
+- 📊 Observe workflows via Prometheus metrics
 
 ## Why does this project exist?
 
@@ -247,6 +247,8 @@ Assign an issue to a coding bot and it can create an implementation pull request
 | **[i18n Coverage](doc/PR_WORKFLOWS_I18N_COVERAGE.md)** | PR opened or command triggered | Missing translations drafted across locale files |
 | **[PR Re-Review](doc/PR_WORKFLOWS_REVIEW.md)** | Force-push or review request | Updated analysis |
 | **[Workflow Automation](doc/PR_WORKFLOWS.md)** | Git events | Automated engineering chores |
+| **[Prometheus Metrics](doc/DEPLOYMENT.md#metrics-prometheus)** | Built-in `/actuator/prometheus` endpoint | Operational metrics for reviews, findings, AI usage, errors, and tool calls |
+| **[Outgoing Webhooks](doc/OUTGOING_WEBHOOKS.md)** | Signed event push to external systems | Durable, retried HMAC-signed notifications for workflow runs, findings, and issue assignments |
 
 ---
 
@@ -396,12 +398,12 @@ The bot:
 ---
 ## Quick Start
 
-Run AI-Git-Bot locally using Docker Compose.
+### Quick testing
+
+For a quick local test, run AI-Git-Bot with a single Docker command using the built-in H2 database and default settings:
 
 ```bash
-git clone https://github.com/tmseidel/ai-git-bot.git
-cd ai-git-bot
-docker compose up --build -d
+docker run -p 8080:8080 tmseidel/ai-git-bot:latest
 ```
 
 Then:
@@ -413,6 +415,18 @@ Then:
 5. Create a Bot
 6. Configure the webhook
 7. You're done
+
+### Production deployment
+
+For a configured production or long-term deployment, we recommend the Docker Compose approach, which gives you full control over configuration:
+
+```bash
+git clone https://github.com/tmseidel/ai-git-bot.git
+cd ai-git-bot
+docker compose up --build -d
+```
+
+See **[Deployment Guide](doc/DEPLOYMENT.md)** for detailed configuration instructions.
 
 ---
 

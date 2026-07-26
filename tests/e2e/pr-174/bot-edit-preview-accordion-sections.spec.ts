@@ -14,6 +14,7 @@ test('Bot-Edit System-Prompt preview modal shows all 10 accordion sections', asy
   const previewBtn = page
     .locator('#previewSystemPrompt')
   await previewBtn.click();
+  await page.waitForLoadState('domcontentloaded');
 
   const previewAccordion = page.locator('#systemPromptPreviewAccordion');
   await expect(previewAccordion).toBeVisible({ timeout: 8000 });

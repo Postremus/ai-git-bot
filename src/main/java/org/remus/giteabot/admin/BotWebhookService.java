@@ -11,6 +11,8 @@ import org.remus.giteabot.ai.AiAuditContext;
 import org.remus.giteabot.ai.AiClient;
 import org.remus.giteabot.config.AgentConfigProperties;
 import org.remus.giteabot.config.PromptService;
+import org.remus.giteabot.eventhook.EventHookEventType;
+import org.remus.giteabot.eventhook.EventHookPublisher;
 import org.remus.giteabot.gitea.model.WebhookPayload;
 import org.remus.giteabot.mcp.McpOrchestrationService;
 import org.remus.giteabot.prworkflow.PrWorkflowContext;
@@ -33,6 +35,7 @@ import org.remus.giteabot.systemsettings.McpToolSelectionService;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
 
@@ -63,6 +66,7 @@ public class BotWebhookService {
     private final ReadmeSyncSlashCommandHandler readmeSyncSlashCommandHandler;
     private final I18nCoverageSlashCommandHandler i18nCoverageSlashCommandHandler;
     private final WorkflowSelectionService workflowSelectionService;
+    private final EventHookPublisher eventHookPublisher;
     private final AgentServiceFactory agentServiceFactory;
 
     public BotWebhookService(AiClientFactory aiClientFactory,
@@ -84,7 +88,8 @@ public class BotWebhookService {
                              AgentReviewSlashCommandHandler agentReviewSlashCommandHandler,
                              ReadmeSyncSlashCommandHandler readmeSyncSlashCommandHandler,
                              I18nCoverageSlashCommandHandler i18nCoverageSlashCommandHandler,
-                             WorkflowSelectionService workflowSelectionService) {
+                             WorkflowSelectionService workflowSelectionService,
+                             EventHookPublisher eventHookPublisher) {
         this.giteaClientFactory = giteaClientFactory;
         this.agentSessionService = agentSessionService;
         this.botService = botService;
@@ -96,6 +101,7 @@ public class BotWebhookService {
         this.readmeSyncSlashCommandHandler = readmeSyncSlashCommandHandler;
         this.i18nCoverageSlashCommandHandler = i18nCoverageSlashCommandHandler;
         this.workflowSelectionService = workflowSelectionService;
+        this.eventHookPublisher = eventHookPublisher;
         this.agentServiceFactory = new AgentServiceFactory(aiClientFactory, giteaClientFactory,
                 promptService, agentConfig, agentSessionService, toolExecutionService, toolCatalog,
                 workspaceService, mcpOrchestrationService, mcpToolSelectionService, botToolSelectionService);
@@ -398,10 +404,13 @@ public class BotWebhookService {
         }
         if (bot.getBotType() == BotType.WRITER) {
             try {
+                publishIssueEvent(EventHookEventType.ISSUE_ASSIGNMENT_STARTED, bot, payload, null, true);
                 createWriterAgentService(bot).handleIssueAssigned(payload);
+                publishIssueEvent(EventHookEventType.ISSUE_ASSIGNMENT_COMPLETED, bot, payload, null, false);
             } catch (Exception e) {
                 log.error("[Bot '{}'] Failed to handle writer issue assignment: {}", bot.getName(), e.getMessage(), e);
                 botService.recordError(bot, e.getMessage());
+                publishIssueEvent(EventHookEventType.ISSUE_ASSIGNMENT_FAILED, bot, payload, e.getMessage(), false);
             }
             return;
         }
@@ -410,11 +419,39 @@ public class BotWebhookService {
             return;
         }
         try {
+            publishIssueEvent(EventHookEventType.ISSUE_ASSIGNMENT_STARTED, bot, payload, null, true);
             createIssueImplementationService(bot).handleIssueAssigned(payload);
+            publishIssueEvent(EventHookEventType.ISSUE_ASSIGNMENT_COMPLETED, bot, payload, null, false);
         } catch (Exception e) {
             log.error("[Bot '{}'] Failed to handle issue assignment: {}", bot.getName(), e.getMessage(), e);
             botService.recordError(bot, e.getMessage());
+            publishIssueEvent(EventHookEventType.ISSUE_ASSIGNMENT_FAILED, bot, payload, e.getMessage(), false);
         }
+    }
+
+    /**
+     * Emits an outgoing-webhook event for an issue assignment: STARTED before the
+     * delegation (with the issue title), COMPLETED on successful return, FAILED in
+     * the catch (with the error). The issue number rides in the envelope's issue
+     * slot; {@code pullRequest} stays null. The publisher never throws.
+     */
+    private void publishIssueEvent(EventHookEventType type, Bot bot, WebhookPayload payload,
+                                   String error, boolean includeTitle) {
+        String owner = payload.getRepository() != null && payload.getRepository().getOwner() != null
+                ? payload.getRepository().getOwner().getLogin() : null;
+        String repo = payload.getRepository() != null ? payload.getRepository().getName() : null;
+        Long issueNumber = payload.getIssue() != null ? payload.getIssue().getNumber() : null;
+        Map<String, Object> data = new LinkedHashMap<>();
+        if (issueNumber != null) {
+            data.put("issueNumber", issueNumber);
+        }
+        if (includeTitle && payload.getIssue() != null && payload.getIssue().getTitle() != null) {
+            data.put("issueTitle", payload.getIssue().getTitle());
+        }
+        if (error != null) {
+            data.put("error", error);
+        }
+        eventHookPublisher.publish(type, bot, owner, repo, null, issueNumber, data);
     }
 
     /**

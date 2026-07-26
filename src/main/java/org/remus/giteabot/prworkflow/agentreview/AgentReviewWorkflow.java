@@ -15,26 +15,10 @@ import org.springframework.stereotype.Component;
 
 import java.util.Map;
 
-/**
- * Agentic {@link PrWorkflow}: reviews a pull request like
- * {@link org.remus.giteabot.prworkflow.review.ReviewWorkflow}, but lets the LLM
- * iteratively call read-only repository tools and MCP tools (via
- * {@link AgentReviewService}) before producing its review.
- *
- * <p>The bot may <strong>only read</strong> the repository — no file-mutation,
- * build/validation or git-write tools are exposed. The result is a Markdown PR
- * comment. When operators enable the optional formal review decision, the bot
- * may additionally approve or request changes based on the review findings.</p>
- *
- * <p>Category {@link PrWorkflowCategory#REVIEW}; the workflow is opt-in per bot
- * via the workflow-selection UI (the orchestrator only runs workflows an
- * operator has explicitly enabled on the bot's configuration).</p>
- */
 @Slf4j
 @Component
 public class AgentReviewWorkflow implements PrWorkflow {
 
-    /** Public, stable identifier referenced by config rows and metrics tags. */
     public static final String KEY = "agentic-review";
 
     static final int DEFAULT_MAX_TOOL_ROUNDS = 12;
@@ -42,60 +26,41 @@ public class AgentReviewWorkflow implements PrWorkflow {
     static final String DEFAULT_FORMAL_REVIEW_DECISION_PROMPT = """
             # Formal Review Decision
 
-            Based on your review findings, decide whether to approve, request changes,
-            or leave the PR review state unchanged. Use the following guidelines:
+            After writing your review findings, classify them by severity:
 
-            - **APPROVE** — The PR is correct, follows best practices, and has no
-            significant issues that should block merging. Minor style nits or
-            optional suggestions do not warrant blocking.
+            - **BLOCKER** — Critical issues that must be fixed before merging:
+              bugs, security vulnerabilities, broken tests, missing error handling,
+              or any problem that could cause a production defect.
 
-            - **REQUEST_CHANGES** — The PR has non-trivial bugs, security concerns,
-            missing error handling, broken tests, or significant code quality issues
-            that must be fixed before merging. Regression risk alone is not enough —
-            there must be an identifiable problem.
+            - **MEDIUM** — Notable issues that should be addressed but may not block
+              merging on their own: significant code-quality concerns, unclear
+              naming, missing tests for edge cases, or maintainability risks.
 
-            - **NONE** — There are minor issues or suggestions, but nothing blocking.
-            Also use NONE when you lack sufficient information to make a confident
-            decision, or when the change is too large to assess reliably from the
-            diff alone.""";
+            - **LOW** — Minor issues, style nits, optional suggestions, or small
+              observations that should not block merging.
+
+            The application will decide whether to approve or request changes based
+            on the configured thresholds for each severity class. Do not emit
+            APPROVE, REQUEST_CHANGES, or NONE yourself; only provide the classification
+            counts below.""";
 
     private final AgentReviewServiceFactory serviceFactory;
     private final WorkflowSelectionService selectionService;
 
-    /**
-     * {@code selectionService} is {@link Lazy} for the same reason as in
-     * {@code E2ETestWorkflow}: it transitively depends on
-     * {@code PrWorkflowRegistry}, which enumerates every {@link PrWorkflow}
-     * bean (including this one). The lazy proxy breaks the construction cycle.
-     */
     public AgentReviewWorkflow(AgentReviewServiceFactory serviceFactory,
                                @Lazy WorkflowSelectionService selectionService) {
         this.serviceFactory = serviceFactory;
         this.selectionService = selectionService;
     }
 
-    @Override
-    public String key() {
-        return KEY;
-    }
-
-    @Override
-    public String displayName() {
-        return "Agentic PR Review";
-    }
-
-    @Override
-    public String description() {
+    @Override public String key() { return KEY; }
+    @Override public String displayName() { return "Agentic PR Review"; }
+    @Override public String description() {
         return "Reviews the pull request with an LLM that can iteratively call read-only "
                 + "repository and MCP tools to gather context before writing its findings as a "
-                + "Markdown comment. When enabled, may optionally post a formal review decision "
-                + "(approve / request changes) based on the operator-configured criteria.";
+                + "Markdown comment.";
     }
-
-    @Override
-    public PrWorkflowCategory category() {
-        return PrWorkflowCategory.REVIEW;
-    }
+    @Override public PrWorkflowCategory category() { return PrWorkflowCategory.REVIEW; }
 
     @Override
     public WorkflowParamsSchema paramsSchema() {
@@ -104,22 +69,32 @@ public class AgentReviewWorkflow implements PrWorkflow {
                         "Max tool-exploration rounds",
                         WorkflowParamField.ParamType.INTEGER, false,
                         String.valueOf(DEFAULT_MAX_TOOL_ROUNDS),
-                        "Upper bound on how many explore/answer rounds the agent may take while "
-                                + "reading the repository (1-30). Higher values allow deeper analysis "
-                                + "at higher token cost."),
+                        "Upper bound on how many explore/answer rounds the agent may take."),
                 new WorkflowParamField(AgentReviewParam.ENABLE_FORMAL_REVIEW_DECISION,
                         "Enable formal review decision",
                         WorkflowParamField.ParamType.BOOLEAN, false,
                         "false",
-                        "When enabled, the bot may post a formal PR review decision (approve "
-                                + "or request changes) based on the criteria configured below."),
+                        "When enabled, the bot may post a formal PR review decision."),
                 new WorkflowParamField(AgentReviewParam.FORMAL_REVIEW_DECISION_PROMPT,
                         "Approval decision prompt",
                         WorkflowParamField.ParamType.TEXT, false,
                         DEFAULT_FORMAL_REVIEW_DECISION_PROMPT,
-                        "Criteria for when the bot should approve, request changes, or leave "
-                                + "the PR review state unchanged. Only applies when the "
-                                + "\"Enable formal review decision\" checkbox is ticked."));
+                        "Criteria the model uses to classify findings by severity."),
+                new WorkflowParamField(AgentReviewParam.BLOCKER_THRESHOLD,
+                        "Blocker must be less or equal",
+                        WorkflowParamField.ParamType.INTEGER, false,
+                        null,
+                        "Maximum allowed BLOCKER findings for a formal APPROVE. Leave empty to ignore."),
+                new WorkflowParamField(AgentReviewParam.MEDIUM_THRESHOLD,
+                        "Medium must be less or equal",
+                        WorkflowParamField.ParamType.INTEGER, false,
+                        null,
+                        "Maximum allowed MEDIUM findings for a formal APPROVE. Leave empty to ignore."),
+                new WorkflowParamField(AgentReviewParam.LOW_THRESHOLD,
+                        "Low must be less or equal",
+                        WorkflowParamField.ParamType.INTEGER, false,
+                        null,
+                        "Maximum allowed LOW findings for a formal APPROVE. Leave empty to ignore."));
     }
 
     @Override
@@ -137,11 +112,16 @@ public class AgentReviewWorkflow implements PrWorkflow {
         boolean enableFormalDecision = boolParam(params, AgentReviewParam.ENABLE_FORMAL_REVIEW_DECISION, false);
         String decisionPrompt = strParam(params, AgentReviewParam.FORMAL_REVIEW_DECISION_PROMPT,
                 DEFAULT_FORMAL_REVIEW_DECISION_PROMPT);
+        AgentReviewService.SeverityThresholds thresholds = new AgentReviewService.SeverityThresholds(
+                integerParam(params, AgentReviewParam.BLOCKER_THRESHOLD),
+                integerParam(params, AgentReviewParam.MEDIUM_THRESHOLD),
+                integerParam(params, AgentReviewParam.LOW_THRESHOLD));
 
         context.requireActive("before running agentic review");
 
         boolean reviewed = serviceFactory.create(bot)
-                .reviewPullRequest(payload, maxToolRounds, enableFormalDecision, decisionPrompt);
+                .reviewPullRequest(payload, maxToolRounds, enableFormalDecision, decisionPrompt, thresholds,
+                        context.runId(), context.auditToolCallConsumer());
 
         context.appendStep("agentic-review",
                 reviewed ? "Posted agentic review for PR" : "Skipped — no diff or no review produced");
@@ -170,44 +150,37 @@ public class AgentReviewWorkflow implements PrWorkflow {
     }
 
     private Map<String, Object> resolveParams(Bot bot) {
-        if (bot.getWorkflowConfiguration() == null) {
-            return Map.of();
-        }
+        if (bot.getWorkflowConfiguration() == null) return Map.of();
         return selectionService.resolveParams(bot.getWorkflowConfiguration().getId(), KEY);
     }
 
     private int intParam(Map<String, Object> params, AgentReviewParam name, int fallback) {
         Object raw = params.get(name.key());
-        if (raw instanceof Number n) {
-            return n.intValue();
-        }
-        if (raw == null) {
-            return fallback;
-        }
-        try {
-            return Integer.parseInt(raw.toString().trim());
-        } catch (NumberFormatException e) {
-            return fallback;
-        }
+        if (raw instanceof Number n) return n.intValue();
+        if (raw == null) return fallback;
+        try { return Integer.parseInt(raw.toString().trim()); }
+        catch (NumberFormatException e) { return fallback; }
+    }
+
+    private Integer integerParam(Map<String, Object> params, AgentReviewParam name) {
+        Object raw = params.get(name.key());
+        if (raw instanceof Number n) return n.intValue();
+        if (raw == null) return null;
+        try { return Integer.parseInt(raw.toString().trim()); }
+        catch (NumberFormatException e) { return null; }
     }
 
     private boolean boolParam(Map<String, Object> params, AgentReviewParam name, boolean fallback) {
         Object raw = params.get(name.key());
-        if (raw instanceof Boolean b) {
-            return b;
-        }
-        if (raw == null) {
-            return fallback;
-        }
+        if (raw instanceof Boolean b) return b;
+        if (raw == null) return fallback;
         String s = raw.toString().trim();
         return "true".equalsIgnoreCase(s) || "1".equals(s);
     }
 
     private String strParam(Map<String, Object> params, AgentReviewParam name, String fallback) {
         Object raw = params.get(name.key());
-        if (raw instanceof String s && !s.isBlank()) {
-            return s;
-        }
+        if (raw instanceof String s && !s.isBlank()) return s;
         return fallback;
     }
 }

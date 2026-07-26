@@ -19,8 +19,10 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -49,7 +51,7 @@ class AgentReviewWorkflowTest {
         AgentReviewWorkflow wf = workflow();
         assertEquals("agentic-review", wf.key());
         assertEquals(PrWorkflowCategory.REVIEW, wf.category());
-        assertEquals(3, wf.paramsSchema().fields().size());
+        assertEquals(6, wf.paramsSchema().fields().size());
         assertFalse(wf.paramsSchema().isEmpty());
     }
 
@@ -57,7 +59,8 @@ class AgentReviewWorkflowTest {
     void run_usesDefaults_whenNoConfiguration_andReportsSuccess() {
         AgentReviewService service = mock(AgentReviewService.class);
         when(serviceFactory.create(any())).thenReturn(service);
-        when(service.reviewPullRequest(any(), anyInt(), anyBoolean(), anyString()))
+        when(service.reviewPullRequest(any(), anyInt(), anyBoolean(), anyString(),
+                any(AgentReviewService.SeverityThresholds.class), anyLong(), any()))
                 .thenReturn(true);
 
         Bot bot = new Bot();
@@ -66,7 +69,8 @@ class AgentReviewWorkflowTest {
 
         assertEquals(WorkflowResultStatus.SUCCESS, result.status());
         verify(service).reviewPullRequest(any(), eq(12), eq(false),
-                eq(AgentReviewWorkflow.DEFAULT_FORMAL_REVIEW_DECISION_PROMPT));
+                eq(AgentReviewWorkflow.DEFAULT_FORMAL_REVIEW_DECISION_PROMPT),
+                eq(new AgentReviewService.SeverityThresholds(null, null, null)), eq(1L), isNull());
     }
 
     @Test
@@ -77,18 +81,19 @@ class AgentReviewWorkflowTest {
         cfg.setId(7L);
         bot.setWorkflowConfiguration(cfg);
 
-        when(selectionService.resolveParams(7L, "agentic-review")).thenReturn(Map.of(
-                "maxToolRounds", 5));
+        when(selectionService.resolveParams(7L, "agentic-review")).thenReturn(Map.of("maxToolRounds", 5));
         AgentReviewService service = mock(AgentReviewService.class);
         when(serviceFactory.create(any())).thenReturn(service);
-        lenient().when(service.reviewPullRequest(any(), anyInt(), anyBoolean(), anyString()))
+        lenient().when(service.reviewPullRequest(any(), anyInt(), anyBoolean(), anyString(),
+                        any(AgentReviewService.SeverityThresholds.class), anyLong(), any()))
                 .thenReturn(false);
 
         WorkflowResult result = workflow().run(context(bot));
 
         assertEquals(WorkflowResultStatus.SKIPPED, result.status());
         verify(service).reviewPullRequest(any(), eq(5), eq(false),
-                eq(AgentReviewWorkflow.DEFAULT_FORMAL_REVIEW_DECISION_PROMPT));
+                eq(AgentReviewWorkflow.DEFAULT_FORMAL_REVIEW_DECISION_PROMPT),
+                eq(new AgentReviewService.SeverityThresholds(null, null, null)), eq(1L), isNull());
     }
 
     @Test
@@ -102,18 +107,23 @@ class AgentReviewWorkflowTest {
         when(selectionService.resolveParams(7L, "agentic-review")).thenReturn(Map.of(
                 "maxToolRounds", 8,
                 "enableFormalReviewDecision", true,
-                "formalReviewDecisionPrompt", "Custom criteria here"));
+                "formalReviewDecisionPrompt", "Custom criteria here",
+                "blockerThreshold", 0,
+                "mediumThreshold", 2,
+                "lowThreshold", 5));
 
         AgentReviewService service = mock(AgentReviewService.class);
         when(serviceFactory.create(any())).thenReturn(service);
-        when(service.reviewPullRequest(any(), anyInt(), anyBoolean(), anyString()))
+        when(service.reviewPullRequest(any(), anyInt(), anyBoolean(), anyString(),
+                any(AgentReviewService.SeverityThresholds.class), anyLong(), any()))
                 .thenReturn(true);
 
         WorkflowResult result = workflow().run(context(bot));
 
         assertEquals(WorkflowResultStatus.SUCCESS, result.status());
         verify(service).reviewPullRequest(any(), eq(8), eq(true),
-                eq("Custom criteria here"));
+                eq("Custom criteria here"),
+                eq(new AgentReviewService.SeverityThresholds(0, 2, 5)), eq(1L), isNull());
     }
 
     @Test
@@ -128,11 +138,13 @@ class AgentReviewWorkflowTest {
 
         AgentReviewService service = mock(AgentReviewService.class);
         when(serviceFactory.create(any())).thenReturn(service);
-        when(service.reviewPullRequest(any(), anyInt(), anyBoolean(), anyString()))
+        when(service.reviewPullRequest(any(), anyInt(), anyBoolean(), anyString(),
+                any(AgentReviewService.SeverityThresholds.class), anyLong(), any()))
                 .thenReturn(true);
 
         workflow().run(context(bot));
 
-        verify(service).reviewPullRequest(any(), anyInt(), eq(false), anyString());
+        verify(service).reviewPullRequest(any(), anyInt(), eq(false), anyString(),
+                eq(new AgentReviewService.SeverityThresholds(null, null, null)), eq(1L), isNull());
     }
 }

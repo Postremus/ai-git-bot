@@ -10,14 +10,15 @@
 
 > **Git 저장소를 위한 셀프호스트형 AI 워크플로우 자동화 플랫폼.**
 
-- 🔍 풀 리퀘스트를 리뷰
+- 🔍 풀 리퀸스트를 리뷰
 - 🧪 테스트 생성
 - ✏️ 이슈 개선
-- 🤖 이슈를 풀 리퀘스트로 변환
+- 🤖 이슈를 풀 리퀸스트로 변환
 - 🎬 E2E 테스트 생성 및 실행
 - 📝 문서를 코드와 동기화
 - 🌍 로케일 파일 간 번역 동기화
 - 💬 코드 리뷰 내에서 질문 답변
+- 📊 Prometheus 메트릭으로 워크플로우 관찰
 
 💡 GitHub Copilot 을 이미 사용 중이신가요?
 
@@ -240,6 +241,8 @@ PR 을 봇에 할당하면 변경 사항에 대한 Playwright 테스트 스위�
 | **[i18n 커버리지](doc/PR_WORKFLOWS_I18N_COVERAGE.md)** | PR 열림 또는 명령 트리거 | 로케일 파일 전반에 걸쳐 누락된 번역 초안 작성 |
 | **[PR 재리뷰](doc/PR_WORKFLOWS_REVIEW.md)** | 강제 푸시 또는 리뷰 요청 | 업데이트된 분석 |
 | **[워크플로우 자동화](doc/PR_WORKFLOWS.md)** | Git 이벤트 | 엔지니어링 잡무 자동화 |
+| **[Prometheus 메트릭](doc/DEPLOYMENT.md#metrics-prometheus)** | 내장 `/actuator/prometheus` 엔드포인트 | 리뷰, 결과, AI 사용량, 오류 및 도구 호출에 대한 운영 메트릭 |
+| **[발신 Webhook](doc/OUTGOING_WEBHOOKS.md)** | 외부 시스템으로 서명된 이벤트 푸시 | 워크플로 실행, 검토 결과, 이슈 할당에 대한 영구 저장 및 재시도되는 HMAC 서명 알림 |
 
 ---
 
@@ -391,12 +394,12 @@ AI-Git-Bot 은 코드 주변 작업을 자동화합니다.
 
 ## 빠른 시작
 
-Docker Compose 를 사용하여 로컬에서 AI-Git-Bot 실행.
+### 빠르게 테스트하기
+
+내장 H2 데이터베이스와 기본 설정을 사용하여 단일 Docker 명령으로 AI-Git-Bot을 빠르게 로컬 테스트하려면 실행하세요:
 
 ```bash
-git clone https://github.com/tmseidel/ai-git-bot.git
-cd ai-git-bot
-docker compose up --build -d
+docker run -p 8080:8080 tmseidel/ai-git-bot:latest
 ```
 
 이후:
@@ -408,6 +411,18 @@ docker compose up --build -d
 5. 봇 생성
 6. webhook 설정
 7. 완료
+
+### 프로덕션 배포
+
+설정된 프로덕션 또는 장기 배포의 경우, 구성에 대한 완전한 제어 권한을 제공하는 Docker Compose 접근 방식을 권장합니다:
+
+```bash
+git clone https://github.com/tmseidel/ai-git-bot.git
+cd ai-git-bot
+docker compose up --build -d
+```
+
+자세한 구성 지침은 **[배포 가이드](doc/DEPLOYMENT.md)**를 참조하세요.
 
 ---
 
