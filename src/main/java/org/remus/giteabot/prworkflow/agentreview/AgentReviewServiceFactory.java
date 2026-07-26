@@ -11,6 +11,7 @@ import org.remus.giteabot.agent.validation.ToolExecutionService;
 import org.remus.giteabot.agent.validation.WorkspaceService;
 import org.remus.giteabot.ai.AiClient;
 import org.remus.giteabot.config.AgentConfigProperties;
+import org.remus.giteabot.eventhook.EventHookPublisher;
 import org.remus.giteabot.mcp.McpOrchestrationService;
 import org.remus.giteabot.mcp.McpToolCatalog;
 import org.remus.giteabot.repository.RepositoryApiClient;
@@ -32,6 +33,7 @@ public class AgentReviewServiceFactory {
     private final ToolCatalog toolCatalog;
     private final WorkspaceService workspaceService;
     private final AgentConfigProperties agentConfig;
+    private final EventHookPublisher eventHookPublisher;
 
     public AgentReviewService create(Bot bot) {
         if (bot.getSystemPrompt() == null) {
@@ -56,6 +58,7 @@ public class AgentReviewServiceFactory {
                 contextWindowTokens);
 
         return new AgentReviewService(context, agentSessionService, toolExecutionService,
-                toolCatalog, workspaceService, agentConfig, mcpOrchestrationService);
+                toolCatalog, workspaceService, agentConfig, mcpOrchestrationService,
+                bot, eventHookPublisher);
     }
 }

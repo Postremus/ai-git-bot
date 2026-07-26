@@ -8,6 +8,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.ArgumentCaptor;
 import org.remus.giteabot.admin.Bot;
 import org.remus.giteabot.audit.PrAuditEventService;
+import org.remus.giteabot.eventhook.EventHookEventType;
+import org.remus.giteabot.eventhook.EventHookPublisher;
 import org.remus.giteabot.gitea.model.WebhookPayload;
 import org.remus.giteabot.prworkflow.config.WorkflowSelectionService;
 
@@ -30,6 +32,7 @@ class PrWorkflowOrchestratorTest {
     @Mock private PrWorkflowRunService runService;
     @Mock private PrWorkflowMetrics metrics;
     @Mock private PrAuditEventService auditService;
+    @Mock private EventHookPublisher eventHookPublisher;
 
     private final PrWorkflowRunLockManager lockManager = new PrWorkflowRunLockManager();
 
@@ -41,7 +44,7 @@ class PrWorkflowOrchestratorTest {
     private PrWorkflowOrchestrator newOrchestrator(PrWorkflow... workflows) {
         PrWorkflowRegistry registry = new PrWorkflowRegistry(List.of(workflows));
         return new PrWorkflowOrchestrator(registry, runService, metrics, lockManager,
-                org.mockito.Mockito.mock(WorkflowSelectionService.class), auditService);
+                org.mockito.Mockito.mock(WorkflowSelectionService.class), auditService, eventHookPublisher);
     }
 
     private static WebhookPayload payloadFor(String owner, String repo, long prNumber) {
@@ -253,6 +256,55 @@ class PrWorkflowOrchestratorTest {
         assertEquals(2, emitted.size());
         assertEquals(org.remus.giteabot.audit.AuditEventType.REVIEW_COMPLETED, emitted.get(0).getEventType());
         assertEquals(org.remus.giteabot.audit.AuditEventType.FINDING_POSTED, emitted.get(1).getEventType());
+    }
+
+    @Test
+    void runPublishesStartedAndCompletedEventHookEvents() {
+        when(runService.start(anyLong(), any(), any(), anyLong(), any()))
+                .thenReturn(runWithId(9L));
+        when(runService.complete(anyLong(), any(), any()))
+                .thenReturn(runWithIdAndStatus(9L, PrWorkflowRunStatus.SUCCESS));
+
+        PrWorkflowOrchestrator orchestrator = newOrchestrator(successWorkflow());
+        Bot bot = new Bot();
+        bot.setId(1L);
+        bot.setName("test-bot");
+
+        orchestrator.run(bot, payloadFor("o", "r", 9), "test-wf");
+
+        verify(eventHookPublisher).publish(eq(EventHookEventType.PR_WORKFLOW_STARTED), eq(bot),
+                eq("o"), eq("r"), eq(9L), org.mockito.ArgumentMatchers.isNull(),
+                org.mockito.ArgumentMatchers.argThat(data ->
+                        "test-wf".equals(data.get("workflowKey"))
+                                && Long.valueOf(9L).equals(data.get("runId"))
+                                && "webhook".equals(data.get("trigger"))));
+        verify(eventHookPublisher).publish(eq(EventHookEventType.PR_WORKFLOW_COMPLETED), eq(bot),
+                eq("o"), eq("r"), eq(9L), org.mockito.ArgumentMatchers.isNull(),
+                org.mockito.ArgumentMatchers.argThat(data ->
+                        "SUCCESS".equals(data.get("status"))
+                                && Long.valueOf(9L).equals(data.get("runId"))
+                                && data.get("durationMs") instanceof Long));
+    }
+
+    @Test
+    void runPublishesFailedEventHookEventOnException() {
+        when(runService.start(anyLong(), any(), any(), anyLong(), any()))
+                .thenReturn(runWithId(10L));
+
+        PrWorkflowOrchestrator orchestrator = newOrchestrator(throwingWorkflow(new RuntimeException("boom")));
+        Bot bot = new Bot();
+        bot.setId(1L);
+        bot.setName("test-bot");
+
+        assertThrows(RuntimeException.class,
+                () -> orchestrator.run(bot, payloadFor("o", "r", 10), "test-wf"));
+
+        verify(eventHookPublisher).publish(eq(EventHookEventType.PR_WORKFLOW_FAILED), eq(bot),
+                eq("o"), eq("r"), eq(10L), org.mockito.ArgumentMatchers.isNull(),
+                org.mockito.ArgumentMatchers.argThat(data ->
+                        "test-wf".equals(data.get("workflowKey"))
+                                && Long.valueOf(10L).equals(data.get("runId"))
+                                && String.valueOf(data.get("error")).contains("boom")));
     }
 
     private static PrWorkflowRun runWithId(long id) {
