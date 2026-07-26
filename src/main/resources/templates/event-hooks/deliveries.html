@@ -80,7 +80,6 @@
                                 <form th:if="${delivery.status.name() == 'FAILED'}"
                                       th:action="@{/admin/event-hooks/deliveries/{deliveryId}/retry(deliveryId=${delivery.id})}"
                                       method="post" class="d-inline">
-                                    <input type="hidden" name="endpointId" th:value="${endpoint.id}"/>
                                     <button type="submit" class="btn btn-outline-primary btn-sm">
                                         <i class="bi bi-arrow-repeat"></i> Retry
                                     </button>

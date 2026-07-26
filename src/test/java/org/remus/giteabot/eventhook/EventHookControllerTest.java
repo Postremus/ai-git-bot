@@ -166,6 +166,58 @@ class EventHookControllerTest {
                 .andExpect(content().string(org.hamcrest.Matchers.containsString("Retry")));
     }
 
+    @Test
+    @WithMockUser(roles = "ADMIN")
+    void saveWithNonexistentIdIsRejected() throws Exception {
+        mvc.perform(post("/admin/event-hooks/save").with(csrf())
+                        .param("id", "99999")
+                        .param("name", "Forged edit")
+                        .param("url", "https://example.com/hook")
+                        .param("eventTypes", "PR_WORKFLOW_STARTED")
+                        .param("enabled", "true"))
+                .andExpect(status().is3xxRedirection())
+                .andExpect(redirectedUrl("/admin/event-hooks"))
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers
+                        .flash().attribute("error", "Event hook endpoint not found"));
+
+        assertTrue(endpointRepository.findAll().isEmpty(),
+                "forged id must not persist a row via merge semantics");
+    }
+
+    @Test
+    @WithMockUser(roles = "ADMIN")
+    void retryRedirectIsDerivedFromDeliveryNotCallerParam() throws Exception {
+        EventHookEndpoint owner = endpointRepository.save(endpoint("Owner", "https://a.example.com/hook"));
+        EventHookEndpoint other = endpointRepository.save(endpoint("Other", "https://b.example.com/hook"));
+        EventHookDelivery delivery = new EventHookDelivery();
+        delivery.setDeliveryUuid("uuid-retry");
+        delivery.setEndpointId(owner.getId());
+        delivery.setEventType("prworkflow.started");
+        delivery.setPayloadJson("{\"schemaVersion\":1}");
+        delivery.setStatus(DeliveryStatus.FAILED);
+        delivery.setAttempts(5);
+        delivery.setCreatedAt(java.time.Instant.now());
+        deliveryRepository.save(delivery);
+
+        // Even with a forged endpointId pointing at the other endpoint, the
+        // redirect follows the delivery's own endpoint.
+        mvc.perform(post("/admin/event-hooks/deliveries/{deliveryId}/retry", delivery.getId())
+                        .with(csrf())
+                        .param("endpointId", String.valueOf(other.getId())))
+                .andExpect(status().is3xxRedirection())
+                .andExpect(redirectedUrl("/admin/event-hooks/" + owner.getId() + "/deliveries"));
+    }
+
+    @Test
+    @WithMockUser(roles = "ADMIN")
+    void retryNonexistentDeliveryRedirectsToListWithError() throws Exception {
+        mvc.perform(post("/admin/event-hooks/deliveries/{deliveryId}/retry", 99999L).with(csrf()))
+                .andExpect(status().is3xxRedirection())
+                .andExpect(redirectedUrl("/admin/event-hooks"))
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers
+                        .flash().attribute("error", "Delivery not found"));
+    }
+
     private static EventHookEndpoint endpoint(String name, String url) {
         EventHookEndpoint endpoint = new EventHookEndpoint();
         endpoint.setName(name);

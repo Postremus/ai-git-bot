@@ -14,6 +14,8 @@ import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
+import java.util.Optional;
+
 /**
  * Admin CRUD UI for outgoing-webhook endpoints ({@link EventHookEndpoint}) and
  * their recent deliveries. Mirrors the structure of
@@ -85,21 +87,27 @@ public class EventHookController {
                        @RequestParam(name = "plainAuthorizationHeader", required = false) String plainAuthorizationHeader,
                        Model model, RedirectAttributes redirectAttributes) {
         String error = validate(endpoint);
+        if (error == null && endpoint.getId() != null) {
+            // An edit must target an existing endpoint: a forged or stale id is
+            // rejected instead of falling into JPA merge semantics.
+            Optional<EventHookEndpoint> existing = endpointService.findById(endpoint.getId());
+            if (existing.isEmpty()) {
+                redirectAttributes.addFlashAttribute("error", "Event hook endpoint not found");
+                return REDIRECT_LIST;
+            }
+            // Blank credential inputs on edit mean "keep current" — copy the
+            // existing ciphertext into the bound entity before saving
+            // (mirrors AiIntegrationController#save).
+            EventHookEndpoint persisted = existing.get();
+            if (plainSecret == null || plainSecret.isBlank()) {
+                endpoint.setSecret(persisted.getSecret());
+            }
+            if (plainAuthorizationHeader == null || plainAuthorizationHeader.isBlank()) {
+                endpoint.setAuthorizationHeader(persisted.getAuthorizationHeader());
+            }
+        }
         if (error == null) {
             try {
-                // Blank credential inputs on edit mean "keep current" — copy the
-                // existing ciphertext into the bound entity before saving
-                // (mirrors AiIntegrationController#save).
-                if (endpoint.getId() != null) {
-                    endpointService.findById(endpoint.getId()).ifPresent(existing -> {
-                        if (plainSecret == null || plainSecret.isBlank()) {
-                            endpoint.setSecret(existing.getSecret());
-                        }
-                        if (plainAuthorizationHeader == null || plainAuthorizationHeader.isBlank()) {
-                            endpoint.setAuthorizationHeader(existing.getAuthorizationHeader());
-                        }
-                    });
-                }
                 endpointService.save(endpoint, plainSecret, plainAuthorizationHeader);
                 redirectAttributes.addFlashAttribute("success",
                         "Event hook endpoint '" + endpoint.getName() + "' saved successfully");
@@ -155,18 +163,24 @@ public class EventHookController {
 
     /** Re-queues a FAILED delivery for an immediate fresh attempt. */
     @PostMapping("/deliveries/{deliveryId}/retry")
-    public String retryDelivery(@PathVariable Long deliveryId, @RequestParam Long endpointId,
-                                RedirectAttributes redirectAttributes) {
-        deliveryRepository.findById(deliveryId).ifPresent(delivery -> {
-            if (delivery.getStatus() == DeliveryStatus.FAILED) {
-                delivery.setStatus(DeliveryStatus.PENDING);
-                delivery.setNextAttemptAt(null);
-                deliveryRepository.save(delivery);
-                deliveryWorker.deliverAsync(delivery.getId());
-            }
-        });
-        redirectAttributes.addFlashAttribute("success", "Delivery re-queued");
-        return "redirect:/admin/event-hooks/" + endpointId + "/deliveries";
+    public String retryDelivery(@PathVariable Long deliveryId, RedirectAttributes redirectAttributes) {
+        return deliveryRepository.findById(deliveryId)
+                .map(delivery -> {
+                    if (delivery.getStatus() == DeliveryStatus.FAILED) {
+                        delivery.setStatus(DeliveryStatus.PENDING);
+                        delivery.setNextAttemptAt(null);
+                        deliveryRepository.save(delivery);
+                        deliveryWorker.deliverAsync(delivery.getId());
+                        redirectAttributes.addFlashAttribute("success", "Delivery re-queued");
+                    }
+                    // Redirect target is derived from the delivery itself — the
+                    // caller cannot steer a retry across endpoints.
+                    return "redirect:/admin/event-hooks/" + delivery.getEndpointId() + "/deliveries";
+                })
+                .orElseGet(() -> {
+                    redirectAttributes.addFlashAttribute("error", "Delivery not found");
+                    return REDIRECT_LIST;
+                });
     }
 
     private void populateForm(Model model, EventHookEndpoint endpoint) {
