@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<body>
+<div th:replace="~{layout :: layout('Deliveries', ~{::pageContent})}">
+    <div th:fragment="pageContent">
+
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h2>
+                <i class="bi bi-list-check"></i>
+                Deliveries — <span th:text="${endpoint.name}"></span>
+            </h2>
+            <a th:href="@{/admin/event-hooks}" class="btn btn-outline-secondary">
+                <i class="bi bi-arrow-left"></i> Back to Outgoing webhooks
+            </a>
+        </div>
+
+        <p class="text-secondary">Most recent 50 deliveries for
+            <code th:text="${endpoint.url}"></code>. Any 2xx response counts as success;
+            failed attempts are retried with growing backoff until the attempt cap is reached.</p>
+
+        <div th:if="${#lists.isEmpty(deliveries)}" class="card">
+            <div class="card-body text-center py-4">
+                <i class="bi bi-inbox fs-1 text-secondary"></i>
+                <p class="text-secondary mt-2">No deliveries yet.</p>
+            </div>
+        </div>
+
+        <div th:if="${!#lists.isEmpty(deliveries)}" class="card">
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-group-divider">
+                        <tr>
+                            <th>Event</th>
+                            <th>Status</th>
+                            <th>Attempts</th>
+                            <th>Response</th>
+                            <th>Created</th>
+                            <th>Completed</th>
+                            <th>Next attempt</th>
+                            <th>Actions</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        <tr th:each="delivery : ${deliveries}">
+                            <td>
+                                <span class="badge bg-secondary" th:text="${delivery.eventType}"></span>
+                                <details class="mt-1">
+                                    <summary class="small text-secondary">payload</summary>
+                                    <pre class="small font-monospace mb-0"
+                                         style="white-space: pre-wrap; word-break: break-all;"
+                                         th:text="${delivery.payloadJson}"></pre>
+                                </details>
+                            </td>
+                            <td>
+                                <span th:if="${delivery.status.name() == 'SUCCESS'}" class="badge bg-success">SUCCESS</span>
+                                <span th:if="${delivery.status.name() == 'FAILED'}" class="badge bg-danger">FAILED</span>
+                                <span th:if="${delivery.status.name() == 'RETRYING'}" class="badge bg-warning text-dark">RETRYING</span>
+                                <span th:if="${delivery.status.name() == 'PENDING'}" class="badge bg-secondary">PENDING</span>
+                                <div th:if="${delivery.lastError != null}" class="small text-danger mt-1"
+                                     th:title="${delivery.lastError}"
+                                     th:text="${#strings.abbreviate(delivery.lastError, 80)}"></div>
+                            </td>
+                            <td th:text="${delivery.attempts}"></td>
+                            <td>
+                                <span th:if="${delivery.lastResponseCode != null}"
+                                      th:text="${delivery.lastResponseCode}"></span>
+                                <span th:if="${delivery.lastResponseCode == null}" class="text-secondary">—</span>
+                            </td>
+                            <td class="small" th:text="${delivery.createdAt}"></td>
+                            <td class="small">
+                                <span th:if="${delivery.completedAt != null}" th:text="${delivery.completedAt}"></span>
+                                <span th:if="${delivery.completedAt == null}" class="text-secondary">—</span>
+                            </td>
+                            <td class="small">
+                                <span th:if="${delivery.nextAttemptAt != null}" th:text="${delivery.nextAttemptAt}"></span>
+                                <span th:if="${delivery.nextAttemptAt == null}" class="text-secondary">—</span>
+                            </td>
+                            <td>
+                                <form th:if="${delivery.status.name() == 'FAILED'}"
+                                      th:action="@{/admin/event-hooks/deliveries/{deliveryId}/retry(deliveryId=${delivery.id})}"
+                                      method="post" class="d-inline">
+                                    <button type="submit" class="btn btn-outline-primary btn-sm">
+                                        <i class="bi bi-arrow-repeat"></i> Retry
+                                    </button>
+                                </form>
+                            </td>
+                        </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+    </div>
+</div>
+</body>
+</html>

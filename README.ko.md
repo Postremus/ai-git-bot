@@ -242,6 +242,7 @@ PR 을 봇에 할당하면 변경 사항에 대한 Playwright 테스트 스위�
 | **[PR 재리뷰](doc/PR_WORKFLOWS_REVIEW.md)** | 강제 푸시 또는 리뷰 요청 | 업데이트된 분석 |
 | **[워크플로우 자동화](doc/PR_WORKFLOWS.md)** | Git 이벤트 | 엔지니어링 잡무 자동화 |
 | **[Prometheus 메트릭](doc/DEPLOYMENT.md#metrics-prometheus)** | 내장 `/actuator/prometheus` 엔드포인트 | 리뷰, 결과, AI 사용량, 오류 및 도구 호출에 대한 운영 메트릭 |
+| **[발신 Webhook](doc/OUTGOING_WEBHOOKS.md)** | 외부 시스템으로 서명된 이벤트 푸시 | 워크플로 실행, 검토 결과, 이슈 할당에 대한 영구 저장 및 재시도되는 HMAC 서명 알림 |
 
 ---
 

@@ -242,6 +242,7 @@ Bot 直接在线程中回答，并保持对话上下文。
 | **[PR 重新审查](doc/PR_WORKFLOWS_REVIEW.md)** | 强制推送或审查请求 | 更新的分析 |
 | **[工作流自动化](doc/PR_WORKFLOWS.md)** | Git 事件 | 工程杂务自动化 |
 | **[Prometheus 指标](doc/DEPLOYMENT.md#metrics-prometheus)** | 内置 `/actuator/prometheus` 端点 | 审查、发现、AI 用量、错误和工具调用的运营指标 |
+| **[外发 Webhook](doc/OUTGOING_WEBHOOKS.md)** | 向外部系统推送签名事件 | 针对工作流运行、审查发现和议题分派的持久化、可重试的 HMAC 签名通知 |
 
 ---
 

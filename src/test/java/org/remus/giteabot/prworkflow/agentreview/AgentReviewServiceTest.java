@@ -1,9 +1,24 @@
 package org.remus.giteabot.prworkflow.agentreview;
 
 import org.junit.jupiter.api.Test;
+import org.remus.giteabot.admin.Bot;
+import org.remus.giteabot.eventhook.EventHookEventType;
+import org.remus.giteabot.eventhook.EventHookPublisher;
 import org.remus.giteabot.repository.PostReviewAction;
 
+import java.util.List;
+import java.util.Map;
+
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyMap;
+import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 
 class AgentReviewServiceTest {
 
@@ -149,6 +164,138 @@ class AgentReviewServiceTest {
         var result = AgentReviewService.parseFormalReviewResult(review, thresholds(0, 0, 0));
         assertThat(result.action()).isNull();
         assertThat(result.reviewText()).isEqualTo(review);
+    }
+
+    @Test
+    void parseFormalReviewResult_findingsArray_extractedWithKnownKeysOnly() {
+        String review = """
+                ## Review
+                Found issues.
+
+                ```json
+                {"blocker": 1, "medium": 0, "low": 0, "findings": [
+                  {"severity": "blocker", "category": "security", "title": "SQL injection",
+                   "file": "src/Foo.java", "line": 42, "cwe": "CWE-89", "owasp": "A03:2021",
+                   "unknownField": "dropped"},
+                  "not-an-object",
+                  {"severity": "medium", "line": "not-an-int"}
+                ]}
+                ```""";
+
+        var result = AgentReviewService.parseFormalReviewResult(review, thresholds(0, null, null));
+
+        assertThat(result.action()).isEqualTo(PostReviewAction.REQUEST_CHANGES);
+        assertThat(result.classification()).isEqualTo(new AgentReviewService.SeverityClassification(1, 0, 0));
+        assertThat(result.findings()).hasSize(2);
+        assertThat(result.findings().get(0))
+                .containsEntry("severity", "blocker")
+                .containsEntry("category", "security")
+                .containsEntry("title", "SQL injection")
+                .containsEntry("file", "src/Foo.java")
+                .containsEntry("line", 42)
+                .containsEntry("cwe", "CWE-89")
+                .containsEntry("owasp", "A03:2021")
+                .doesNotContainKey("unknownField");
+        assertThat(result.findings().get(1))
+                .containsEntry("severity", "medium")
+                .doesNotContainKey("line");
+    }
+
+    @Test
+    void parseFormalReviewResult_nonArrayFindings_emptyFindings() {
+        String review = "Review text.\n\n{\"blocker\": 0, \"medium\": 1, \"low\": 0, \"findings\": \"nope\"}";
+
+        var result = AgentReviewService.parseFormalReviewResult(review, thresholds(1, 1, 1));
+
+        assertThat(result.findings()).isEmpty();
+        assertThat(result.classification()).isEqualTo(new AgentReviewService.SeverityClassification(0, 1, 0));
+    }
+
+    @Test
+    void parseFormalReviewResult_noClassificationBlock_nullClassificationEmptyFindings() {
+        var result = AgentReviewService.parseFormalReviewResult("Plain review.", thresholds(0, 0, 0));
+
+        assertThat(result.classification()).isNull();
+        assertThat(result.findings()).isEmpty();
+    }
+
+    @Test
+    void publishFindingEvents_structuredFindings_oneEventPerFinding() {
+        EventHookPublisher publisher = mock(EventHookPublisher.class);
+        Bot bot = bot();
+        var parsed = new AgentReviewService.ParseResult("review", PostReviewAction.APPROVE,
+                new AgentReviewService.SeverityClassification(1, 1, 0),
+                List.of(Map.of("severity", "blocker", "title", "A"), Map.of("severity", "medium", "title", "B")));
+
+        AgentReviewService.publishFindingEvents(publisher, bot, parsed, "o", "r", 7L);
+
+        verify(publisher, times(2)).publish(eq(EventHookEventType.AGENT_REVIEW_FINDING_DETECTED),
+                eq(bot), eq("o"), eq("r"), eq(7L), isNull(), anyMap());
+        verify(publisher).publish(eq(EventHookEventType.AGENT_REVIEW_FINDING_DETECTED),
+                eq(bot), eq("o"), eq("r"), eq(7L), isNull(),
+                argThat(data -> data.get("finding") instanceof Map<?, ?> f && "A".equals(f.get("title"))));
+    }
+
+    @Test
+    void publishFindingEvents_countsOnly_singleAggregateEvent() {
+        EventHookPublisher publisher = mock(EventHookPublisher.class);
+        Bot bot = bot();
+        var parsed = new AgentReviewService.ParseResult("review", PostReviewAction.REQUEST_CHANGES,
+                new AgentReviewService.SeverityClassification(2, 1, 3), List.of());
+
+        AgentReviewService.publishFindingEvents(publisher, bot, parsed, "o", "r", 7L);
+
+        verify(publisher, times(1)).publish(eq(EventHookEventType.AGENT_REVIEW_FINDING_DETECTED),
+                eq(bot), eq("o"), eq("r"), eq(7L), isNull(),
+                argThat(data -> data.get("findingCounts") instanceof Map<?, ?> c
+                        && Integer.valueOf(2).equals(c.get("blocker"))
+                        && Integer.valueOf(1).equals(c.get("medium"))
+                        && Integer.valueOf(3).equals(c.get("low"))));
+    }
+
+    @Test
+    void publishFindingEvents_malformedFindingsWithCounts_fallsBackToAggregate() {
+        EventHookPublisher publisher = mock(EventHookPublisher.class);
+        Bot bot = bot();
+        // Model returned counts but the findings array was non-array/malformed → parser
+        // yielded an empty list; the aggregate event must still carry the counts.
+        var result = AgentReviewService.parseFormalReviewResult(
+                "Review.\n\n{\"blocker\": 1, \"medium\": 0, \"low\": 0, \"findings\": 42}",
+                thresholds(0, null, null));
+
+        AgentReviewService.publishFindingEvents(publisher, bot, result, "o", "r", 7L);
+
+        verify(publisher, times(1)).publish(eq(EventHookEventType.AGENT_REVIEW_FINDING_DETECTED),
+                eq(bot), eq("o"), eq("r"), eq(7L), isNull(),
+                argThat(data -> data.containsKey("findingCounts") && !data.containsKey("finding")));
+    }
+
+    @Test
+    void publishFindingEvents_zeroCountsAndNoFindings_noEvent() {
+        EventHookPublisher publisher = mock(EventHookPublisher.class);
+        var parsed = new AgentReviewService.ParseResult("review", PostReviewAction.APPROVE,
+                new AgentReviewService.SeverityClassification(0, 0, 0), List.of());
+
+        AgentReviewService.publishFindingEvents(publisher, bot(), parsed, "o", "r", 7L);
+
+        verify(publisher, never()).publish(any(), any(), any(), any(), any(), any(), anyMap());
+    }
+
+    @Test
+    void publishFindingEvents_noClassification_noEvent() {
+        EventHookPublisher publisher = mock(EventHookPublisher.class);
+        var parsed = AgentReviewService.ParseResult.noDecision("review");
+
+        AgentReviewService.publishFindingEvents(publisher, bot(), parsed, "o", "r", 7L);
+
+        verify(publisher, never()).publish(any(), any(), any(), any(), any(), any(), anyMap());
+    }
+
+    private static Bot bot() {
+        Bot bot = new Bot();
+        bot.setId(1L);
+        bot.setName("review-bot");
+        return bot;
     }
 
     private static AgentReviewService.SeverityThresholds thresholds(Integer blocker, Integer medium, Integer low) {

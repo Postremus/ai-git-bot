@@ -8,6 +8,8 @@ import org.remus.giteabot.audit.ActorType;
 import org.remus.giteabot.audit.AuditEventType;
 import org.remus.giteabot.audit.PrAuditEvent;
 import org.remus.giteabot.audit.PrAuditEventService;
+import org.remus.giteabot.eventhook.EventHookEventType;
+import org.remus.giteabot.eventhook.EventHookPublisher;
 import org.remus.giteabot.gitea.model.WebhookPayload;
 import org.remus.giteabot.prworkflow.config.WorkflowSelectionService;
 import org.remus.giteabot.prworkflow.review.ReviewWorkflow;
@@ -16,6 +18,7 @@ import org.springframework.stereotype.Service;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
@@ -31,6 +34,7 @@ public class PrWorkflowOrchestrator {
     private final PrWorkflowRunLockManager lockManager;
     private final WorkflowSelectionService workflowSelectionService;
     private final PrAuditEventService auditService;
+    private final EventHookPublisher eventHookPublisher;
 
     public List<PrWorkflowRun> runAll(Bot bot, WebhookPayload payload) {
         if (bot == null) throw new IllegalArgumentException("bot must not be null");
@@ -91,6 +95,11 @@ public class PrWorkflowOrchestrator {
                 .eventPayloadJson(PrAuditEventService.toJson(Map.of(
                         "workflow_key", workflow.key(), "trigger", "webhook")))
                 .build());
+        Map<String, Object> startedData = new LinkedHashMap<>();
+        startedData.put("workflowKey", workflow.key());
+        startedData.put("runId", run.getId());
+        startedData.put("trigger", "webhook");
+        publishRunEvent(EventHookEventType.PR_WORKFLOW_STARTED, bot, owner, repoName, prNumber, startedData);
 
         Instant startInstant = run.getStartedAt() == null ? Instant.now() : run.getStartedAt();
 
@@ -166,6 +175,15 @@ public class PrWorkflowOrchestrator {
                 }
             }
 
+            Map<String, Object> completedData = new LinkedHashMap<>();
+            completedData.put("workflowKey", workflow.key());
+            completedData.put("runId", completed.getId());
+            completedData.put("status", effective.name());
+            completedData.put("durationMs", Duration.between(startInstant, Instant.now()).toMillis());
+            if (completed.getSummary() != null && !completed.getSummary().isBlank()) {
+                completedData.put("summary", completed.getSummary());
+            }
+            publishRunEvent(effective == PrWorkflowRunStatus.SUCCESS ? EventHookEventType.PR_WORKFLOW_COMPLETED : EventHookEventType.PR_WORKFLOW_FAILED, bot, owner, repoName, prNumber, completedData);
             log.info("[Workflow '{}'] Finished run id={} status={}", workflow.key(), completed.getId(), effective);
             return completed;
         } catch (WorkflowCancelledException cancelled) {
@@ -208,9 +226,25 @@ public class PrWorkflowOrchestrator {
                             "run_status", "FAILED", "workflow_key", workflow.key(),
                             "error", truncateForSummary(e.getMessage()))))
                     .build());
+            Map<String, Object> failedData = new LinkedHashMap<>();
+            failedData.put("workflowKey", workflow.key());
+            failedData.put("runId", run.getId());
+            failedData.put("error", truncateForSummary(e.getMessage()));
+            publishRunEvent(EventHookEventType.PR_WORKFLOW_FAILED, bot, owner, repoName, prNumber, failedData);
             log.error("[Workflow '{}'] Run id={} FAILED", workflow.key(), run.getId(), e);
             throw e;
         }
+    }
+
+    /**
+     * Publishes an outgoing-webhook event for a workflow run (run id travels in
+     * {@code data}; the envelope's issue slot stays null). Delivery is
+     * fire-and-forget from this class's perspective — the publisher persists
+     * PENDING rows and never throws, so webhook delivery can never affect the run.
+     */
+    private void publishRunEvent(EventHookEventType type, Bot bot, String owner, String repoName,
+                                 Long prNumber, Map<String, Object> data) {
+        eventHookPublisher.publish(type, bot, owner, repoName, prNumber, null, data);
     }
 
     private PrWorkflowRunStatus mapTerminalStatus(WorkflowResultStatus status) {

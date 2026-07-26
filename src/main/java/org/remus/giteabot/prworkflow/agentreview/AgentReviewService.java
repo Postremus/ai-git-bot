@@ -3,6 +3,7 @@ package org.remus.giteabot.prworkflow.agentreview;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
+import org.remus.giteabot.admin.Bot;
 import org.remus.giteabot.agent.issueimpl.AiResponseParser;
 import org.remus.giteabot.agent.loop.AgentBudget;
 import org.remus.giteabot.agent.loop.AgentLoop;
@@ -21,13 +22,18 @@ import org.remus.giteabot.agent.validation.WorkspaceResult;
 import org.remus.giteabot.agent.validation.WorkspaceService;
 import org.remus.giteabot.ai.AiClient;
 import org.remus.giteabot.config.AgentConfigProperties;
+import org.remus.giteabot.eventhook.EventHookEventType;
+import org.remus.giteabot.eventhook.EventHookPublisher;
 import org.remus.giteabot.gitea.model.WebhookPayload;
 import org.remus.giteabot.mcp.McpOrchestrationService;
 import org.remus.giteabot.repository.PostReviewAction;
 import org.remus.giteabot.repository.RepositoryApiClient;
 
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.function.Consumer;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -62,19 +68,26 @@ public class AgentReviewService {
             {"blocker": 0, "medium": 1, "low": 2}
 
             The values are integer counts of findings for each severity class.
-            Do not wrap it in a code fence and do not write anything after it.""";
+            Do not wrap it in a code fence and do not write anything after it.
+
+            Optionally include a "findings" array next to the counts:
+            {"blocker": 1, "medium": 0, "low": 0, "findings": [{"severity": "blocker", "category": "security", "title": "...", "file": "src/Foo.java", "line": 42, "cwe": "CWE-89", "owasp": "A03:2021"}]}
+            Omit unknown optional fields instead of guessing.""";
 
     /**
-     * Matches a trailing severity-classification JSON block, bare or fenced,
-     * regardless of whether its values are valid — an invalid block is still
-     * detected and stripped so it never leaks into the posted review.
+     * Matches a trailing classification JSON block, bare or fenced, regardless of
+     * whether its values are valid — an invalid block is still detected and
+     * stripped so it never leaks into the posted review. The body is one-level
+     * brace-aware so the optional {@code findings} array (objects nested one
+     * level deep) does not break the match; whether the block actually is a
+     * severity classification is decided by {@link #containsSeverityKey(String)}.
      */
     private static final Pattern SEVERITY_JSON_PATTERN = Pattern.compile(
-            "```json\\s*\\n?\\s*(\\{[^}]*(?:\"blocker\"|\"medium\"|\"low\")[^}]*})\\s*\\n?\\s*```\\s*\\z",
+            "```json\\s*\\n?\\s*(\\{(?:[^{}]|\\{[^{}]*})*})\\s*\\n?\\s*```\\s*\\z",
             Pattern.DOTALL);
 
     private static final Pattern SEVERITY_BARE_PATTERN = Pattern.compile(
-            "\\{[^}]*(?:\"blocker\"|\"medium\"|\"low\")[^}]*}\\s*\\z",
+            "\\{(?:[^{}]|\\{[^{}]*})*}\\s*\\z",
             Pattern.MULTILINE);
 
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
@@ -93,6 +106,8 @@ public class AgentReviewService {
     }
 
     private final AgentReviewContext context;
+    private final Bot bot;
+    private final EventHookPublisher eventHookPublisher;
     private final AgentSessionService sessionService;
     private final ToolCatalog toolCatalog;
     private final WorkspaceService workspaceService;
@@ -111,8 +126,12 @@ public class AgentReviewService {
                               ToolCatalog toolCatalog,
                               WorkspaceService workspaceService,
                               AgentConfigProperties agentConfig,
-                              McpOrchestrationService mcpOrchestrationService) {
+                              McpOrchestrationService mcpOrchestrationService,
+                              Bot bot,
+                              EventHookPublisher eventHookPublisher) {
         this.context = context;
+        this.bot = bot;
+        this.eventHookPublisher = eventHookPublisher;
         this.sessionService = sessionService;
         this.toolCatalog = toolCatalog;
         this.workspaceService = workspaceService;
@@ -228,6 +247,7 @@ public class AgentReviewService {
                 repositoryClient.postReviewComment(owner, repo, prNumber, reviewBody);
             }
 
+            publishFindingEvents(eventHookPublisher, bot, parsed, owner, repo, prNumber);
             log.info("Agentic review completed for PR #{} in {}/{} (decision={})",
                     prNumber, owner, repo, action);
             return outcome.success();
@@ -336,34 +356,118 @@ public class AgentReviewService {
 
         // Canonical form: a bare JSON object on the last line.
         Matcher bare = SEVERITY_BARE_PATTERN.matcher(review);
-        if (bare.find()) {
+        if (bare.find() && containsSeverityKey(bare.group())) {
             String cleaned = review.substring(0, bare.start()).stripTrailing();
-            return new ParseResult(cleaned, evaluateAction(parseSeverityJson(bare.group()), thresholds));
+            return toParseResult(cleaned, parseClassificationBlock(bare.group()), thresholds);
         }
 
         // Tolerant fallback: a fenced ```json block at the end.
         Matcher fenced = SEVERITY_JSON_PATTERN.matcher(review);
-        if (fenced.find()) {
+        if (fenced.find() && containsSeverityKey(fenced.group(1))) {
             String cleaned = review.substring(0, fenced.start()).stripTrailing();
-            return new ParseResult(cleaned, evaluateAction(parseSeverityJson(fenced.group(1)), thresholds));
+            return toParseResult(cleaned, parseClassificationBlock(fenced.group(1)), thresholds);
         }
 
         return ParseResult.noDecision(review);
     }
 
-    private static SeverityClassification parseSeverityJson(String json) {
+    /** A trailing JSON block only counts as a classification when it names a severity count. */
+    private static boolean containsSeverityKey(String json) {
+        return json.contains("\"blocker\"") || json.contains("\"medium\"") || json.contains("\"low\"");
+    }
+
+    private static ParseResult toParseResult(String cleaned, ClassificationBlock block,
+                                             SeverityThresholds thresholds) {
+        if (block == null) {
+            // Detected but unparseable block: fail-open (NONE) with cleaned text.
+            return new ParseResult(cleaned, evaluateAction(null, thresholds), null, List.of());
+        }
+        return new ParseResult(cleaned, evaluateAction(block.classification(), thresholds),
+                block.classification(), block.findings());
+    }
+
+    /** Severity counts plus the optional structured findings array. */
+    private record ClassificationBlock(SeverityClassification classification,
+                                       List<Map<String, Object>> findings) {
+    }
+
+    private static ClassificationBlock parseClassificationBlock(String json) {
         if (json == null || json.isBlank()) {
             return null;
         }
         try {
             JsonNode root = OBJECT_MAPPER.readTree(json);
-            return new SeverityClassification(
+            SeverityClassification classification = new SeverityClassification(
                     intField(root, "blocker"),
                     intField(root, "medium"),
                     intField(root, "low"));
+            return new ClassificationBlock(classification, parseFindings(root.get("findings")));
         } catch (Exception e) {
             log.warn("Failed to parse severity classification JSON: {}", json);
             return null;
+        }
+    }
+
+    /** Optional keys copied from a structured finding into the webhook payload. */
+    private static final List<String> FINDING_STRING_KEYS =
+            List.of("severity", "category", "title", "file", "cwe", "owasp");
+
+    /**
+     * Lenient extraction of the optional {@code findings} array: a missing or
+     * non-array node yields an empty list; non-object elements are skipped; only
+     * known keys are copied (strings textually, {@code line} as int). Unknown
+     * fields and wrong-typed values are dropped rather than guessed.
+     */
+    private static List<Map<String, Object>> parseFindings(JsonNode findingsNode) {
+        if (findingsNode == null || !findingsNode.isArray()) {
+            return List.of();
+        }
+        List<Map<String, Object>> findings = new ArrayList<>();
+        for (JsonNode element : findingsNode) {
+            if (!element.isObject()) {
+                continue;
+            }
+            Map<String, Object> finding = new LinkedHashMap<>();
+            for (String key : FINDING_STRING_KEYS) {
+                JsonNode value = element.get(key);
+                if (value != null && value.isTextual()) {
+                    finding.put(key, value.asText());
+                }
+            }
+            JsonNode line = element.get("line");
+            if (line != null && line.isInt()) {
+                finding.put("line", line.asInt());
+            }
+            findings.add(finding);
+        }
+        return List.copyOf(findings);
+    }
+
+    /**
+     * Emits one {@code agent.review.finding.detected} event per structured finding,
+     * or a single aggregate event carrying the severity counts when the model only
+     * returned counts. Package-private static seam for unit tests; the publisher
+     * never throws, so emission can never affect the review outcome.
+     */
+    static void publishFindingEvents(EventHookPublisher publisher, Bot bot, ParseResult parsed,
+                                     String owner, String repo, Long prNumber) {
+        if (publisher == null || bot == null || parsed == null) {
+            return;
+        }
+        if (!parsed.findings().isEmpty()) {
+            for (Map<String, Object> finding : parsed.findings()) {
+                publisher.publish(EventHookEventType.AGENT_REVIEW_FINDING_DETECTED, bot, owner, repo,
+                        prNumber, null, Map.of("finding", finding));
+            }
+            return;
+        }
+        SeverityClassification counts = parsed.classification();
+        if (counts != null && (counts.blocker() > 0 || counts.medium() > 0 || counts.low() > 0)) {
+            publisher.publish(EventHookEventType.AGENT_REVIEW_FINDING_DETECTED, bot, owner, repo,
+                    prNumber, null, Map.of("findingCounts", Map.of(
+                            "blocker", counts.blocker(),
+                            "medium", counts.medium(),
+                            "low", counts.low())));
         }
     }
 
@@ -404,13 +508,18 @@ public class AgentReviewService {
     /**
      * Parsed result of extracting a formal review decision from model output.
      *
-     * @param reviewText the review text with the classification JSON stripped
-     * @param action     the computed formal review action, or {@code null} when
-     *                   no formal decision was requested
+     * @param reviewText     the review text with the classification JSON stripped
+     * @param action         the computed formal review action, or {@code null} when
+     *                       no formal decision was requested
+     * @param classification the parsed severity counts, or {@code null} when no
+     *                       (valid) classification block was present
+     * @param findings       the optional structured findings array (never null)
      */
-    public record ParseResult(String reviewText, PostReviewAction action) {
+    public record ParseResult(String reviewText, PostReviewAction action,
+                              SeverityClassification classification,
+                              List<Map<String, Object>> findings) {
         static ParseResult noDecision(String reviewText) {
-            return new ParseResult(reviewText, null);
+            return new ParseResult(reviewText, null, null, List.of());
         }
     }
 
