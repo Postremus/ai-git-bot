@@ -183,7 +183,7 @@ public class PrWorkflowOrchestrator {
             if (completed.getSummary() != null && !completed.getSummary().isBlank()) {
                 completedData.put("summary", completed.getSummary());
             }
-            publishRunEvent(EventHookEventType.PR_WORKFLOW_COMPLETED, bot, owner, repoName, prNumber, completedData);
+            publishRunEvent(effective == PrWorkflowRunStatus.SUCCESS ? EventHookEventType.PR_WORKFLOW_COMPLETED : EventHookEventType.PR_WORKFLOW_FAILED, bot, owner, repoName, prNumber, completedData);
             log.info("[Workflow '{}'] Finished run id={} status={}", workflow.key(), completed.getId(), effective);
             return completed;
         } catch (WorkflowCancelledException cancelled) {
