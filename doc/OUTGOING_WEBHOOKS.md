@@ -61,6 +61,8 @@ plaintext storage (acceptable for development, warned about at startup).
 
 ## Setting up an endpoint
 
+<img src="screenshots/webhooks/outgoing-webhooks-overview.png" alt="Overview of all created outgoing webhooks" width="600"/>
+
 *System settings → Outgoing webhooks → Add endpoint* (`/admin/event-hooks/new`):
 
 1. **Name** — free-form label.
@@ -111,6 +113,8 @@ On edit, leaving a credential field blank keeps the current (encrypted) value.
    and `PENDING` rows stranded by a crash — at-least-once delivery.
 6. `FAILED` deliveries can be re-queued manually from the deliveries page
    (*Retry* button).
+
+<img src="screenshots/webhooks/deliveries-overview.png" alt="Overview of all webhook-deliveries" width="600"/>
 
 ### Request headers
 
@@ -213,6 +217,8 @@ Every delivery carries the same JSON envelope:
 `status` is one of `SUCCESS`, `FAILED`, `CANCELLED` (effective terminal
 status); `summary` is present only when the workflow produced one.
 
+<img src="screenshots/webhooks/delivery-details-prworkflow-finished.png" alt="Payload of a prworkflow.completed webhook" width="600"/>
+
 **`prworkflow.failed`** — a run aborted with an error.
 
 ```json
@@ -235,6 +241,8 @@ parsed:
 ```json
 { "findingCounts": { "blocker": 1, "medium": 0, "low": 2 } }
 ```
+
+<img src="screenshots/webhooks/delivery-details-finding.png" alt="Payload of a Review-finding" width="600"/>
 
 **`issueassignment.started`** — the bot picked up an issue assignment.
 
