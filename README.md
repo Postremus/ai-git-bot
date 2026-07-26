@@ -397,12 +397,12 @@ The bot:
 ---
 ## Quick Start
 
-Run AI-Git-Bot locally using Docker Compose.
+### Quick testing
+
+For a quick local test, run AI-Git-Bot with a single Docker command using the built-in H2 database and default settings:
 
 ```bash
-git clone https://github.com/tmseidel/ai-git-bot.git
-cd ai-git-bot
-docker compose up --build -d
+docker run -p 8080:8080 tmseidel/ai-git-bot:latest
 ```
 
 Then:
@@ -414,6 +414,18 @@ Then:
 5. Create a Bot
 6. Configure the webhook
 7. You're done
+
+### Production deployment
+
+For a configured production or long-term deployment, we recommend the Docker Compose approach, which gives you full control over configuration:
+
+```bash
+git clone https://github.com/tmseidel/ai-git-bot.git
+cd ai-git-bot
+docker compose up --build -d
+```
+
+See **[Deployment Guide](doc/DEPLOYMENT.md)** for detailed configuration instructions.
 
 ---
 

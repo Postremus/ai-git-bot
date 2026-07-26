@@ -389,12 +389,12 @@ Bot 将粗略的需求转化为结构化的工程工作项：
 
 ## 快速开始
 
-使用 Docker Compose 在本地运行 AI-Git-Bot。
+### 快速测试
+
+对于快速本地测试，使用内置 H2 数据库和默认设置，通过单个 Docker 命令运行 AI-Git-Bot：
 
 ```bash
-git clone https://github.com/tmseidel/ai-git-bot.git
-cd ai-git-bot
-docker compose up --build -d
+docker run -p 8080:8080 tmseidel/ai-git-bot:latest
 ```
 
 然后：
@@ -406,6 +406,18 @@ docker compose up --build -d
 5. 创建 Bot
 6. 配置 webhook
 7. 完成
+
+### 生产部署
+
+对于经过配置的生产或长期部署，我们推荐使用 Docker Compose 方式，以便对配置拥有完全控制权：
+
+```bash
+git clone https://github.com/tmseidel/ai-git-bot.git
+cd ai-git-bot
+docker compose up --build -d
+```
+
+有关详细配置说明，请参阅 **[部署指南](doc/DEPLOYMENT.md)**。
 
 ---
 

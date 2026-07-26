@@ -394,12 +394,12 @@ Markdown のみ対応で、変更されるファイルは必ず設定したド�
 
 ## クイックスタート
 
-Docker Compose で AI-Git-Bot をローカルに実行。
+### クイックテスト
+
+ビルトインのH2データベースとデフォルト設定を使用して、単一のDockerコマンドでAI-Git-Botをローカルテストするには：
 
 ```bash
-git clone https://github.com/tmseidel/ai-git-bot.git
-cd ai-git-bot
-docker compose up --build -d
+docker run -p 8080:8080 tmseidel/ai-git-bot:latest
 ```
 
 その後：
@@ -411,6 +411,18 @@ docker compose up --build -d
 5. Bot を作成
 6. webhook を設定
 7. 完了
+
+### 本番環境デプロイメント
+
+設定済みの本番環境または長期デプロイメントの場合は、設定を完全に制御できるDocker Composeのアプローチを推奨します：
+
+```bash
+git clone https://github.com/tmseidel/ai-git-bot.git
+cd ai-git-bot
+docker compose up --build -d
+```
+
+詳細な設定手順については、**[デプロイメントガイド](doc/DEPLOYMENT.md)** を参照してください。
 
 ---
 
