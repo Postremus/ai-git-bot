@@ -242,6 +242,7 @@ PR を bot に割り当てると、変更に対する Playwright テストスイ
 | **[PR 再レビュー](doc/PR_WORKFLOWS_REVIEW.md)** | フォースプッシュまたはレビュー依頼 | 更新された分析 |
 | **[ワークフロー自動化](doc/PR_WORKFLOWS.md)** | Git イベント | エンジニアリング作業の自動化 |
 | **[Prometheus メトリクス](doc/DEPLOYMENT.md#metrics-prometheus)** | 組み込み `/actuator/prometheus` エンドポイント | レビュー、調査結果、AI 使用量、エラー、ツール呼び出しの運用メトリクス |
+| **[送信 Webhook](doc/OUTGOING_WEBHOOKS.md)** | 外部システムへの署名付きイベントプッシュ | ワークフロー実行、レビュー結果、Issue 割り当ての永続化・再試行される HMAC 署名通知 |
 
 ---
 

@@ -110,6 +110,29 @@ class EventHookEndpointTest {
         assertFalse(endpoint.matchesScope(4L, "acme", "shop"));
     }
 
+    @Test
+    void matchesScope_emptyOrBlankRepoScope_treatedAsGlobal() {
+        // The admin form binds cleared scope inputs as "" (not null) — these
+        // must behave like an unset scope instead of matching nothing.
+        EventHookEndpoint endpoint = endpoint("PR_WORKFLOW_STARTED");
+        endpoint.setRepoOwner("");
+        endpoint.setRepoName("   ");
+
+        assertTrue(endpoint.matchesScope(null, "acme", "shop"));
+        assertTrue(endpoint.matchesScope(3L, "other", "other"));
+        assertTrue(endpoint.matchesScope(null, null, null));
+    }
+
+    @Test
+    void matchesScope_blankOwnerWithSetName_nameStillRestricts() {
+        EventHookEndpoint endpoint = endpoint("PR_WORKFLOW_STARTED");
+        endpoint.setRepoOwner("");
+        endpoint.setRepoName("shop");
+
+        assertTrue(endpoint.matchesScope(null, "acme", "shop"));
+        assertFalse(endpoint.matchesScope(null, "acme", "other"));
+    }
+
     // --- custom headers ---
 
     @Test

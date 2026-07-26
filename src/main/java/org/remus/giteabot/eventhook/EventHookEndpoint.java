@@ -114,10 +114,10 @@ public class EventHookEndpoint {
         if (this.botId != null && !this.botId.equals(botId)) {
             return false;
         }
-        if (this.repoOwner != null && !this.repoOwner.equalsIgnoreCase(repoOwner)) {
+        if (this.repoOwner != null && !this.repoOwner.isBlank() && !this.repoOwner.equalsIgnoreCase(repoOwner)) {
             return false;
         }
-        if (this.repoName != null && !this.repoName.equalsIgnoreCase(repoName)) {
+        if (this.repoName != null && !this.repoName.isBlank() && !this.repoName.equalsIgnoreCase(repoName)) {
             return false;
         }
         return true;
