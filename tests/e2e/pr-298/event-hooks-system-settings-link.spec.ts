@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 
 test('outgoing webhooks is reachable from the system settings area', async ({ page }) => {
   // Try common Gitea admin/system settings entry points until one loads.
-  const candidateSettingsPaths = ['/-/admin', '/-/admin/config', '/admin', '/admin/config'];
+  const candidateSettingsPaths = ['/system-settings'];
 
   let settingsLoaded = false;
   for (const path of candidateSettingsPaths) {

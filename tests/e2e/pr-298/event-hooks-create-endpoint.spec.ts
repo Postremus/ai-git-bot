@@ -30,11 +30,8 @@ test('create an outgoing webhook endpoint and see it in the list', async ({ page
       await eventCheckbox.click({ force: true });
     });
   }
-
-  // Submit the form.
-  const submit = page
-    .locator('button[type="submit"], input[type="submit"]')
-    .first();
+// Submit the form.
+  const submit = page.locator('button[type="submit"]:has-text("Save"), input[type="submit"][value="Save"]').first();
   await expect(submit).toBeVisible();
 
   await Promise.all([
@@ -43,7 +40,6 @@ test('create an outgoing webhook endpoint and see it in the list', async ({ page
   ]);
 
   // Ensure we can see the endpoints list containing the new endpoint name.
-  await page.goto('/admin/event-hooks');
   await page.waitForLoadState('domcontentloaded');
 
   const listing = page.getByText(uniqueName, { exact: false }).first();

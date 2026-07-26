@@ -28,7 +28,7 @@ test('invalid URL is rejected on the new endpoint form', async ({ page }) => {
     });
   }
 
-  const submit = page.locator('button[type="submit"], input[type="submit"]').first();
+  const submit = page.locator('button[type="submit"]:has-text("Save"), input[type="submit"][value="Save"]').first();
   await expect(submit).toBeVisible();
   await submit.click();
 

@@ -29,7 +29,7 @@ test('existing endpoint can be opened for editing and pre-fills the URL', async 
     });
   }
 
-  const submit = page.locator('button[type="submit"], input[type="submit"]').first();
+  const submit = page.locator('button[type="submit"]:has-text("Save"), input[type="submit"][value="Save"]').first();
   await submit.click();
   await page.waitForLoadState('domcontentloaded');
 
@@ -37,14 +37,14 @@ test('existing endpoint can be opened for editing and pre-fills the URL', async 
   await page.goto('/admin/event-hooks');
   await page.waitForLoadState('domcontentloaded');
 
-  // Find and open the newly created endpoint for editing.
-  const row = page.locator(`a:has-text("${uniqueName}")`).first();
-  await expect(row).toBeVisible({ timeout: 10_000 });
-  await row.click();
-  await page.waitForLoadState('domcontentloaded');
-
   // If we did not land directly on an edit form, look for an explicit "Edit" action.
-  const editButton = page.locator('a:has-text("Edit"), button:has-text("Edit")').first();
+  const editButton = page
+      .locator('tr')
+      .filter({ hasText: uniqueName })
+      .getByRole('link', { name: 'Edit', exact: false });
+
+  await editButton.click();
+
   if (await editButton.count()) {
     const editable = page.locator('input[name="url"], input[name="payload_url"], input[type="url"]').first();
     if (!(await editable.isVisible().catch(() => false))) {
