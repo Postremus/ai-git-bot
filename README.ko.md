@@ -394,12 +394,12 @@ AI-Git-Bot 은 코드 주변 작업을 자동화합니다.
 
 ## 빠른 시작
 
-Docker Compose 를 사용하여 로컬에서 AI-Git-Bot 실행.
+### 빠르게 테스트하기
+
+내장 H2 데이터베이스와 기본 설정을 사용하여 단일 Docker 명령으로 AI-Git-Bot을 빠르게 로컬 테스트하려면 실행하세요:
 
 ```bash
-git clone https://github.com/tmseidel/ai-git-bot.git
-cd ai-git-bot
-docker compose up --build -d
+docker run -p 8080:8080 tmseidel/ai-git-bot:latest
 ```
 
 이후:
@@ -411,6 +411,18 @@ docker compose up --build -d
 5. 봇 생성
 6. webhook 설정
 7. 완료
+
+### 프로덕션 배포
+
+설정된 프로덕션 또는 장기 배포의 경우, 구성에 대한 완전한 제어 권한을 제공하는 Docker Compose 접근 방식을 권장합니다:
+
+```bash
+git clone https://github.com/tmseidel/ai-git-bot.git
+cd ai-git-bot
+docker compose up --build -d
+```
+
+자세한 구성 지침은 **[배포 가이드](doc/DEPLOYMENT.md)**를 참조하세요.
 
 ---
 
