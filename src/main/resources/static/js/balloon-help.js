@@ -86,21 +86,47 @@
         document.body.appendChild(balloon);
 
         var current = -1;
+        var previousBodyOverflow = document.body.style.overflow;
+
+        // Lock background scrolling while the tour is open so the fixed-position
+        // balloon can never detach from its anchor.
+        document.body.style.overflow = 'hidden';
 
         function finish() {
             setCookie(COOKIE_NAME, version);
             steps.forEach(function (step) {
                 step.element.classList.remove('giteabot-tour-highlight');
             });
+            document.body.style.overflow = previousBodyOverflow;
             overlay.remove();
             balloon.remove();
             document.removeEventListener('keydown', onKeydown);
+            window.removeEventListener('resize', onResize);
         }
 
         function onKeydown(event) {
             if (event.key === 'Escape') {
                 finish();
             }
+        }
+
+        function onResize() {
+            if (current >= 0 && current < steps.length) {
+                positionBalloon(steps[current].element);
+            }
+        }
+
+        function positionBalloon(target) {
+            var rect = target.getBoundingClientRect();
+            var balloonWidth = Math.min(352, window.innerWidth - 16);
+            balloon.style.width = balloonWidth + 'px';
+            var left = Math.max(8, Math.min(rect.left, window.innerWidth - balloonWidth - 8));
+            var top = rect.bottom + 10;
+            if (top + balloon.offsetHeight > window.innerHeight - 8) {
+                top = Math.max(8, rect.top - balloon.offsetHeight - 10);
+            }
+            balloon.style.left = left + 'px';
+            balloon.style.top = top + 'px';
         }
 
         function showStep(index) {
@@ -149,19 +175,11 @@
             balloon.appendChild(body);
             balloon.appendChild(footer);
 
-            var rect = step.element.getBoundingClientRect();
-            var balloonWidth = Math.min(352, window.innerWidth - 16);
-            balloon.style.width = balloonWidth + 'px';
-            var left = Math.max(8, Math.min(rect.left, window.innerWidth - balloonWidth - 8));
-            var top = rect.bottom + 10;
-            if (top + balloon.offsetHeight > window.innerHeight - 8) {
-                top = Math.max(8, rect.top - balloon.offsetHeight - 10);
-            }
-            balloon.style.left = left + 'px';
-            balloon.style.top = top + 'px';
+            positionBalloon(step.element);
         }
 
         document.addEventListener('keydown', onKeydown);
+        window.addEventListener('resize', onResize);
         showStep(0);
     });
 })();
