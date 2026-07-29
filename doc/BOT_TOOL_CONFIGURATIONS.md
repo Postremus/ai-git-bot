@@ -75,10 +75,12 @@ configuration. This means:
   seeds the built-in tool selections (file, context, repository) and then
   attaches every existing bot to it before adding the `NOT NULL` /
   foreign-key constraint.
-- New built-in tools shipped in a future release — and validation tools
-  added through `agent.validation.available-tools` — are **not** added to
-  Default automatically. An admin must opt in by editing the configuration
-  in **System settings → Tool configurations**.
+- New built-in context-gathering tools shipped in a later release are added
+  to Default by follow-up migrations (V29 seeded `ctags-signatures` /
+  `ctags-deps`, V37 seeded `pr-diff`). Validation tools added through
+  `agent.validation.available-tools` and any other built-in tools are
+  **not** added to Default automatically — an admin opts in by editing the
+  configuration in **System settings → Tool configurations**.
 - Admin-curated selections in Default and in every other configuration are
   stable across upgrades.
 
@@ -178,6 +180,11 @@ application-level code:
    context aliases), backfills every existing bot to that Default
    configuration, adds the foreign-key constraint and finally sets the column
    to `NOT NULL`.
+3. **V29** adds the `ctags-signatures` / `ctags-deps` context tools and
+   **V37** adds the `pr-diff` context tool to the Default configuration, so
+   fresh installations and existing Default configurations expose every
+   context-gathering tool. (V30 separately backfills `pr-diff` into custom
+   configurations used by bots with the agentic-review workflow.)
 
 After migration completes the application performs **no** further auto-seeding
 of tool configurations. Built-in or validation tools added in future releases
