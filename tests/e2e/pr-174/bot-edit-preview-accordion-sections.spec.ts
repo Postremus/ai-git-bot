@@ -3,18 +3,24 @@ import { test, expect } from '@playwright/test';
 test('Bot-Edit System-Prompt preview modal shows all 10 accordion sections', async ({ page }) => {
   await page.goto('/bots');
 
+  const dismissButton = page.getByRole('button', { name: 'Dismiss' });
+  if (await dismissButton.count() > 0) {
+    await dismissButton.click();
+  }
+
+
   // Open the edit modal for the first bot listed
   const editTrigger = page
     .locator('[data-bs-toggle="modal"], a, button')
     .filter({ hasText: /Edit/i })
     .first();
   await editTrigger.click();
+  await page.waitForLoadState('networkidle');
 
   // Trigger the System-Prompt preview action
   const previewBtn = page
     .locator('#previewSystemPrompt')
   await previewBtn.click();
-  await page.waitForLoadState('domcontentloaded');
 
   const previewAccordion = page.locator('#systemPromptPreviewAccordion');
   await expect(previewAccordion).toBeVisible({ timeout: 8000 });

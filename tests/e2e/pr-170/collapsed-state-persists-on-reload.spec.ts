@@ -3,6 +3,12 @@ import { test, expect } from '@playwright/test';
 test('collapsed section state persists across page reloads', async ({ page }) => {
   await page.goto('/system-settings');
 
+  const dismissButton = page.getByRole('button', { name: 'Dismiss' });
+  if (await dismissButton.count() > 0) {
+    await dismissButton.click();
+  }
+
+
   const section = page.locator('#section-bot-tools');
   const header = page.locator('[data-bs-target="#section-bot-tools"], [aria-controls="section-bot-tools"]').first();
 

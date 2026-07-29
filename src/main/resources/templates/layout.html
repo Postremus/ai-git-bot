@@ -33,37 +33,49 @@
                 <ul class="navbar-nav me-auto">
                     <li class="nav-item">
                         <a class="nav-link" th:href="@{/dashboard}"
-                           th:classappend="${activeNav == 'dashboard'} ? 'active'">
+                           th:classappend="${activeNav == 'dashboard'} ? 'active'"
+                           data-tour="dashboard" data-tour-title="Dashboard"
+                           data-tour-text="Your starting point: bot counts, webhook activity and AI token usage at a glance.">
                             <i class="bi bi-speedometer2"></i> Dashboard
                         </a>
                     </li>
                     <li class="nav-item">
                         <a class="nav-link" th:href="@{/bots}"
-                           th:classappend="${activeNav == 'bots'} ? 'active'">
+                           th:classappend="${activeNav == 'bots'} ? 'active'"
+                           data-tour="bots" data-tour-title="Bots"
+                           data-tour-text="Create and manage your AI bots here. Each bot combines an AI integration, a Git integration and a system prompt.">
                             <i class="bi bi-cpu"></i> Bots
                         </a>
                     </li>
                     <li class="nav-item">
                         <a class="nav-link" th:href="@{/ai-integrations}"
-                           th:classappend="${activeNav == 'ai-integrations'} ? 'active'">
+                           th:classappend="${activeNav == 'ai-integrations'} ? 'active'"
+                           data-tour="ai-integrations" data-tour-title="AI Integrations"
+                           data-tour-text="Connect AI providers (Anthropic, OpenAI, Google, or self-hosted) with API keys and model selection. You need at least one before creating a bot.">
                             <i class="bi bi-stars"></i> AI Integrations
                         </a>
                     </li>
                     <li class="nav-item">
                         <a class="nav-link" th:href="@{/git-integrations}"
-                           th:classappend="${activeNav == 'git-integrations'} ? 'active'">
+                           th:classappend="${activeNav == 'git-integrations'} ? 'active'"
+                           data-tour="git-integrations" data-tour-title="Git Integrations"
+                           data-tour-text="Connect Git platforms (Gitea, GitHub, GitLab, Bitbucket) so bots can read pull requests and post reviews. You need at least one before creating a bot.">
                             <i class="bi bi-git"></i> Git Integrations
                         </a>
                     </li>
                     <li class="nav-item">
                         <a class="nav-link" th:href="@{/usage}"
-                           th:classappend="${activeNav == 'usage'} ? 'active'">
+                           th:classappend="${activeNav == 'usage'} ? 'active'"
+                           data-tour="usage" data-tour-title="Usage"
+                           data-tour-text="Track AI token consumption per bot and integration — useful for keeping an eye on costs.">
                             <i class="bi bi-graph-up"></i> Usage
                         </a>
                     </li>
                     <li class="nav-item">
                         <a class="nav-link" th:href="@{/system-settings}"
-                           th:classappend="${activeNav == 'system-settings'} ? 'active'">
+                           th:classappend="${activeNav == 'system-settings'} ? 'active'"
+                           data-tour="system-settings" data-tour-title="System settings"
+                           data-tour-text="Advanced configuration: system prompts, tool configurations, workflows, MCP servers and event hooks.">
                             <i class="bi bi-gear"></i> System settings
                         </a>
                     </li>
@@ -102,6 +114,10 @@
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
     <script th:src="@{/js/collapsible-sections.js}"></script>
+    <script th:inline="javascript">
+        window.giteabotTourVersion = /*[[${appVersion}]]*/ 'dev';
+    </script>
+    <script th:src="@{/js/balloon-help.js}"></script>
 </div>
 
 </body>

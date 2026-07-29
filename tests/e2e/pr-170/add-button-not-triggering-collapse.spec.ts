@@ -3,6 +3,11 @@ import { test, expect } from '@playwright/test';
 test('Add button in section header navigates without toggling collapse', async ({ page }) => {
   await page.goto('/system-settings');
 
+  const dismissButton = page.getByRole('button', { name: 'Dismiss' });
+  if (await dismissButton.count() > 0) {
+    await dismissButton.click();
+  }
+
   const section = page.locator('#section-system-prompts');
   await expect(section).toBeVisible();
 

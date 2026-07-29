@@ -2,6 +2,10 @@ import { test, expect } from '@playwright/test';
 
 test('System settings list still toggles sections after refactor to shared helper', async ({ page }) => {
   await page.goto('/system-settings');
+  const dismissButton = page.getByRole('button', { name: 'Dismiss' });
+  if (await dismissButton.count() > 0) {
+    await dismissButton.click();
+  }
 
   await page.locator('#collapseAllSections').click();
 

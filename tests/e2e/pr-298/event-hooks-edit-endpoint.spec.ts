@@ -7,6 +7,11 @@ test('existing endpoint can be opened for editing and pre-fills the URL', async 
   // --- Create an endpoint first. ---
   await page.goto('/admin/event-hooks/new');
   await page.waitForLoadState('domcontentloaded');
+  const dismissButton = page.getByRole('button', { name: 'Dismiss' });
+  if (await dismissButton.count() > 0) {
+    await dismissButton.click();
+  }
+
   await page.waitForSelector('form', { timeout: 10_000 });
 
   const nameField = page

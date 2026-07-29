@@ -3,6 +3,11 @@ import { test, expect } from '@playwright/test';
 test('Expand all button opens every prompt section', async ({ page }) => {
   await page.goto('/system-settings/system-prompts/1/edit');
 
+  const dismissButton = page.getByRole('button', { name: 'Dismiss' });
+  if (await dismissButton.count() > 0) {
+    await dismissButton.click();
+  }
+
   await page.locator('#expandAllPromptsBtn').click();
 
   // Wait briefly for the bootstrap collapse animations

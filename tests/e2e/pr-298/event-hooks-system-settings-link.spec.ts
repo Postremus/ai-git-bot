@@ -15,6 +15,10 @@ test('outgoing webhooks is reachable from the system settings area', async ({ pa
 
   expect(settingsLoaded, 'a system settings page should be reachable').toBeTruthy();
   await page.waitForLoadState('domcontentloaded');
+  const dismissButton = page.getByRole('button', { name: 'Dismiss' });
+  if (await dismissButton.count() > 0) {
+    await dismissButton.click();
+  }
 
   // Look for a link to outgoing webhooks. Match by href or link text.
   const link = page

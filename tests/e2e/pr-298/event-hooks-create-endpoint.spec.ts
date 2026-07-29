@@ -5,6 +5,10 @@ test('create an outgoing webhook endpoint and see it in the list', async ({ page
 
   await page.goto('/admin/event-hooks/new');
   await page.waitForLoadState('domcontentloaded');
+  const dismissButton = page.getByRole('button', { name: 'Dismiss' });
+  if (await dismissButton.count() > 0) {
+    await dismissButton.click();
+  }
   await page.waitForSelector('form', { timeout: 10_000 });
 
   // Fill the name field. Different builds label it "name" or "label" or similar.
