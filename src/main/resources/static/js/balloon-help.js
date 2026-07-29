@@ -78,6 +78,11 @@
 
         var overlay = document.createElement('div');
         overlay.className = 'giteabot-tour-overlay';
+        // Clicking the scrim dismisses the tour — escape hatch so the user can
+        // never get stuck behind the overlay.
+        overlay.addEventListener('click', function () {
+            finish();
+        });
         document.body.appendChild(overlay);
 
         var balloon = document.createElement('div');
@@ -110,9 +115,24 @@
             }
         }
 
+        function isVisible(el) {
+            if (el.offsetParent === null) {
+                return false;
+            }
+            var rect = el.getBoundingClientRect();
+            return rect.width > 0 && rect.height > 0;
+        }
+
         function onResize() {
-            if (current >= 0 && current < steps.length) {
+            if (current < 0) {
+                return;
+            }
+            if (current < steps.length && isVisible(steps[current].element)) {
                 positionBalloon(steps[current].element);
+            } else {
+                // Anchor disappeared (e.g. navbar collapsed on viewport change) —
+                // advance to the next visible step, or end the tour if none remain.
+                showStep(current + 1);
             }
         }
 
@@ -130,8 +150,13 @@
         }
 
         function showStep(index) {
-            if (index > 0) {
-                steps[index - 1].element.classList.remove('giteabot-tour-highlight');
+            steps.forEach(function (step) {
+                step.element.classList.remove('giteabot-tour-highlight');
+            });
+            // Skip steps whose anchor is no longer visible (e.g. navbar
+            // collapsed after the tour started).
+            while (index < steps.length && !isVisible(steps[index].element)) {
+                index++;
             }
             if (index >= steps.length) {
                 finish();
