@@ -3,6 +3,12 @@ import { test, expect } from '@playwright/test';
 test("header chevron reflects collapsed state via 'collapsed' class", async ({ page }) => {
   await page.goto('/system-settings');
 
+  const dismissButton = page.getByRole('button', { name: 'Dismiss' });
+  if (await dismissButton.count() > 0) {
+    await dismissButton.click();
+  }
+
+
   const section = page.locator('#section-deployment-targets');
   const header = page.locator('[data-bs-target="#section-deployment-targets"], [aria-controls="section-deployment-targets"]').first();
 

@@ -3,6 +3,11 @@ import { test, expect } from '@playwright/test';
 test('User can edit a prompt inside an accordion section and save successfully', async ({ page }) => {
   await page.goto('/system-settings/system-prompts/1/edit');
 
+  const dismissButton = page.getByRole('button', { name: 'Dismiss' });
+  if (await dismissButton.count() > 0) {
+    await dismissButton.click();
+  }
+
   // Ensure the Review section is open
   const reviewCollapse = page.locator('#collapseReviewPrompt');
   if (!(await reviewCollapse.evaluate((el) => el.classList.contains('show')).catch(() => false))) {

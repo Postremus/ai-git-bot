@@ -3,6 +3,10 @@ import { test, expect } from '@playwright/test';
 test('new endpoint form exposes at least one event type checkbox', async ({ page }) => {
   await page.goto('/admin/event-hooks/new');
   await page.waitForLoadState('domcontentloaded');
+  const dismissButton = page.getByRole('button', { name: 'Dismiss' });
+  if (await dismissButton.count() > 0) {
+    await dismissButton.click();
+  }
 
   // Give the form time to render.
   await page.waitForSelector('form', { timeout: 10_000 });

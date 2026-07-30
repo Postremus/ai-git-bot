@@ -3,6 +3,12 @@ import { test, expect } from '@playwright/test';
 test('expand all button shows every section after collapsing', async ({ page }) => {
   await page.goto('/system-settings');
 
+  const dismissButton = page.getByRole('button', { name: 'Dismiss' });
+  if (await dismissButton.count() > 0) {
+    await dismissButton.click();
+  }
+
+
   const sectionIds = [
     '#section-system-prompts',
     '#section-mcp-configurations',

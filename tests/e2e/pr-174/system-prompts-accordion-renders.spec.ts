@@ -3,6 +3,12 @@ import { test, expect } from '@playwright/test';
 test('System-Prompts edit page renders accordion with all 10 sections', async ({ page }) => {
   await page.goto('/system-settings/system-prompts/1/edit');
 
+  const dismissButton = page.getByRole('button', { name: 'Dismiss' });
+  if (await dismissButton.count() > 0) {
+    await dismissButton.click();
+  }
+
+
   const accordion = page.locator('#systemPromptsAccordion');
   await expect(accordion).toBeVisible();
 

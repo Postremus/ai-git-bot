@@ -234,6 +234,53 @@
             </div>
         </div>
 
+        <div class="modal fade" id="missingIntegrationModal" tabindex="-1"
+             aria-labelledby="missingIntegrationTitle" aria-hidden="true"
+             data-bs-backdrop="static" data-bs-keyboard="false"
+             th:if="${missingAiIntegration or missingGitIntegration}">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="missingIntegrationTitle">
+                            <i class="bi bi-exclamation-triangle text-warning"></i> Setup required
+                        </h5>
+                    </div>
+                    <div class="modal-body">
+                        <p>Before you can create a bot, the following integrations must be set up first:</p>
+                        <ul>
+                            <li th:if="${missingAiIntegration}">
+                                <strong>AI Integration</strong> — connects the bot to an AI provider
+                                (Anthropic, OpenAI, Google, ...).
+                            </li>
+                            <li th:if="${missingGitIntegration}">
+                                <strong>Git Integration</strong> — connects the bot to a Git platform
+                                (Gitea, GitHub, GitLab, ...).
+                            </li>
+                        </ul>
+                    </div>
+                    <div class="modal-footer">
+                        <a th:href="@{/bots}" class="btn btn-secondary">
+                            <i class="bi bi-arrow-left"></i> Back to Bots
+                        </a>
+                        <a th:if="${missingGitIntegration}" th:href="@{/git-integrations/new}"
+                           class="btn btn-primary">
+                            <i class="bi bi-git"></i> Create Git Integration
+                        </a>
+                        <a th:if="${missingAiIntegration}" th:href="@{/ai-integrations/new}"
+                           class="btn btn-primary">
+                            <i class="bi bi-stars"></i> Create AI Integration
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <script th:if="${missingAiIntegration or missingGitIntegration}">
+            document.addEventListener('DOMContentLoaded', function() {
+                new bootstrap.Modal(document.getElementById('missingIntegrationModal')).show();
+            });
+        </script>
+
         <div class="modal fade" id="systemPromptPreviewModal" tabindex="-1" aria-labelledby="systemPromptPreviewTitle"
              aria-hidden="true">
             <div class="modal-dialog modal-xl modal-dialog-scrollable">
