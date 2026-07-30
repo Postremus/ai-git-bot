@@ -3,6 +3,12 @@ import { test, expect } from '@playwright/test';
 test('Collapse all button closes every prompt section', async ({ page }) => {
   await page.goto('/system-settings/system-prompts/1/edit');
 
+  const dismissButton = page.getByRole('button', { name: 'Dismiss' });
+  if (await dismissButton.count() > 0) {
+    await dismissButton.click();
+  }
+
+
   await page.locator('#expandAllPromptsBtn').click();
   await page.waitForTimeout(600);
 

@@ -62,6 +62,8 @@ public class BotController {
         workflowConfigurationService.findDefault().ifPresent(bot::setWorkflowConfiguration);
         model.addAttribute("bot", bot);
         addFormAttributes(model);
+        model.addAttribute("missingAiIntegration", aiIntegrationService.findAll().isEmpty());
+        model.addAttribute("missingGitIntegration", gitIntegrationService.findAll().isEmpty());
         return "bots/form";
     }
 
@@ -139,6 +141,10 @@ public class BotController {
         List<SystemPrompt> systemPrompts = systemPromptService.findAll();
         model.addAttribute("aiIntegrations", aiIntegrationService.findAll());
         model.addAttribute("gitIntegrations", gitIntegrationService.findAll());
+        // Defaults so the missing-integration modal expression is null-safe on the
+        // edit form and the save-error re-render; newForm() overrides these.
+        model.addAttribute("missingAiIntegration", false);
+        model.addAttribute("missingGitIntegration", false);
         model.addAttribute("systemPrompts", systemPrompts);
         model.addAttribute("mcpConfigurations", mcpConfigurationService.findAll());
         model.addAttribute("toolConfigurations", botToolConfigurationService.findAll());

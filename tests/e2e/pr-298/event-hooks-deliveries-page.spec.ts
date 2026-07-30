@@ -4,6 +4,12 @@ test('deliveries view is reachable from the outgoing webhooks admin', async ({ p
   await page.goto('/admin/event-hooks');
   await page.waitForLoadState('domcontentloaded');
 
+  const dismissButton = page.getByRole('button', { name: 'Dismiss' });
+  if (await dismissButton.count() > 0) {
+    await dismissButton.click();
+  }
+
+
   // Try to find a global "deliveries" link on the admin page.
   const deliveriesLink = page
     .locator(

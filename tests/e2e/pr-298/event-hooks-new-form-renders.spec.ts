@@ -6,6 +6,10 @@ test('new outgoing webhook form renders with a URL input', async ({ page }) => {
   expect(response!.status()).toBeLessThan(400);
 
   await page.waitForLoadState('domcontentloaded');
+  const dismissButton = page.getByRole('button', { name: 'Dismiss' });
+  if (await dismissButton.count() > 0) {
+    await dismissButton.click();
+  }
 
   // Look for a URL input for the webhook endpoint. Match common attribute names
   // used by webhook creation forms: name="url" / name="payload_url" / type="url".

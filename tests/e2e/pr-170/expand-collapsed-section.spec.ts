@@ -3,6 +3,12 @@ import { test, expect } from '@playwright/test';
 test('clicking a collapsed section header expands it again', async ({ page }) => {
   await page.goto('/system-settings');
 
+  const dismissButton = page.getByRole('button', { name: 'Dismiss' });
+  if (await dismissButton.count() > 0) {
+    await dismissButton.click();
+  }
+
+
   const section = page.locator('#section-mcp-configurations');
   const header = page.locator('[data-bs-target="#section-mcp-configurations"], [aria-controls="section-mcp-configurations"]').first();
 

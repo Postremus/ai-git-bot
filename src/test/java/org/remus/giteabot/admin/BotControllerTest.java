@@ -12,6 +12,7 @@ import org.remus.giteabot.systemsettings.McpToolSelectionRow;
 import org.remus.giteabot.systemsettings.McpToolSelectionService;
 import org.remus.giteabot.systemsettings.SystemPromptService;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
 import java.util.List;
 import java.util.Optional;
@@ -38,6 +39,65 @@ class BotControllerTest {
                 botToolSelectionService,
                 mock(WorkflowConfigurationService.class),
                 mock(org.remus.giteabot.prworkflow.config.DeploymentTargetService.class));
+    }
+
+    @Test
+    void newForm_withoutIntegrations_setsMissingFlags() {
+        BotController controller = newController(mock(BotService.class), mock(McpConfigurationService.class),
+                mock(McpToolSelectionService.class), mock(BotToolConfigurationService.class),
+                mock(BotToolSelectionService.class));
+        // Unstubbed Mockito mocks return empty lists for findAll()
+
+        org.springframework.ui.Model model = new org.springframework.ui.ExtendedModelMap();
+        String view = controller.newForm(model);
+
+        assertEquals("bots/form", view);
+        assertEquals(Boolean.TRUE, model.getAttribute("missingAiIntegration"));
+        assertEquals(Boolean.TRUE, model.getAttribute("missingGitIntegration"));
+    }
+
+    @Test
+    void newForm_withIntegrations_clearsMissingFlags() {
+        AiIntegrationService aiIntegrationService = mock(AiIntegrationService.class);
+        GitIntegrationService gitIntegrationService = mock(GitIntegrationService.class);
+        when(aiIntegrationService.findAll()).thenReturn(List.of(new AiIntegration()));
+        when(gitIntegrationService.findAll()).thenReturn(List.of(new GitIntegration()));
+        BotController controller = new BotController(
+                mock(BotService.class),
+                aiIntegrationService,
+                gitIntegrationService,
+                mock(SystemPromptService.class),
+                mock(McpConfigurationService.class),
+                mock(McpToolSelectionService.class),
+                mock(BotToolConfigurationService.class),
+                mock(BotToolSelectionService.class),
+                mock(WorkflowConfigurationService.class),
+                mock(org.remus.giteabot.prworkflow.config.DeploymentTargetService.class));
+
+        org.springframework.ui.Model model = new org.springframework.ui.ExtendedModelMap();
+        String view = controller.newForm(model);
+
+        assertEquals("bots/form", view);
+        assertEquals(Boolean.FALSE, model.getAttribute("missingAiIntegration"));
+        assertEquals(Boolean.FALSE, model.getAttribute("missingGitIntegration"));
+    }
+
+    @Test
+    void editForm_existingBot_defaultsMissingFlagsToFalse() {
+        BotService botService = mock(BotService.class);
+        Bot bot = new Bot();
+        bot.setId(1L);
+        when(botService.findById(1L)).thenReturn(Optional.of(bot));
+        BotController controller = newController(botService, mock(McpConfigurationService.class),
+                mock(McpToolSelectionService.class), mock(BotToolConfigurationService.class),
+                mock(BotToolSelectionService.class));
+
+        org.springframework.ui.Model model = new org.springframework.ui.ExtendedModelMap();
+        String view = controller.editForm(1L, model, mock(RedirectAttributes.class));
+
+        assertEquals("bots/form", view);
+        assertEquals(Boolean.FALSE, model.getAttribute("missingAiIntegration"));
+        assertEquals(Boolean.FALSE, model.getAttribute("missingGitIntegration"));
     }
 
     @Test
