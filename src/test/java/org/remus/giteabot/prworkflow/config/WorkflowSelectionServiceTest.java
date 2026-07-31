@@ -6,6 +6,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.remus.giteabot.issueworkflow.IssueWorkflowRegistry;
 import org.remus.giteabot.prworkflow.PrWorkflow;
 import org.remus.giteabot.prworkflow.PrWorkflowCategory;
 import org.remus.giteabot.prworkflow.PrWorkflowContext;
@@ -39,8 +40,9 @@ class WorkflowSelectionServiceTest {
     @BeforeEach
     void setUp() {
         PrWorkflowRegistry registry = new PrWorkflowRegistry(List.of(new ReviewLike(), new TestsLike()));
+        IssueWorkflowRegistry issueRegistry = new IssueWorkflowRegistry(List.of());
         service = new WorkflowSelectionService(configurationRepository, selectionRepository,
-                registry, paramsValidator);
+                registry, issueRegistry, paramsValidator);
     }
 
     @Test

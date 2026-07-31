@@ -2,8 +2,10 @@ package org.remus.giteabot.prworkflow.config;
 
 import lombok.RequiredArgsConstructor;
 
+import org.remus.giteabot.issueworkflow.IssueWorkflowRegistry;
 import org.remus.giteabot.prworkflow.PrWorkflow;
 import org.remus.giteabot.prworkflow.PrWorkflowRegistry;
+import org.remus.giteabot.prworkflow.WorkflowDescriptor;
 import org.remus.giteabot.prworkflow.WorkflowParamField;
 import org.remus.giteabot.prworkflow.WorkflowParamsSchema;
 import org.springframework.stereotype.Service;
@@ -18,14 +20,21 @@ import java.util.Optional;
 import java.util.Set;
 
 /**
- * Loads the available {@link PrWorkflow} catalog for the admin UI and
- * persists per-configuration selections + per-selection params. Mirrors
+ * Loads the available workflow catalog for the admin UI and persists
+ * per-configuration selections + per-selection params. Mirrors
  * {@link org.remus.giteabot.systemsettings.BotToolSelectionService}.
+ *
+ * <p>The catalog is scoped by the configuration's
+ * {@link WorkflowConfigurationKind}: PR configurations list
+ * {@link PrWorkflowRegistry} entries, ISSUE configurations list
+ * {@link IssueWorkflowRegistry} entries. Both SPIs are exposed through the
+ * shared {@link WorkflowDescriptor} abstraction, so selection, params
+ * validation and the UI rows are identical for either kind.</p>
  *
  * <p>Workflows that are no longer registered (e.g. removed in a release) are
  * kept on the configuration so manual selections survive upgrades, but they
  * are surfaced in {@link #loadAvailableWorkflows(Long)} with a {@code null}
- * {@link WorkflowSelectionRow#prWorkflow()} for the UI to flag.</p>
+ * {@link WorkflowSelectionRow#workflow()} for the UI to flag.</p>
  */
 @Service
 @Transactional
@@ -35,23 +44,24 @@ public class WorkflowSelectionService {
     private final WorkflowConfigurationRepository configurationRepository;
     private final WorkflowSelectionRepository selectionRepository;
     private final PrWorkflowRegistry workflowRegistry;
+    private final IssueWorkflowRegistry issueWorkflowRegistry;
     private final WorkflowParamsValidator paramsValidator;
 
     @Transactional(readOnly = true)
     public List<WorkflowSelectionRow> loadAvailableWorkflows(Long configurationId) {
-        requireConfiguration(configurationId);
+        WorkflowConfiguration configuration = requireConfiguration(configurationId);
         Map<String, WorkflowSelection> persistedByKey = new LinkedHashMap<>();
         for (WorkflowSelection persisted : selectionRepository.findByConfigurationId(configurationId)) {
             persistedByKey.put(persisted.getWorkflowKey(), persisted);
         }
 
         Map<String, WorkflowSelectionRow> rows = new LinkedHashMap<>();
-        for (PrWorkflow workflow : workflowRegistry.all()) {
+        for (WorkflowDescriptor workflow : catalog(configuration.getKind())) {
             WorkflowSelection persisted = persistedByKey.get(workflow.key());
             rows.put(workflow.key(), new WorkflowSelectionRow(
                     workflow.key(),
                     workflow.displayName(),
-                    workflow.category().name(),
+                    categoryOf(workflow),
                     workflow,
                     persisted != null,
                     persisted != null ? persisted.getParamsMap() : Map.of()));
@@ -82,7 +92,8 @@ public class WorkflowSelectionService {
      * Replaces all selections for the given configuration with the given
      * subset. {@code workflowParams} maps {@code workflowKey -> (name -> value)}
      * and is validated against the registered workflow's
-     * {@link PrWorkflow#paramsSchema()} before each child row is persisted.
+     * {@link WorkflowDescriptor#paramsSchema()} before each child row is
+     * persisted.
      *
      * @throws IllegalArgumentException when params validation fails, with
      *         per-workflow error messages.
@@ -91,6 +102,7 @@ public class WorkflowSelectionService {
                               List<String> selectedWorkflowKeys,
                               Map<String, Map<String, String>> workflowParams) {
         WorkflowConfiguration configuration = requireConfiguration(configurationId);
+        WorkflowConfigurationKind kind = configuration.getKind();
 
         Set<String> requested = new LinkedHashSet<>();
         if (selectedWorkflowKeys != null) {
@@ -113,7 +125,7 @@ public class WorkflowSelectionService {
 
         List<WorkflowSelection> replacement = new ArrayList<>();
         for (String key : requested) {
-            Optional<PrWorkflow> registered = workflowRegistry.find(key);
+            Optional<? extends WorkflowDescriptor> registered = findWorkflow(kind, key);
             WorkflowSelection row = new WorkflowSelection();
             row.setConfiguration(configuration);
             row.setWorkflowKey(key);
@@ -161,7 +173,9 @@ public class WorkflowSelectionService {
      */
     public void enableWorkflow(Long configurationId, String workflowKey, Map<String, String> params) {
         WorkflowConfiguration configuration = requireConfiguration(configurationId);
-        PrWorkflow workflow = workflowRegistry.require(workflowKey);
+        WorkflowDescriptor workflow = findWorkflow(configuration.getKind(), workflowKey)
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "No workflow registered for key '" + workflowKey + "'"));
         Map<String, String> canonical = paramsValidator.validate(params, workflow.paramsSchema());
         Optional<WorkflowSelection> existing =
                 selectionRepository.findByConfigurationIdAndWorkflowKey(configurationId, workflowKey);
@@ -182,14 +196,20 @@ public class WorkflowSelectionService {
         if (configurationId == null || workflowKey == null) {
             return Map.of();
         }
+        // Kind comes from the repository (PR fallback) rather than the
+        // selection's back-reference: tests construct selections without a
+        // configuration attached.
+        WorkflowConfigurationKind kind = configurationRepository.findById(configurationId)
+                .map(WorkflowConfiguration::getKind)
+                .orElse(WorkflowConfigurationKind.PR);
         return selectionRepository.findByConfigurationIdAndWorkflowKey(configurationId, workflowKey)
-                .map(s -> paramsValidator.typed(s.getParamsMap(), schemaFor(workflowKey)))
+                .map(s -> paramsValidator.typed(s.getParamsMap(), schemaFor(kind, workflowKey)))
                 .orElseGet(Map::of);
     }
 
     /**
      * Stable order list of workflow keys enabled on the configuration. The
-     * orchestrator's {@code runAll} iterates this list in order.
+     * orchestrators iterate this list in order.
      */
     @Transactional(readOnly = true)
     public List<String> enabledWorkflowKeys(Long configurationId) {
@@ -220,7 +240,7 @@ public class WorkflowSelectionService {
      * available parameters. SECRET fields are masked.
      */
     public Map<String, Object> describeParams(String workflowKey, Map<String, String> raw) {
-        return paramsValidator.describeParams(raw, schemaFor(workflowKey));
+        return paramsValidator.describeParams(raw, schemaForAnyKind(workflowKey));
     }
 
     /**
@@ -230,15 +250,51 @@ public class WorkflowSelectionService {
      * hidden+checkbox pattern and not to other multi-valued params.
      */
     public boolean isBooleanField(String workflowKey, String fieldName) {
-        WorkflowParamsSchema schema = schemaFor(workflowKey);
+        WorkflowParamsSchema schema = schemaForAnyKind(workflowKey);
         return schema != null && schema.fields().stream()
                 .anyMatch(f -> f.name().equals(fieldName)
                         && f.type() == WorkflowParamField.ParamType.BOOLEAN);
     }
 
-    private WorkflowParamsSchema schemaFor(String workflowKey) {
+    /**
+     * The registered catalog for the given kind: PR workflows for
+     * {@link WorkflowConfigurationKind#PR}, issue-assigned workflows for
+     * {@link WorkflowConfigurationKind#ISSUE}.
+     */
+    private List<? extends WorkflowDescriptor> catalog(WorkflowConfigurationKind kind) {
+        return kind == WorkflowConfigurationKind.ISSUE
+                ? issueWorkflowRegistry.all()
+                : workflowRegistry.all();
+    }
+
+    private Optional<? extends WorkflowDescriptor> findWorkflow(WorkflowConfigurationKind kind, String key) {
+        return kind == WorkflowConfigurationKind.ISSUE
+                ? issueWorkflowRegistry.find(key)
+                : workflowRegistry.find(key);
+    }
+
+    private String categoryOf(WorkflowDescriptor workflow) {
+        return workflow instanceof PrWorkflow prWorkflow
+                ? prWorkflow.category().name()
+                : "ISSUE";
+    }
+
+    private WorkflowParamsSchema schemaFor(WorkflowConfigurationKind kind, String workflowKey) {
+        return findWorkflow(kind, workflowKey)
+                .map(WorkflowDescriptor::paramsSchema)
+                .orElse(null);
+    }
+
+    /**
+     * Schema lookup when only the workflow key is known (bot Details modal
+     * endpoints). PR keys take precedence; issue-assigned keys live in a
+     * separate namespace by convention ({@code issue-*}), so the two
+     * registries are not expected to collide.
+     */
+    private WorkflowParamsSchema schemaForAnyKind(String workflowKey) {
         return workflowRegistry.find(workflowKey)
-                .map(PrWorkflow::paramsSchema)
+                .map(WorkflowDescriptor::paramsSchema)
+                .or(() -> issueWorkflowRegistry.find(workflowKey).map(WorkflowDescriptor::paramsSchema))
                 .orElse(null);
     }
 

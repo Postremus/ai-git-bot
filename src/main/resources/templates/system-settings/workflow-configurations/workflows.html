@@ -46,7 +46,7 @@
             <div th:each="row : ${workflows}" class="card mb-3">
                 <div class="card-header d-flex align-items-center gap-2 py-2">
                     <!-- Collapse toggle (only rendered when the workflow has params) -->
-                    <button th:if="${row.prWorkflow != null and !row.prWorkflow.paramsSchema().empty}"
+                    <button th:if="${row.workflow != null and !row.workflow.paramsSchema().empty}"
                             type="button"
                             class="btn btn-link p-0 text-body text-decoration-none workflow-toggle"
                             data-bs-toggle="collapse"
@@ -56,7 +56,7 @@
                         <i class="bi bi-chevron-down section-chevron"></i>
                     </button>
                     <!-- Spacer so rows without a toggle button still align -->
-                    <span th:if="${row.prWorkflow == null or row.prWorkflow.paramsSchema().empty}"
+                    <span th:if="${row.workflow == null or row.workflow.paramsSchema().empty}"
                           style="width:1.5rem; display:inline-block;"></span>
 
                     <div class="form-check mb-0 flex-grow-1">
@@ -69,20 +69,20 @@
                             <strong th:text="${row.displayName}"></strong>
                             <code class="ms-2 text-secondary" th:text="${row.workflowKey}"></code>
                             <span class="badge bg-body-tertiary text-body ms-2" th:text="${row.category}"></span>
-                            <span th:if="${row.prWorkflow == null}" class="badge bg-warning ms-2">Not registered</span>
+                            <span th:if="${row.workflow == null}" class="badge bg-warning ms-2">Not registered</span>
                         </label>
                         <!-- Short description of what the workflow does -->
-                        <div th:if="${row.prWorkflow != null and row.prWorkflow.description() != null and !row.prWorkflow.description().isEmpty()}"
+                        <div th:if="${row.workflow != null and row.workflow.description() != null and !row.workflow.description().isEmpty()}"
                              class="form-text mt-1 mb-0"
-                             th:text="${row.prWorkflow.description()}"></div>
+                             th:text="${row.workflow.description()}"></div>
                     </div>
                 </div>
 
-                <div th:if="${row.prWorkflow != null and !row.prWorkflow.paramsSchema().empty}"
+                <div th:if="${row.workflow != null and !row.workflow.paramsSchema().empty}"
                      th:id="'wf-collapse-' + ${row.workflowKey}"
                      class="collapse show">
                     <div class="card-body pt-2">
-                        <div th:each="field : ${row.prWorkflow.paramsSchema().fields()}" class="mb-3"
+                        <div th:each="field : ${row.workflow.paramsSchema().fields()}" class="mb-3"
                              th:with="persisted=${row.persistedParams != null ? row.persistedParams.get(field.name) : null},
                                       currentValue=${persisted != null ? persisted : field.defaultValue},
                                       booleanChecked=${persisted != null ? (persisted == 'true') : (field.defaultValue != null and field.defaultValue == 'true')}">

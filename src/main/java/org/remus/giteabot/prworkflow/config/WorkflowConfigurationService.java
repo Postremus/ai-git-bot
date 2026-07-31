@@ -17,11 +17,17 @@ import java.util.Optional;
  * admin UX (list / new / edit / delete / clone) stays uniform across both
  * "kinds" of bot configurations.
  *
- * <p>The default configuration is protected: it cannot be renamed, deleted,
- * nor have its default flag cleared. The default row itself is seeded by
- * Flyway migration {@code V15__workflow_configurations_default.sql}; any
- * additional REVIEW workflows shipped in later releases must add their own
- * follow-up migration — the application does not auto-extend the Default at
+ * <p>All enumeration and default-resolution is scoped by
+ * {@link WorkflowConfigurationKind}: PR configurations drive pull-request
+ * workflows, ISSUE configurations drive issue-assigned workflows. The
+ * no-arg {@link #findAll()} and {@link #findDefault()} delegate to
+ * {@link WorkflowConfigurationKind#PR} for the pre-existing callers.</p>
+ *
+ * <p>The default configuration of each kind is protected: it cannot be
+ * renamed, deleted, nor have its default flag cleared. The default rows are
+ * seeded by Flyway ({@code V15} for PR, {@code V39} for ISSUE); any
+ * additional workflows shipped in later releases must add their own
+ * follow-up migration — the application does not auto-extend defaults at
  * runtime.</p>
  */
 @Service
@@ -33,9 +39,18 @@ public class WorkflowConfigurationService {
     private final WorkflowSelectionRepository selectionRepository;
     private final BotRepository botRepository;
 
+    /**
+     * All PR-kind configurations. Kept for pre-existing callers; new code
+     * should call {@link #findAll(WorkflowConfigurationKind)} explicitly.
+     */
     @Transactional(readOnly = true)
     public List<WorkflowConfiguration> findAll() {
-        return configurationRepository.findAll();
+        return findAll(WorkflowConfigurationKind.PR);
+    }
+
+    @Transactional(readOnly = true)
+    public List<WorkflowConfiguration> findAll(WorkflowConfigurationKind kind) {
+        return configurationRepository.findByKind(kind);
     }
 
     @Transactional(readOnly = true)
@@ -43,9 +58,18 @@ public class WorkflowConfigurationService {
         return configurationRepository.findById(id);
     }
 
+    /**
+     * The default PR-kind configuration. Kept for pre-existing callers; new
+     * code should call {@link #findDefault(WorkflowConfigurationKind)}.
+     */
     @Transactional(readOnly = true)
     public Optional<WorkflowConfiguration> findDefault() {
-        return configurationRepository.findByDefaultEntryTrue();
+        return findDefault(WorkflowConfigurationKind.PR);
+    }
+
+    @Transactional(readOnly = true)
+    public Optional<WorkflowConfiguration> findDefault(WorkflowConfigurationKind kind) {
+        return configurationRepository.findByKindAndDefaultEntryTrue(kind);
     }
 
     public WorkflowConfiguration save(WorkflowConfiguration configuration) {
@@ -92,6 +116,7 @@ public class WorkflowConfigurationService {
                 .orElseThrow(() -> new IllegalArgumentException("Workflow configuration not found"));
         WorkflowConfiguration clone = new WorkflowConfiguration();
         clone.setName(uniqueCopyName(source.getName()));
+        clone.setKind(source.getKind());
         clone.setDefaultEntry(false);
         List<WorkflowSelection> clonedSelections = new ArrayList<>();
         for (WorkflowSelection original : source.getSelectedWorkflows()) {
@@ -111,9 +136,10 @@ public class WorkflowConfigurationService {
         if (configuration.isDefaultEntry()) {
             throw new IllegalStateException("The default workflow configuration cannot be deleted");
         }
-        List<Bot> bots = botRepository.findByWorkflowConfigurationId(id);
+        List<Bot> bots = new ArrayList<>(botRepository.findByWorkflowConfigurationId(id));
+        bots.addAll(botRepository.findByIssueWorkflowConfigurationId(id));
         if (!bots.isEmpty()) {
-            String botNames = bots.stream().map(Bot::getName).toList().toString();
+            String botNames = bots.stream().map(Bot::getName).distinct().toList().toString();
             throw new IllegalStateException("Workflow configuration is used by bot(s): " + botNames);
         }
         selectionRepository.deleteByConfigurationId(id);
