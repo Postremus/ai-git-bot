@@ -70,16 +70,17 @@ class BotServiceTest {
     }
 
     @Test
-    void save_writerBotDisablesCodingAgentCheckbox() {
+    void save_preservesAgentEnabledFlag() {
+        // The deprecated botType no longer forces agentEnabled off; the flag
+        // is an independent toggle consumed only by the issue-coding workflow.
         Bot bot = newBotWithDefaultToolConfig();
         bot.setWebhookSecret("existing-secret");
-        bot.setBotType(BotType.WRITER);
         bot.setAgentEnabled(true);
         when(botRepository.save(any(Bot.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         Bot result = botService.save(bot);
 
-        assertFalse(result.isAgentEnabled());
+        assertTrue(result.isAgentEnabled());
     }
 
     @Test

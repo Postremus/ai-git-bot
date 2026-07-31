@@ -20,35 +20,32 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * CRUD UI for PR-kind {@link WorkflowConfiguration} rows. Mirrors the
- * structure of the MCP / Bot-tool configuration controllers
- * (list-on-System-settings, dedicated form + sub-page for the workflow
- * selection). The issue-assigned counterpart is
- * {@link IssueWorkflowConfigurationController}; both share the same
+ * CRUD UI for ISSUE-kind {@link WorkflowConfiguration} rows — the
+ * issue-assigned workflow configurations selectable on the bot edit form.
+ * Mirrors {@code WorkflowConfigurationController} (PR kind) and shares its
  * templates, parameterized via the {@code workflowConfig*} model attributes.
+ *
+ * <p>Controllers must not depend on each other (ArchUnit), so the small
+ * template-attribute contract is duplicated here rather than shared.</p>
  */
 @Slf4j
 @Controller
-@RequestMapping("/system-settings/workflow-configurations")
+@RequestMapping("/system-settings/issue-workflow-configurations")
 @RequiredArgsConstructor
-public class WorkflowConfigurationController {
+public class IssueWorkflowConfigurationController {
 
-    static final String BASE_URL = "/system-settings/workflow-configurations";
-    static final String KIND_LABEL = "PR workflow";
-    static final String SELECTION_HELP_TEXT =
-            "Tick the PR workflows that should run on every pull-request webhook for bots using"
-            + " this configuration. Workflows are executed sequentially in stable order"
-            + " (lexicographic by workflow key).";
+    private static final String BASE_URL = "/system-settings/issue-workflow-configurations";
+    private static final String KIND_LABEL = "issue-assigned workflow";
+    private static final String SELECTION_HELP_TEXT =
+            "Tick the issue workflows that should run when a bot using this configuration is"
+            + " assigned to an issue and when it receives follow-up issue comments. Usually"
+            + " exactly one issue workflow is enabled; multiple enabled workflows run"
+            + " sequentially in stable order (lexicographic by workflow key).";
 
     private final WorkflowConfigurationService configurationService;
     private final WorkflowSelectionService selectionService;
 
-    /**
-     * Exposes the shared-template contract: which base URL the form actions
-     * post to and how the workflow kind is labelled in headings and help
-     * texts.
-     */
-    static void addTemplateAttributes(Model model) {
+    private static void addTemplateAttributes(Model model) {
         model.addAttribute("workflowConfigBaseUrl", BASE_URL);
         model.addAttribute("workflowConfigKindLabel", KIND_LABEL);
         model.addAttribute("workflowSelectionHelpText", SELECTION_HELP_TEXT);
@@ -95,15 +92,15 @@ public class WorkflowConfigurationController {
     public String save(@ModelAttribute("workflowConfiguration") WorkflowConfiguration workflowConfiguration,
                        Model model, RedirectAttributes redirectAttributes) {
         if (workflowConfiguration.getId() == null) {
-            workflowConfiguration.setKind(WorkflowConfigurationKind.PR);
+            workflowConfiguration.setKind(WorkflowConfigurationKind.ISSUE);
         }
         try {
             WorkflowConfiguration saved = configurationService.save(workflowConfiguration);
             redirectAttributes.addFlashAttribute("success",
-                    "Workflow configuration saved. Please select which workflows are enabled.");
-            return "redirect:/system-settings/workflow-configurations/" + saved.getId() + "/workflows";
+                    "Issue-assigned workflow configuration saved. Please select which workflows are enabled.");
+            return "redirect:" + BASE_URL + "/" + saved.getId() + "/workflows";
         } catch (Exception e) {
-            log.error("Failed to save workflow configuration", e);
+            log.error("Failed to save issue-assigned workflow configuration", e);
             model.addAttribute("error", "Failed to save: " + e.getMessage());
             model.addAttribute("workflowConfiguration", workflowConfiguration);
             model.addAttribute("activeNav", "system-settings");
@@ -138,18 +135,13 @@ public class WorkflowConfigurationController {
         try {
             Map<String, Map<String, String>> workflowParams =
                     selectionService.extractWorkflowParams(allParams, selectedWorkflowKeys);
-            if (log.isDebugEnabled()) {
-                log.debug("saveWorkflowSelection id={} selectedKeys={} rawParamKeys={} workflowParams={}",
-                        id, selectedWorkflowKeys,
-                        allParams == null ? null : allParams.keySet(), workflowParams);
-            }
             selectionService.saveSelection(id, selectedWorkflowKeys, workflowParams);
             redirectAttributes.addFlashAttribute("success", "Workflow selection saved successfully");
             return "redirect:/system-settings";
         } catch (Exception e) {
             log.error("Failed to save workflow selection", e);
             redirectAttributes.addFlashAttribute("error", "Failed to save workflow selection: " + e.getMessage());
-            return "redirect:/system-settings/workflow-configurations/" + id + "/workflows";
+            return "redirect:" + BASE_URL + "/" + id + "/workflows";
         }
     }
 
@@ -157,9 +149,10 @@ public class WorkflowConfigurationController {
     public String delete(@PathVariable Long id, RedirectAttributes redirectAttributes) {
         try {
             configurationService.deleteById(id);
-            redirectAttributes.addFlashAttribute("success", "Workflow configuration deleted successfully");
+            redirectAttributes.addFlashAttribute("success",
+                    "Issue-assigned workflow configuration deleted successfully");
         } catch (Exception e) {
-            log.error("Failed to delete workflow configuration", e);
+            log.error("Failed to delete issue-assigned workflow configuration", e);
             redirectAttributes.addFlashAttribute("error", "Failed to delete: " + e.getMessage());
         }
         return "redirect:/system-settings";
@@ -167,7 +160,8 @@ public class WorkflowConfigurationController {
 
     /**
      * Returns the selected workflows for the Bot Details modal (mirrors the
-     * MCP / built-in tool endpoints under {@code /bots/...}).
+     * PR controller's endpoint; both are kind-agnostic because the
+     * configuration's own kind decides which registry is consulted).
      */
     @GetMapping("/{id}/selected-workflows")
     @ResponseBody
@@ -187,6 +181,4 @@ public class WorkflowConfigurationController {
                 .toList();
         return ResponseEntity.ok(rows);
     }
-
 }
-

@@ -3,18 +3,10 @@ package org.remus.giteabot.admin;
 import lombok.extern.slf4j.Slf4j;
 import org.remus.giteabot.agent.IssueImplementationService;
 import org.remus.giteabot.agent.session.AgentSessionService;
-import org.remus.giteabot.agent.tools.ToolCatalog;
-import org.remus.giteabot.agent.validation.ToolExecutionService;
-import org.remus.giteabot.agent.validation.WorkspaceService;
-import org.remus.giteabot.agent.writerimpl.WriterAgentService;
 import org.remus.giteabot.ai.AiAuditContext;
 import org.remus.giteabot.ai.AiClient;
-import org.remus.giteabot.config.AgentConfigProperties;
-import org.remus.giteabot.config.PromptService;
-import org.remus.giteabot.eventhook.EventHookEventType;
-import org.remus.giteabot.eventhook.EventHookPublisher;
 import org.remus.giteabot.gitea.model.WebhookPayload;
-import org.remus.giteabot.mcp.McpOrchestrationService;
+import org.remus.giteabot.issueworkflow.IssueWorkflowOrchestrator;
 import org.remus.giteabot.prworkflow.PrWorkflowContext;
 import org.remus.giteabot.prworkflow.PrWorkflowOrchestrator;
 import org.remus.giteabot.prworkflow.agentreview.AgentReviewSlashCommandHandler;
@@ -30,12 +22,9 @@ import org.remus.giteabot.prworkflow.unittest.UnitTestSlashCommandHandler;
 import org.remus.giteabot.prworkflow.unittest.UnitTestWorkflow;
 import org.remus.giteabot.repository.RepositoryApiClient;
 import org.remus.giteabot.review.CodeReviewService;
-import org.remus.giteabot.systemsettings.BotToolSelectionService;
-import org.remus.giteabot.systemsettings.McpToolSelectionService;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
-import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
 
@@ -66,21 +55,12 @@ public class BotWebhookService {
     private final ReadmeSyncSlashCommandHandler readmeSyncSlashCommandHandler;
     private final I18nCoverageSlashCommandHandler i18nCoverageSlashCommandHandler;
     private final WorkflowSelectionService workflowSelectionService;
-    private final EventHookPublisher eventHookPublisher;
+    private final IssueWorkflowOrchestrator issueWorkflowOrchestrator;
     private final AgentServiceFactory agentServiceFactory;
 
-    public BotWebhookService(AiClientFactory aiClientFactory,
-                             GiteaClientFactory giteaClientFactory,
-                             PromptService promptService,
-                             AgentConfigProperties agentConfig,
+    public BotWebhookService(GiteaClientFactory giteaClientFactory,
                              AgentSessionService agentSessionService,
-                             ToolExecutionService toolExecutionService,
-                             ToolCatalog toolCatalog,
-                             WorkspaceService workspaceService,
                              BotService botService,
-                             McpOrchestrationService mcpOrchestrationService,
-                             McpToolSelectionService mcpToolSelectionService,
-                             BotToolSelectionService botToolSelectionService,
                              PrWorkflowOrchestrator prWorkflowOrchestrator,
                              E2eTestPrCloseHandler e2eTestPrCloseHandler,
                              E2eTestSlashCommandHandler e2eTestSlashCommandHandler,
@@ -89,7 +69,8 @@ public class BotWebhookService {
                              ReadmeSyncSlashCommandHandler readmeSyncSlashCommandHandler,
                              I18nCoverageSlashCommandHandler i18nCoverageSlashCommandHandler,
                              WorkflowSelectionService workflowSelectionService,
-                             EventHookPublisher eventHookPublisher) {
+                             IssueWorkflowOrchestrator issueWorkflowOrchestrator,
+                             AgentServiceFactory agentServiceFactory) {
         this.giteaClientFactory = giteaClientFactory;
         this.agentSessionService = agentSessionService;
         this.botService = botService;
@@ -101,10 +82,8 @@ public class BotWebhookService {
         this.readmeSyncSlashCommandHandler = readmeSyncSlashCommandHandler;
         this.i18nCoverageSlashCommandHandler = i18nCoverageSlashCommandHandler;
         this.workflowSelectionService = workflowSelectionService;
-        this.eventHookPublisher = eventHookPublisher;
-        this.agentServiceFactory = new AgentServiceFactory(aiClientFactory, giteaClientFactory,
-                promptService, agentConfig, agentSessionService, toolExecutionService, toolCatalog,
-                workspaceService, mcpOrchestrationService, mcpToolSelectionService, botToolSelectionService);
+        this.issueWorkflowOrchestrator = issueWorkflowOrchestrator;
+        this.agentServiceFactory = agentServiceFactory;
     }
 
     /**
@@ -115,10 +94,6 @@ public class BotWebhookService {
     @Async
     public void reviewPullRequest(Bot bot, WebhookPayload payload) {
         AiAuditContext.setSessionId(auditSessionId(payload));
-        if (bot.getBotType() == BotType.WRITER) {
-            log.debug("[Bot '{}'] Writer bot ignores pull request review event", bot.getName());
-            return;
-        }
         if (!isCallerAllowed(bot, payload)) {
             return;
         }
@@ -153,11 +128,11 @@ public class BotWebhookService {
             log.debug("[Bot '{}'] Ignoring pull request command from non-author", bot.getName());
             return;
         }
-        if (bot.getBotType() == BotType.WRITER) {
-            log.debug("[Bot '{}'] Writer bot ignores pull request command", bot.getName());
+        if (!isCallerAllowed(bot, payload)) {
             return;
         }
-        if (!isCallerAllowed(bot, payload)) {
+        if (hasNoEnabledPrWorkflows(bot)) {
+            log.debug("[Bot '{}'] No PR workflows enabled, ignoring pull request command", bot.getName());
             return;
         }
         try {
@@ -205,10 +180,6 @@ public class BotWebhookService {
     @Async
     public void handlePrComment(Bot bot, WebhookPayload payload) {
         AiAuditContext.setSessionId(auditSessionId(payload));
-        if (bot.getBotType() == BotType.WRITER) {
-            log.debug("[Bot '{}'] Writer bot ignores pull request comment", bot.getName());
-            return;
-        }
         if (!isPrCommenterAllowed(bot, payload)) {
             return;
         }
@@ -224,12 +195,16 @@ public class BotWebhookService {
         if (hasAgentSession && bot.isAgentEnabled()) {
             log.debug("[Bot '{}'] Agent session found for PR #{}, routing to agent", bot.getName(), prNumber);
             try {
-                createIssueImplementationService(bot).handleIssueComment(payload);
+                agentServiceFactory.createIssueImplementationService(bot).handleIssueComment(payload);
             } catch (Exception e) {
                 log.error("[Bot '{}'] Failed to handle PR comment via agent: {}", bot.getName(), e.getMessage(), e);
                 botService.recordError(bot, e.getMessage());
             }
         } else {
+            if (hasNoEnabledPrWorkflows(bot)) {
+                log.debug("[Bot '{}'] No PR workflows enabled, ignoring pull request comment", bot.getName());
+                return;
+            }
             log.debug("[Bot '{}'] No agent session for PR #{}, routing to code-review handler",
                     bot.getName(), prNumber);
             try {
@@ -275,10 +250,6 @@ public class BotWebhookService {
             log.debug("[Bot '{}'] Ignoring inline review comment from non-author", bot.getName());
             return;
         }
-        if (bot.getBotType() == BotType.WRITER) {
-            log.debug("[Bot '{}'] Writer bot ignores inline review comment", bot.getName());
-            return;
-        }
         if (!isCallerAllowed(bot, payload)) {
             return;
         }
@@ -311,10 +282,6 @@ public class BotWebhookService {
     @Async
     public void handleReviewSubmitted(Bot bot, WebhookPayload payload) {
         AiAuditContext.setSessionId(auditSessionId(payload));
-        if (bot.getBotType() == BotType.WRITER) {
-            log.debug("[Bot '{}'] Writer bot ignores submitted review", bot.getName());
-            return;
-        }
         if (!isCallerAllowed(bot, payload)) {
             return;
         }
@@ -359,13 +326,11 @@ public class BotWebhookService {
     public void handlePrClosed(Bot bot, WebhookPayload payload) {
         try {
             AiAuditContext.setSessionId(auditSessionId(payload));
-            if (bot.getBotType() == BotType.WRITER) {
-                log.debug("[Bot '{}'] Writer bot ignores pull request closed event", bot.getName());
-                return;
-            }
             try {
-                var hints = Map.of(ReviewWorkflow.HINT_REVIEW_ACTION, ReviewWorkflow.ACTION_PR_CLOSED);
-                prWorkflowOrchestrator.run(bot, payload, ReviewWorkflow.KEY, hints);
+                if (isWorkflowEnabled(bot, ReviewWorkflow.KEY)) {
+                    var hints = Map.of(ReviewWorkflow.HINT_REVIEW_ACTION, ReviewWorkflow.ACTION_PR_CLOSED);
+                    prWorkflowOrchestrator.run(bot, payload, ReviewWorkflow.KEY, hints);
+                }
             } catch (RuntimeException e) {
                 log.warn("[Bot '{}'] CodeReviewService.handlePrClosed threw {} — continuing with E2E teardown",
                         bot.getName(), e.toString());
@@ -393,8 +358,10 @@ public class BotWebhookService {
     }
 
     /**
-     * Handles an issue assigned event (agent feature).
-     * Delegates to {@link IssueImplementationService#handleIssueAssigned(WebhookPayload)}.
+     * Handles an issue assigned event by running the {@code IssueWorkflow}(s)
+     * enabled on the bot's issue-assigned {@code WorkflowConfiguration} (kind
+     * {@code ISSUE}). The orchestrator owns the run lifecycle
+     * ({@code issueassignment.*} outgoing events, bot error recording).
      */
     @Async
     public void handleIssueAssigned(Bot bot, WebhookPayload payload) {
@@ -402,61 +369,19 @@ public class BotWebhookService {
         if (!isCallerAllowed(bot, payload)) {
             return;
         }
-        if (bot.getBotType() == BotType.WRITER) {
-            try {
-                publishIssueEvent(EventHookEventType.ISSUE_ASSIGNMENT_STARTED, bot, payload, null, true);
-                createWriterAgentService(bot).handleIssueAssigned(payload);
-                publishIssueEvent(EventHookEventType.ISSUE_ASSIGNMENT_COMPLETED, bot, payload, null, false);
-            } catch (Exception e) {
-                log.error("[Bot '{}'] Failed to handle writer issue assignment: {}", bot.getName(), e.getMessage(), e);
-                botService.recordError(bot, e.getMessage());
-                publishIssueEvent(EventHookEventType.ISSUE_ASSIGNMENT_FAILED, bot, payload, e.getMessage(), false);
-            }
-            return;
-        }
-        if (!bot.isAgentEnabled()) {
-            log.debug("[Bot '{}'] Agent feature disabled, ignoring issue assignment", bot.getName());
-            return;
-        }
         try {
-            publishIssueEvent(EventHookEventType.ISSUE_ASSIGNMENT_STARTED, bot, payload, null, true);
-            createIssueImplementationService(bot).handleIssueAssigned(payload);
-            publishIssueEvent(EventHookEventType.ISSUE_ASSIGNMENT_COMPLETED, bot, payload, null, false);
+            issueWorkflowOrchestrator.runAssigned(bot, payload);
         } catch (Exception e) {
+            // Defense-in-depth: the orchestrator already records errors per workflow.
             log.error("[Bot '{}'] Failed to handle issue assignment: {}", bot.getName(), e.getMessage(), e);
             botService.recordError(bot, e.getMessage());
-            publishIssueEvent(EventHookEventType.ISSUE_ASSIGNMENT_FAILED, bot, payload, e.getMessage(), false);
         }
     }
 
     /**
-     * Emits an outgoing-webhook event for an issue assignment: STARTED before the
-     * delegation (with the issue title), COMPLETED on successful return, FAILED in
-     * the catch (with the error). The issue number rides in the envelope's issue
-     * slot; {@code pullRequest} stays null. The publisher never throws.
-     */
-    private void publishIssueEvent(EventHookEventType type, Bot bot, WebhookPayload payload,
-                                   String error, boolean includeTitle) {
-        String owner = payload.getRepository() != null && payload.getRepository().getOwner() != null
-                ? payload.getRepository().getOwner().getLogin() : null;
-        String repo = payload.getRepository() != null ? payload.getRepository().getName() : null;
-        Long issueNumber = payload.getIssue() != null ? payload.getIssue().getNumber() : null;
-        Map<String, Object> data = new LinkedHashMap<>();
-        if (issueNumber != null) {
-            data.put("issueNumber", issueNumber);
-        }
-        if (includeTitle && payload.getIssue() != null && payload.getIssue().getTitle() != null) {
-            data.put("issueTitle", payload.getIssue().getTitle());
-        }
-        if (error != null) {
-            data.put("error", error);
-        }
-        eventHookPublisher.publish(type, bot, owner, repo, null, issueNumber, data);
-    }
-
-    /**
-     * Handles a comment on an issue (agent follow-up).
-     * Delegates to {@link IssueImplementationService#handleIssueComment(WebhookPayload)}.
+     * Handles a comment on an issue by routing it through the same
+     * {@code IssueWorkflow}(s) resolved from the bot's issue-assigned
+     * {@code WorkflowConfiguration}.
      */
     @Async
     public void handleIssueComment(Bot bot, WebhookPayload payload) {
@@ -464,22 +389,10 @@ public class BotWebhookService {
         if (!isCallerAllowed(bot, payload)) {
             return;
         }
-        if (bot.getBotType() == BotType.WRITER) {
-            try {
-                createWriterAgentService(bot).handleIssueComment(payload);
-            } catch (Exception e) {
-                log.error("[Bot '{}'] Failed to handle writer issue comment: {}", bot.getName(), e.getMessage(), e);
-                botService.recordError(bot, e.getMessage());
-            }
-            return;
-        }
-        if (!bot.isAgentEnabled()) {
-            log.debug("[Bot '{}'] Agent feature disabled, ignoring issue comment", bot.getName());
-            return;
-        }
         try {
-            createIssueImplementationService(bot).handleIssueComment(payload);
+            issueWorkflowOrchestrator.runComment(bot, payload);
         } catch (Exception e) {
+            // Defense-in-depth: the orchestrator already records errors per workflow.
             log.error("[Bot '{}'] Failed to handle issue comment: {}", bot.getName(), e.getMessage(), e);
             botService.recordError(bot, e.getMessage());
         }
@@ -508,6 +421,31 @@ public class BotWebhookService {
         } catch (RuntimeException e) {
             log.debug("[Bot '{}'] enabled-check for workflow '{}' failed: {}",
                     bot.getName(), workflowKey, e.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Returns {@code true} when the bot has an explicit PR
+     * {@link org.remus.giteabot.prworkflow.config.WorkflowConfiguration}
+     * that enables <em>no</em> workflows at all. Such bots ignore PR comment
+     * / command events silently — this preserves the historic "writer bot
+     * never reacts on PRs" behavior in configuration terms (migrated writer
+     * bots reference the seeded empty {@code No PR workflows} configuration).
+     *
+     * <p>Bots without a configuration fall back to the legacy default
+     * (review enabled), so they return {@code false} here.</p>
+     */
+    private boolean hasNoEnabledPrWorkflows(Bot bot) {
+        if (bot == null || bot.getWorkflowConfiguration() == null) {
+            return false;
+        }
+        try {
+            return workflowSelectionService
+                    .enabledWorkflowKeys(bot.getWorkflowConfiguration().getId())
+                    .isEmpty();
+        } catch (RuntimeException e) {
+            log.debug("[Bot '{}'] enabled-keys lookup failed: {}", bot.getName(), e.getMessage());
             return false;
         }
     }
@@ -803,11 +741,4 @@ public class BotWebhookService {
         return content;
     }
 
-    private IssueImplementationService createIssueImplementationService(Bot bot) {
-        return agentServiceFactory.createIssueImplementationService(bot);
-    }
-
-    private WriterAgentService createWriterAgentService(Bot bot) {
-        return agentServiceFactory.createWriterAgentService(bot);
-    }
 }

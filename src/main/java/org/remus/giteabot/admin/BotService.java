@@ -43,9 +43,6 @@ public class BotService {
         if (bot.getWebhookSecret() == null) {
             bot.setWebhookSecret(UUID.randomUUID().toString());
         }
-        if (bot.getBotType() == BotType.WRITER) {
-            bot.setAgentEnabled(false);
-        }
         if (bot.getToolConfiguration() == null) {
             // Defensive fallback for callers that bypass the BotController
             // (integration tests, scripts): assign the Default tool

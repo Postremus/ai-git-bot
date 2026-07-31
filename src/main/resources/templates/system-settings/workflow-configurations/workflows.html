@@ -30,17 +30,13 @@
 
         <div th:if="${error}" class="alert alert-danger" th:text="${error}"></div>
 
-        <p class="text-secondary">
-            Tick the PR workflows that should run on every pull-request webhook for bots
-            using this configuration. Workflows are executed sequentially in stable order
-            (lexicographic by workflow key).
-        </p>
+        <p class="text-secondary" th:text="${workflowSelectionHelpText}"></p>
 
-        <form th:action="@{/system-settings/workflow-configurations/{id}/workflows/save(id=${workflowConfiguration.id})}"
+        <form th:action="@{${workflowConfigBaseUrl + '/' + workflowConfiguration.id + '/workflows/save'}}"
               method="post">
 
-            <div th:if="${#lists.isEmpty(workflows)}" class="alert alert-warning">
-                No PR workflows are currently registered in the application.
+            <div th:if="${#lists.isEmpty(workflows)}" class="alert alert-warning"
+                 th:text="'No ' + ${workflowConfigKindLabel} + ' workflows are currently registered in the application.'">
             </div>
 
             <div th:each="row : ${workflows}" class="card mb-3">

@@ -39,19 +39,6 @@
                         </div>
 
                         <div class="col-12">
-                            <label for="botType" class="form-label">Bot Type</label>
-                            <select class="form-select" id="botType" th:field="*{botType}" required>
-                                <option th:each="type : ${botTypes}"
-                                        th:value="${type}"
-                                        th:text="${type == T(org.remus.giteabot.admin.BotType).WRITER ? 'Writer bot' : 'Coding bot'}">
-                                </option>
-                             </select>
-                             <div class="form-text">
-                                Coding bots review pull requests when explicitly requested and can implement issues. Writer bots ignore pull requests and draft improved issues.
-                             </div>
-                         </div>
-
-                        <div class="col-12">
                             <label for="systemPromptId" class="form-label">System Prompt</label>
                             <div class="input-group">
                                 <select class="form-select" id="systemPromptId" name="systemPromptId"
@@ -133,7 +120,7 @@
                         </div>
 
                         <div class="col-12">
-                            <label for="workflowConfigurationId" class="form-label">Workflow Configuration</label>
+                            <label for="workflowConfigurationId" class="form-label">PR Workflow Configuration</label>
                             <div class="input-group">
                                 <select class="form-select" id="workflowConfigurationId" name="workflowConfigurationId">
                                     <option value="">(use default)</option>
@@ -148,7 +135,27 @@
                                 </button>
                             </div>
                             <div class="form-text">
-                                Selected workflows run on every pull-request webhook in stable order. Leave empty to inherit the auto-bootstrapped default (review-only).
+                                Which workflows run on pull-request webhooks (reviews, test generation, ...). Leave empty to inherit the default (review-only). Select the empty "No PR workflows" configuration to keep the bot silent on PRs.
+                            </div>
+                        </div>
+
+                        <div class="col-12">
+                            <label for="issueWorkflowConfigurationId" class="form-label">Issue-Assigned Workflow Configuration</label>
+                            <div class="input-group">
+                                <select class="form-select" id="issueWorkflowConfigurationId" name="issueWorkflowConfigurationId">
+                                    <option value="">(use default)</option>
+                                    <option th:each="issueWorkflowConfiguration : ${issueWorkflowConfigurations}"
+                                            th:value="${issueWorkflowConfiguration.id}"
+                                            th:text="${issueWorkflowConfiguration.name + (issueWorkflowConfiguration.defaultEntry ? ' (default)' : '')}"
+                                            th:selected="${bot.issueWorkflowConfiguration != null and bot.issueWorkflowConfiguration.id == issueWorkflowConfiguration.id}">
+                                    </option>
+                                </select>
+                                <button class="btn btn-outline-secondary" type="button" id="issueWorkflowConfigurationDetailsBtn">
+                                    <i class="bi bi-eye"></i> Details
+                                </button>
+                            </div>
+                            <div class="form-text">
+                                What this bot does when it is assigned to an issue, and how it handles follow-up issue comments (e.g. Coding Agent implements the issue, Writer Agent refines it). Independent from the PR workflow configuration above.
                             </div>
                         </div>
 
@@ -212,8 +219,7 @@
                                 <label class="form-check-label" for="enabled">Enabled</label>
                             </div>
                         </div>
-                        <div class="col-md-6" id="agentEnabledContainer"
-                             th:hidden="${bot.botType != null and bot.botType.name() == 'WRITER'}">
+                        <div class="col-md-6" id="agentEnabledContainer">
                             <div class="form-check form-switch mt-3">
                                 <input class="form-check-input" type="checkbox" id="agentEnabled"
                                        th:field="*{agentEnabled}"/>
@@ -505,9 +511,6 @@
                 const unitTestAuthorPreview = document.getElementById('unitTestAuthorPromptPreview');
                 const readmeSyncPreview = document.getElementById('readmeSyncPromptPreview');
                 const i18nCoveragePreview = document.getElementById('i18nCoveragePromptPreview');
-                const botTypeSelect = document.getElementById('botType');
-                const agentContainer = document.getElementById('agentEnabledContainer');
-                const agentEnabled = document.getElementById('agentEnabled');
                 const previewModal = new bootstrap.Modal(document.getElementById('systemPromptPreviewModal'));
                 const previewAccordion = document.getElementById('systemPromptPreviewAccordion');
                 if (previewAccordion) {
@@ -525,17 +528,6 @@
                 function renderMarkdown(markdown) {
                     return DOMPurify.sanitize(marked.parse(markdown || ''));
                 }
-
-                function updateAgentVisibility() {
-                    const isWriter = botTypeSelect.value === 'WRITER';
-                    agentContainer.hidden = isWriter;
-                    if (isWriter) {
-                        agentEnabled.checked = false;
-                    }
-                }
-
-                botTypeSelect.addEventListener('change', updateAgentVisibility);
-                updateAgentVisibility();
 
                 previewButton.addEventListener('click', function() {
                     const selectedPromptId = systemPromptSelect.value;
@@ -728,6 +720,39 @@
 
                 workflowConfigurationSelect.addEventListener('change', updateWorkflowConfigurationDetailButtonState);
                 updateWorkflowConfigurationDetailButtonState();
+
+                // The issue-assigned selector shares the details modal and the
+                // (kind-agnostic) selected-workflows endpoint.
+                const issueWorkflowConfigurationSelect = document.getElementById('issueWorkflowConfigurationId');
+                const issueWorkflowConfigurationDetailsBtn = document.getElementById('issueWorkflowConfigurationDetailsBtn');
+
+                function updateIssueWorkflowConfigurationDetailButtonState() {
+                    issueWorkflowConfigurationDetailsBtn.disabled = !issueWorkflowConfigurationSelect.value;
+                }
+
+                issueWorkflowConfigurationSelect.addEventListener('change', updateIssueWorkflowConfigurationDetailButtonState);
+                updateIssueWorkflowConfigurationDetailButtonState();
+
+                issueWorkflowConfigurationDetailsBtn.addEventListener('click', function() {
+                    const selectedIssueWorkflowConfigId = issueWorkflowConfigurationSelect.value;
+                    if (!selectedIssueWorkflowConfigId) {
+                        return;
+                    }
+                    fetch(workflowConfigurationBaseUrl + encodeURIComponent(selectedIssueWorkflowConfigId) + '/selected-workflows')
+                        .then(function(response) {
+                            if (!response.ok) {
+                                throw new Error('Workflow configuration details could not be loaded.');
+                            }
+                            return response.json();
+                        })
+                        .then(function(rows) {
+                            workflowConfigurationDetailsBody.innerHTML = renderWorkflowTable(rows);
+                            workflowConfigurationDetailsModal.show();
+                        })
+                        .catch(function(error) {
+                            alert(error.message);
+                        });
+                });
 
                 workflowConfigurationDetailsBtn.addEventListener('click', function() {
                     const selectedWorkflowConfigId = workflowConfigurationSelect.value;

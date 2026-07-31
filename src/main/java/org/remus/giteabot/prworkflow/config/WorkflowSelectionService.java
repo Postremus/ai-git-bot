@@ -298,6 +298,62 @@ public class WorkflowSelectionService {
                 .orElse(null);
     }
 
+    /**
+     * Extracts the {@code params.<workflowKey>.<fieldName>} request
+     * parameters submitted by the workflow-selection form into a
+     * {@code workflowKey -> {fieldName -> value}} map — validated by
+     * {@link #saveSelection} against each workflow's
+     * {@link org.remus.giteabot.prworkflow.WorkflowParamsSchema}. Shared by
+     * the PR and issue-assigned configuration controllers.
+     *
+     * <p>The dot separator is used (rather than the historic
+     * {@code __} double-underscore) because Thymeleaf's expression
+     * preprocessing eats any {@code __...__} pair from attribute values,
+     * which silently mangled the field names so the controller never
+     * received them.</p>
+     */
+    public Map<String, Map<String, String>> extractWorkflowParams(
+            org.springframework.util.MultiValueMap<String, String> allParams,
+            List<String> selectedKeys) {
+        Map<String, Map<String, String>> grouped = new LinkedHashMap<>();
+        if (allParams != null) {
+            for (Map.Entry<String, List<String>> entry : allParams.entrySet()) {
+                String key = entry.getKey();
+                if (!key.startsWith("params.")) {
+                    continue;
+                }
+                String rest = key.substring("params.".length());
+                int sep = rest.indexOf('.');
+                if (sep < 0) {
+                    continue;
+                }
+                String workflowKey = rest.substring(0, sep);
+                String fieldName = rest.substring(sep + 1);
+                List<String> values = entry.getValue();
+                if (values == null || values.isEmpty()) {
+                    continue;
+                }
+                // A BOOLEAN field submits the hidden+checkbox pair — ["false"]
+                // when unchecked, ["false","true"] when checked — so "true"
+                // wins regardless of order. Any other field takes the last
+                // submitted value; the "true"-wins rule must not leak to them.
+                String effective = isBooleanField(workflowKey, fieldName)
+                        ? (values.contains("true") ? "true" : "false")
+                        : values.get(values.size() - 1);
+                grouped.computeIfAbsent(workflowKey, k -> new LinkedHashMap<>())
+                        .put(fieldName, effective);
+            }
+        }
+        Map<String, Map<String, String>> result = new LinkedHashMap<>();
+        for (Map.Entry<String, Map<String, String>> entry : grouped.entrySet()) {
+            if (selectedKeys != null && !selectedKeys.contains(entry.getKey())) {
+                continue;
+            }
+            result.put(entry.getKey(), entry.getValue());
+        }
+        return result;
+    }
+
     private WorkflowConfiguration requireConfiguration(Long id) {
         return configurationRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Workflow configuration not found"));

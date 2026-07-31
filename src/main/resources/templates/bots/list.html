@@ -29,7 +29,7 @@
                                 <th>Username</th>
                                 <th>AI Integration</th>
                                  <th>Git Integration</th>
-                                 <th>Type</th>
+                                 <th>Issue Workflow</th>
                                  <th>Enabled</th>
                                 <th>Agent</th>
                                 <th>Webhook URL</th>
@@ -43,17 +43,17 @@
                                 <td th:text="${bot.aiIntegration.name}"></td>
                                  <td th:text="${bot.gitIntegration.name}"></td>
                                  <td>
-                                     <span th:if="${bot.botType.name() == 'WRITER'}" class="badge bg-primary">Writer</span>
-                                     <span th:if="${bot.botType.name() == 'CODING'}" class="badge bg-dark">Coding</span>
+                                     <span th:if="${bot.issueWorkflowConfiguration != null}" class="badge bg-primary"
+                                           th:text="${bot.issueWorkflowConfiguration.name}"></span>
+                                     <span th:if="${bot.issueWorkflowConfiguration == null}" class="badge bg-secondary">None</span>
                                  </td>
                                  <td>
                                     <span th:if="${bot.enabled}" class="badge bg-success">Enabled</span>
                                     <span th:if="${!bot.enabled}" class="badge bg-secondary">Disabled</span>
                                 </td>
                                  <td>
-                                     <span th:if="${bot.botType.name() == 'WRITER'}" class="badge bg-secondary">Hidden</span>
-                                     <span th:if="${bot.botType.name() == 'CODING' and bot.agentEnabled}" class="badge bg-info">Enabled</span>
-                                     <span th:if="${bot.botType.name() == 'CODING' and !bot.agentEnabled}" class="badge bg-secondary">Disabled</span>
+                                     <span th:if="${bot.agentEnabled}" class="badge bg-info">Enabled</span>
+                                     <span th:if="${!bot.agentEnabled}" class="badge bg-secondary">Disabled</span>
                                  </td>
                                 <td>
                                     <span th:if="${bot.webhookPath != null}" class="font-monospace small">
