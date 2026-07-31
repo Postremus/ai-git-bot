@@ -10,7 +10,7 @@
 
 ## ADR-1: Reuse the `workflow_configurations` entity model with a `kind` discriminator
 
-**Status:** Proposed
+**Status:** Accepted
 
 **Context**
 A bot must reference a PR workflow configuration and an issue-assigned workflow configuration independently. The issue states a preference for using the same entity model as `PRWorkflow` configurations. Two options: separate parallel tables (`issue_workflow_configurations` + selection tables), or one shared model with a discriminator.
@@ -33,7 +33,7 @@ Choose **Option 2**. `WorkflowConfiguration` gains a `kind` field (`WorkflowConf
 
 ## ADR-2: New `issueworkflow` package with an `IssueWorkflow` SPI covering assignment AND comment handling
 
-**Status:** Proposed
+**Status:** Accepted
 
 **Context**
 Issue behavior needs the same pluggability PR behavior got from `PrWorkflow`. Open question 3 of the issue asks whether issue-comment handling is formally part of the abstraction; the issue notes state comments must use the same configured workflow resolution. Package placement must respect `ArchitectureTest` (`..webhook` is a top layer — ArchUnit prefix matching also catches `webhooks`; `config` must stay feature-free).
@@ -69,7 +69,7 @@ public interface IssueWorkflow {
 
 ## ADR-3: `botType` deprecated and inert, not dropped
 
-**Status:** Proposed
+**Status:** Accepted
 
 **Context**
 Open question 1: remove `botType` now or retain it. The issue notes say "botType should be deprecated first". Dropping the column in the same release that rewrites dispatch leaves no rollback path if a migrated bot misbehaves.
@@ -86,7 +86,7 @@ Open question 1: remove `botType` now or retain it. The issue notes say "botType
 
 ## ADR-4: Writer-PR silence is preserved via an explicit empty PR configuration, not a type guard
 
-**Status:** Proposed
+**Status:** Accepted
 
 **Context**
 Today six PR-side handlers in `BotWebhookService` early-return on `botType == WRITER` (`reviewPullRequest`, `handleBotCommand`, `handlePrComment`, `handleInlineComment`, `handleReviewSubmitted`, `handlePrClosed`). This guard is load-bearing: V15 backfilled *every* bot — writers included — with the `Default` PR configuration (review enabled), so without the guard, writer bots would suddenly run PR reviews. Deleting `botType` requires an equivalent configuration-driven mechanism.
@@ -112,7 +112,7 @@ Choose **Option 2**. Guard replacements, handler by handler:
 
 ## ADR-5: Parallel admin controller for issue configurations, shared services and templates
 
-**Status:** Proposed
+**Status:** Accepted
 
 **Context**
 The issue requires a dedicated system-settings section with list/create/edit/manage-workflows screens modeled after `system-settings/workflow-configurations/...`.

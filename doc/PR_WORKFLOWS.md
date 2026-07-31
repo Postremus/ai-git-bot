@@ -25,6 +25,12 @@ need to understand the bot's internals to use any of them.
 Every workflow posts its result as a comment on the pull request. Only
 **PR Review** is on by default; the rest are opt-in per bot.
 
+> **PR vs. issue workflows:** the configurations on this page drive
+> pull-request events only. What a bot does when it is *assigned to an
+> issue* is configured separately through its **Issue-Assigned Workflow
+> Configuration** — see [Issue-Assigned Workflows](ISSUE_WORKFLOWS.md). Both
+> are independent per-bot selections on the bot edit form.
+
 ---
 
 ## Setting up and running a workflow
