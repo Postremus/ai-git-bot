@@ -140,26 +140,6 @@
                         </div>
 
                         <div class="col-12">
-                            <label for="issueWorkflowConfigurationId" class="form-label">Issue-Assigned Workflow Configuration</label>
-                            <div class="input-group">
-                                <select class="form-select" id="issueWorkflowConfigurationId" name="issueWorkflowConfigurationId">
-                                    <option value="">(use default)</option>
-                                    <option th:each="issueWorkflowConfiguration : ${issueWorkflowConfigurations}"
-                                            th:value="${issueWorkflowConfiguration.id}"
-                                            th:text="${issueWorkflowConfiguration.name + (issueWorkflowConfiguration.defaultEntry ? ' (default)' : '')}"
-                                            th:selected="${bot.issueWorkflowConfiguration != null and bot.issueWorkflowConfiguration.id == issueWorkflowConfiguration.id}">
-                                    </option>
-                                </select>
-                                <button class="btn btn-outline-secondary" type="button" id="issueWorkflowConfigurationDetailsBtn">
-                                    <i class="bi bi-eye"></i> Details
-                                </button>
-                            </div>
-                            <div class="form-text">
-                                What this bot does when it is assigned to an issue, and how it handles follow-up issue comments (e.g. Coding Agent implements the issue, Writer Agent refines it). Independent from the PR workflow configuration above.
-                            </div>
-                        </div>
-
-                        <div class="col-12">
                             <div class="form-check form-switch">
                                 <input class="form-check-input" type="checkbox" id="runOnPrCreation"
                                        th:field="*{runOnPrCreation}"/>
@@ -178,6 +158,26 @@
                             </div>
                             <div class="form-text">
                                 When enabled, the bot executes its configured PR workflow on every <code>synchronized</code> event (new commits pushed to the PR branch). Supported on GitHub and Gitea only. Existing installations default to off.
+                            </div>
+                        </div>
+
+                        <div class="col-12">
+                            <label for="issueWorkflowConfigurationId" class="form-label">Issue-Assigned Workflow Configuration</label>
+                            <div class="input-group">
+                                <select class="form-select" id="issueWorkflowConfigurationId" name="issueWorkflowConfigurationId">
+                                    <option value="">(use default)</option>
+                                    <option th:each="issueWorkflowConfiguration : ${issueWorkflowConfigurations}"
+                                            th:value="${issueWorkflowConfiguration.id}"
+                                            th:text="${issueWorkflowConfiguration.name + (issueWorkflowConfiguration.defaultEntry ? ' (default)' : '')}"
+                                            th:selected="${bot.issueWorkflowConfiguration != null and bot.issueWorkflowConfiguration.id == issueWorkflowConfiguration.id}">
+                                    </option>
+                                </select>
+                                <button class="btn btn-outline-secondary" type="button" id="issueWorkflowConfigurationDetailsBtn">
+                                    <i class="bi bi-eye"></i> Details
+                                </button>
+                            </div>
+                            <div class="form-text">
+                                What this bot does when it is assigned to an issue, and how it handles follow-up issue comments (e.g. Coding Agent implements the issue, Writer Agent refines it). Independent from the PR workflow configuration above.
                             </div>
                         </div>
 
