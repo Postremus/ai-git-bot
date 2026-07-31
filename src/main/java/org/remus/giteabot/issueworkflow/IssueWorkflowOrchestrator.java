@@ -4,6 +4,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.remus.giteabot.admin.Bot;
 import org.remus.giteabot.admin.BotService;
+import org.remus.giteabot.admin.GiteaClientFactory;
 import org.remus.giteabot.eventhook.EventHookEventType;
 import org.remus.giteabot.eventhook.EventHookPublisher;
 import org.remus.giteabot.gitea.model.WebhookPayload;
@@ -49,6 +50,7 @@ public class IssueWorkflowOrchestrator {
     private final WorkflowSelectionService workflowSelectionService;
     private final BotService botService;
     private final EventHookPublisher eventHookPublisher;
+    private final GiteaClientFactory giteaClientFactory;
 
     /**
      * Runs every issue workflow enabled on the bot's issue-assigned
@@ -74,12 +76,21 @@ public class IssueWorkflowOrchestrator {
 
     /**
      * Routes a follow-up issue comment through every issue workflow enabled
-     * on the bot's issue-assigned configuration. Failures record a bot error
-     * only (no outgoing events, matching the legacy behavior) and do not
-     * prevent the remaining workflows from running.
+     * on the bot's issue-assigned configuration. The comment is acknowledged
+     * with a best-effort 👀 reaction (uniform for all issue workflows, the
+     * same pattern the slash-command handlers use). Failures record a bot
+     * error only (no outgoing events, matching the legacy behavior) and do
+     * not prevent the remaining workflows from running.
      */
     public void runComment(Bot bot, WebhookPayload payload) {
-        for (IssueWorkflow workflow : resolveWorkflows(bot)) {
+        List<IssueWorkflow> workflows = resolveWorkflows(bot);
+        if (workflows.isEmpty()) {
+            return;
+        }
+        // Acknowledge immediately with 👀 so the operator knows the bot saw
+        // the comment — the same pattern the slash-command handlers use.
+        acknowledgeComment(bot, payload);
+        for (IssueWorkflow workflow : workflows) {
             try {
                 workflow.onIssueComment(context(bot, payload, workflow.key()));
             } catch (Exception e) {
@@ -87,6 +98,27 @@ public class IssueWorkflowOrchestrator {
                         bot.getName(), workflow.key(), e.getMessage(), e);
                 botService.recordError(bot, e.getMessage());
             }
+        }
+    }
+
+    /**
+     * Best-effort 👀 reaction on the triggering comment. Failures (missing
+     * permission, provider quirks) are logged and never affect the workflow.
+     */
+    private void acknowledgeComment(Bot bot, WebhookPayload payload) {
+        if (payload.getComment() == null || payload.getComment().getId() == null) {
+            return;
+        }
+        Long commentId = payload.getComment().getId();
+        try {
+            String owner = payload.getRepository() != null && payload.getRepository().getOwner() != null
+                    ? payload.getRepository().getOwner().getLogin() : null;
+            String repo = payload.getRepository() != null ? payload.getRepository().getName() : null;
+            giteaClientFactory.getApiClient(bot.getGitIntegration())
+                    .addReaction(owner, repo, commentId, "eyes");
+        } catch (Exception e) {
+            log.warn("[Bot '{}'] Failed to add 👀 reaction to comment #{}: {}",
+                    bot.getName(), commentId, e.getMessage());
         }
     }
 

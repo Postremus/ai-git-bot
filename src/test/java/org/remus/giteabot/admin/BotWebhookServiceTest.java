@@ -108,14 +108,15 @@ class BotWebhookServiceTest {
                         new org.remus.giteabot.issueworkflow.writer.WriterIssueWorkflow(agentServiceFactory)));
         org.remus.giteabot.issueworkflow.IssueWorkflowOrchestrator issueWorkflowOrchestrator =
                 new org.remus.giteabot.issueworkflow.IssueWorkflowOrchestrator(
-                        issueWorkflowRegistry, workflowSelectionService, botService, eventHookPublisher);
+                        issueWorkflowRegistry, workflowSelectionService, botService, eventHookPublisher,
+                        giteaClientFactory);
         botWebhookService = new BotWebhookService(giteaClientFactory,
                 agentSessionService, botService,
                 prWorkflowOrchestrator, e2eTestPrCloseHandler,
                 e2eTestSlashCommandHandler, unitTestSlashCommandHandler,
                 agentReviewSlashCommandHandler, readmeSyncSlashCommandHandler,
                 i18nCoverageSlashCommandHandler, workflowSelectionService,
-                issueWorkflowOrchestrator, agentServiceFactory);
+                issueWorkflowOrchestrator);
         codingIssueConfiguration = namedConfiguration(101L, "coding-issue-cfg");
         writerIssueConfiguration = namedConfiguration(102L, "writer-issue-cfg");
         emptyPrConfiguration = namedConfiguration(103L, "empty-pr-cfg");

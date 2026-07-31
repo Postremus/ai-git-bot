@@ -1,7 +1,6 @@
 package org.remus.giteabot.admin;
 
 import lombok.extern.slf4j.Slf4j;
-import org.remus.giteabot.agent.IssueImplementationService;
 import org.remus.giteabot.agent.session.AgentSessionService;
 import org.remus.giteabot.ai.AiAuditContext;
 import org.remus.giteabot.ai.AiClient;
@@ -36,9 +35,10 @@ import java.util.Set;
  * services.  Each bot gets its own {@link AiClient} (via {@link AiClientFactory})
  * and its own {@link RepositoryApiClient} (via {@link GiteaClientFactory}).
  * <p>
- * Actual business logic is delegated to {@link org.remus.giteabot.review.CodeReviewService} and
- * {@link IssueImplementationService}, which are instantiated per-bot with the
- * bot's specific AI and Git clients.
+ * PR events are delegated to the {@link PrWorkflowOrchestrator}, issue events
+ * (assignments and comments, including follow-ups on agent-created PRs) to the
+ * {@link IssueWorkflowOrchestrator} — both resolve what runs from the bot's
+ * workflow configurations, never from a hardcoded bot category.
  */
 @Slf4j
 @Service
@@ -56,7 +56,6 @@ public class BotWebhookService {
     private final I18nCoverageSlashCommandHandler i18nCoverageSlashCommandHandler;
     private final WorkflowSelectionService workflowSelectionService;
     private final IssueWorkflowOrchestrator issueWorkflowOrchestrator;
-    private final AgentServiceFactory agentServiceFactory;
 
     public BotWebhookService(GiteaClientFactory giteaClientFactory,
                              AgentSessionService agentSessionService,
@@ -69,8 +68,7 @@ public class BotWebhookService {
                              ReadmeSyncSlashCommandHandler readmeSyncSlashCommandHandler,
                              I18nCoverageSlashCommandHandler i18nCoverageSlashCommandHandler,
                              WorkflowSelectionService workflowSelectionService,
-                             IssueWorkflowOrchestrator issueWorkflowOrchestrator,
-                             AgentServiceFactory agentServiceFactory) {
+                             IssueWorkflowOrchestrator issueWorkflowOrchestrator) {
         this.giteaClientFactory = giteaClientFactory;
         this.agentSessionService = agentSessionService;
         this.botService = botService;
@@ -83,7 +81,6 @@ public class BotWebhookService {
         this.i18nCoverageSlashCommandHandler = i18nCoverageSlashCommandHandler;
         this.workflowSelectionService = workflowSelectionService;
         this.issueWorkflowOrchestrator = issueWorkflowOrchestrator;
-        this.agentServiceFactory = agentServiceFactory;
     }
 
     /**
@@ -173,9 +170,10 @@ public class BotWebhookService {
      * may interact.  If a whitelist is configured, only the PR author <em>or</em> users listed
      * in the whitelist may interact — all other commenters are ignored.
      * <p>
-     * Routes to the agent when an agent session exists for the PR (i.e. the PR was created by the
-     * agent and can be continued).  For manually created PRs (no active session), the comment is
-     * routed to the code-review handler.
+     * Routes to the configured issue-assigned workflow(s) when an agent session exists for the
+     * PR (i.e. the PR was created by the issue workflow and can be continued — the comment is a
+     * follow-up in the same flow lifecycle).  For manually created PRs (no active session), the
+     * comment is routed to the code-review handler.
      */
     @Async
     public void handlePrComment(Bot bot, WebhookPayload payload) {
@@ -193,11 +191,15 @@ public class BotWebhookService {
                 || agentSessionService.getSessionByPr(owner, repo, prNumber).isPresent();
 
         if (hasAgentSession && bot.isAgentEnabled()) {
-            log.debug("[Bot '{}'] Agent session found for PR #{}, routing to agent", bot.getName(), prNumber);
+            // The PR was created by the bot's issue workflow (an agent session
+            // exists): the comment continues that same flow, so it routes
+            // through the configured issue-workflow resolution exactly like a
+            // comment on the original issue would.
+            log.debug("[Bot '{}'] Agent session found for PR #{}, routing to issue workflow", bot.getName(), prNumber);
             try {
-                agentServiceFactory.createIssueImplementationService(bot).handleIssueComment(payload);
+                issueWorkflowOrchestrator.runComment(bot, payload);
             } catch (Exception e) {
-                log.error("[Bot '{}'] Failed to handle PR comment via agent: {}", bot.getName(), e.getMessage(), e);
+                log.error("[Bot '{}'] Failed to handle PR comment via issue workflow: {}", bot.getName(), e.getMessage(), e);
                 botService.recordError(bot, e.getMessage());
             }
         } else {

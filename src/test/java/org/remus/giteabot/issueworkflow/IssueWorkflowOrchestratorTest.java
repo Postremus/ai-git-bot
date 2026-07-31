@@ -7,6 +7,8 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.remus.giteabot.admin.Bot;
 import org.remus.giteabot.admin.BotService;
+import org.remus.giteabot.admin.GiteaClientFactory;
+import org.remus.giteabot.repository.RepositoryApiClient;
 import org.remus.giteabot.eventhook.EventHookEventType;
 import org.remus.giteabot.eventhook.EventHookPublisher;
 import org.remus.giteabot.gitea.model.WebhookPayload;
@@ -36,6 +38,8 @@ class IssueWorkflowOrchestratorTest {
     @Mock private WorkflowSelectionService workflowSelectionService;
     @Mock private BotService botService;
     @Mock private EventHookPublisher eventHookPublisher;
+    @Mock private GiteaClientFactory giteaClientFactory;
+    @Mock private RepositoryApiClient repositoryApiClient;
 
     private IssueWorkflowOrchestrator orchestrator;
     private RecordingWorkflow recording;
@@ -69,7 +73,8 @@ class IssueWorkflowOrchestratorTest {
         recording = new RecordingWorkflow();
         orchestrator = new IssueWorkflowOrchestrator(
                 new IssueWorkflowRegistry(List.of(recording)),
-                workflowSelectionService, botService, eventHookPublisher);
+                workflowSelectionService, botService, eventHookPublisher, giteaClientFactory);
+        lenient().when(giteaClientFactory.getApiClient(any())).thenReturn(repositoryApiClient);
         bot = new Bot();
         bot.setName("test-bot");
         WorkflowConfiguration configuration = new WorkflowConfiguration();
@@ -94,6 +99,9 @@ class IssueWorkflowOrchestratorTest {
         issue.setNumber(12L);
         issue.setTitle("Vague issue");
         payload.setIssue(issue);
+        WebhookPayload.Comment comment = new WebhookPayload.Comment();
+        comment.setId(77L);
+        payload.setComment(comment);
         return payload;
     }
 
@@ -179,6 +187,32 @@ class IssueWorkflowOrchestratorTest {
     }
 
     @Test
+    void runComment_acknowledgesCommentWithEyesReaction() {
+        orchestrator.runComment(bot, issuePayload());
+
+        verify(repositoryApiClient).addReaction("Test", "my-repo", 77L, "eyes");
+    }
+
+    @Test
+    void runComment_reactionFailure_isSwallowedAndWorkflowStillRuns() {
+        org.mockito.Mockito.doThrow(new RuntimeException("reaction api down"))
+                .when(repositoryApiClient).addReaction(any(), any(), any(), any());
+
+        orchestrator.runComment(bot, issuePayload());
+
+        assertEquals(1, recording.comments.size());
+    }
+
+    @Test
+    void runComment_noWorkflowsResolved_noReaction() {
+        when(workflowSelectionService.enabledWorkflowKeys(5L)).thenReturn(List.of());
+
+        orchestrator.runComment(bot, issuePayload());
+
+        verify(repositoryApiClient, never()).addReaction(any(), any(), any(), any());
+    }
+
+    @Test
     void runComment_workflowThrows_recordsErrorOnly() {
         RecordingWorkflow failing = new RecordingWorkflow() {
             @Override public String key() { return "issue-x"; }
@@ -188,7 +222,7 @@ class IssueWorkflowOrchestratorTest {
         };
         orchestrator = new IssueWorkflowOrchestrator(
                 new IssueWorkflowRegistry(List.of(failing)),
-                workflowSelectionService, botService, eventHookPublisher);
+                workflowSelectionService, botService, eventHookPublisher, giteaClientFactory);
 
         orchestrator.runComment(bot, issuePayload());
 
