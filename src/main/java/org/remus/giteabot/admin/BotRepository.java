@@ -21,8 +21,6 @@ public interface BotRepository extends JpaRepository<Bot, Long> {
 
     List<Bot> findBySystemPromptId(Long systemPromptId);
 
-    long countBySystemPromptId(Long systemPromptId);
-
     List<Bot> findByMcpConfigurationId(Long mcpConfigurationId);
 
     List<Bot> findByToolConfigurationId(Long toolConfigurationId);

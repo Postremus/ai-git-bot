@@ -1,7 +1,6 @@
 package org.remus.giteabot.prworkflow.config;
 
 import org.junit.jupiter.api.Test;
-import org.mockito.ArgumentCaptor;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
 import org.springframework.web.servlet.mvc.support.RedirectAttributesModelMap;
@@ -86,7 +85,6 @@ class WorkflowConfigurationControllerTest {
     }
 
     @Test
-    @SuppressWarnings("unchecked")
     void saveWorkflowSelection_delegatesParamExtractionToService() {
         // The "true-wins" / "last-value" extraction semantics live in
         // WorkflowSelectionService.extractWorkflowParams and are tested there.
