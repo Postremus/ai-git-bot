@@ -40,6 +40,8 @@ public class WorkflowConfigurationController {
             + " this configuration. Workflows are executed sequentially in stable order"
             + " (lexicographic by workflow key).";
 
+    private static final WorkflowConfigurationKind EXPECTED_KIND = WorkflowConfigurationKind.PR;
+
     private final WorkflowConfigurationService configurationService;
     private final WorkflowSelectionService selectionService;
 
@@ -64,21 +66,22 @@ public class WorkflowConfigurationController {
 
     @GetMapping("/{id}/edit")
     public String editForm(@PathVariable Long id, Model model, RedirectAttributes redirectAttributes) {
-        return configurationService.findById(id)
-                .map(configuration -> {
-                    model.addAttribute("workflowConfiguration", configuration);
-                    model.addAttribute("activeNav", "system-settings");
-                    addTemplateAttributes(model);
-                    return "system-settings/workflow-configurations/form";
-                })
-                .orElseGet(() -> {
-                    redirectAttributes.addFlashAttribute("error", "Workflow configuration not found");
-                    return "redirect:/system-settings";
-                });
+        WorkflowConfiguration configuration = WorkflowConfigurationKindGuard.requireExpectedKind(id, EXPECTED_KIND, configurationService, redirectAttributes);
+        if (configuration == null) {
+            return "redirect:/system-settings";
+        }
+        model.addAttribute("workflowConfiguration", configuration);
+        model.addAttribute("activeNav", "system-settings");
+        addTemplateAttributes(model);
+        return "system-settings/workflow-configurations/form";
     }
 
     @GetMapping("/{id}/clone")
     public String cloneForm(@PathVariable Long id, Model model, RedirectAttributes redirectAttributes) {
+        WorkflowConfiguration configuration = WorkflowConfigurationKindGuard.requireExpectedKind(id, EXPECTED_KIND, configurationService, redirectAttributes);
+        if (configuration == null) {
+            return "redirect:/system-settings";
+        }
         try {
             WorkflowConfiguration clone = configurationService.cloneConfiguration(id);
             model.addAttribute("workflowConfiguration", clone);
@@ -95,7 +98,9 @@ public class WorkflowConfigurationController {
     public String save(@ModelAttribute("workflowConfiguration") WorkflowConfiguration workflowConfiguration,
                        Model model, RedirectAttributes redirectAttributes) {
         if (workflowConfiguration.getId() == null) {
-            workflowConfiguration.setKind(WorkflowConfigurationKind.PR);
+            workflowConfiguration.setKind(EXPECTED_KIND);
+        } else if (WorkflowConfigurationKindGuard.requireExpectedKind(workflowConfiguration.getId(), EXPECTED_KIND, configurationService, redirectAttributes) == null) {
+            return "redirect:/system-settings";
         }
         try {
             WorkflowConfiguration saved = configurationService.save(workflowConfiguration);
@@ -114,19 +119,16 @@ public class WorkflowConfigurationController {
 
     @GetMapping("/{id}/workflows")
     public String workflowSelection(@PathVariable Long id, Model model, RedirectAttributes redirectAttributes) {
-        return configurationService.findById(id)
-                .map(configuration -> {
-                    List<WorkflowSelectionRow> rows = selectionService.loadAvailableWorkflows(id);
-                    model.addAttribute("workflowConfiguration", configuration);
-                    model.addAttribute("workflows", rows);
-                    model.addAttribute("activeNav", "system-settings");
-                    addTemplateAttributes(model);
-                    return "system-settings/workflow-configurations/workflows";
-                })
-                .orElseGet(() -> {
-                    redirectAttributes.addFlashAttribute("error", "Workflow configuration not found");
-                    return "redirect:/system-settings";
-                });
+        WorkflowConfiguration configuration = WorkflowConfigurationKindGuard.requireExpectedKind(id, EXPECTED_KIND, configurationService, redirectAttributes);
+        if (configuration == null) {
+            return "redirect:/system-settings";
+        }
+        List<WorkflowSelectionRow> rows = selectionService.loadAvailableWorkflows(id);
+        model.addAttribute("workflowConfiguration", configuration);
+        model.addAttribute("workflows", rows);
+        model.addAttribute("activeNav", "system-settings");
+        addTemplateAttributes(model);
+        return "system-settings/workflow-configurations/workflows";
     }
 
     @PostMapping("/{id}/workflows/save")
@@ -135,6 +137,9 @@ public class WorkflowConfigurationController {
                                         List<String> selectedWorkflowKeys,
                                         @RequestParam MultiValueMap<String, String> allParams,
                                         RedirectAttributes redirectAttributes) {
+        if (WorkflowConfigurationKindGuard.requireExpectedKind(id, EXPECTED_KIND, configurationService, redirectAttributes) == null) {
+            return "redirect:/system-settings";
+        }
         try {
             Map<String, Map<String, String>> workflowParams =
                     selectionService.extractWorkflowParams(allParams, selectedWorkflowKeys);
@@ -155,6 +160,9 @@ public class WorkflowConfigurationController {
 
     @PostMapping("/{id}/delete")
     public String delete(@PathVariable Long id, RedirectAttributes redirectAttributes) {
+        if (WorkflowConfigurationKindGuard.requireExpectedKind(id, EXPECTED_KIND, configurationService, redirectAttributes) == null) {
+            return "redirect:/system-settings";
+        }
         try {
             configurationService.deleteById(id);
             redirectAttributes.addFlashAttribute("success", "Workflow configuration deleted successfully");
@@ -172,7 +180,8 @@ public class WorkflowConfigurationController {
     @GetMapping("/{id}/selected-workflows")
     @ResponseBody
     public ResponseEntity<List<Map<String, Object>>> selectedWorkflows(@PathVariable Long id) {
-        if (configurationService.findById(id).isEmpty()) {
+        WorkflowConfiguration configuration = configurationService.findById(id).orElse(null);
+        if (configuration == null || configuration.getKind() != EXPECTED_KIND) {
             return ResponseEntity.notFound().build();
         }
         List<Map<String, Object>> rows = selectionService.describeSelections(id).stream()
