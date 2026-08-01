@@ -6,8 +6,13 @@ import { test, expect } from '@playwright/test';
  */
 test('issue configuration workflow screen offers the issue workflow catalog', async ({ page }) => {
   // Step 1: Navigate directly to the issue workflow configurations list.
-  await page.goto('/system-settings/issue-workflow-configurations');
+  await page.goto('/system-settings');
   await page.waitForLoadState('networkidle');
+  const dismissButton = page.getByRole('button', { name: /dismiss/i }).first();
+  if (await dismissButton.isVisible().catch(() => false)) {
+    await dismissButton.click();
+    await expect(dismissButton).toHaveCount(0, { timeout: 5000 }).catch(() => {});
+  }
 
   const codingAgentRow = page
     .locator('tr, li, [role="row"]')

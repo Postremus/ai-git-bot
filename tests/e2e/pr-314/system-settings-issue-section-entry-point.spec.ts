@@ -8,7 +8,11 @@ test('system settings exposes an entry point to issue-assigned workflow configur
   // Step 1: Navigate directly to /system-settings.
   await page.goto('/system-settings');
   await page.waitForLoadState('networkidle');
-
+  const dismissButton = page.getByRole('button', { name: /dismiss/i }).first();
+  if (await dismissButton.isVisible().catch(() => false)) {
+    await dismissButton.click();
+    await expect(dismissButton).toHaveCount(0, { timeout: 5000 }).catch(() => {});
+  }
   // Step 2: Wait for the settings sections to render.
   await page.locator('main, body').first().waitFor({ state: 'visible', timeout: 30_000 });
   await page.waitForTimeout(1_000);

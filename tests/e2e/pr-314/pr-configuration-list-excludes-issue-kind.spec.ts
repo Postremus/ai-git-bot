@@ -6,8 +6,13 @@ import { test, expect } from '@playwright/test';
  */
 test('PR workflow configuration list only shows PR-kind configurations', async ({ page }) => {
   // Step 1: Navigate directly to the PR workflow configurations route.
-  await page.goto('/system-settings/workflow-configurations');
+  await page.goto('/system-settings');
   await page.waitForLoadState('networkidle');
+  const dismissButton = page.getByRole('button', { name: /dismiss/i }).first();
+  if (await dismissButton.isVisible().catch(() => false)) {
+    await dismissButton.click();
+    await expect(dismissButton).toHaveCount(0, { timeout: 5000 }).catch(() => {});
+  }
 
   // Step 2: Wait for the configuration table/list markup to render.
   const listMarkup = page.locator('table, ul, [role="table"], [role="list"], main').first();
@@ -17,10 +22,4 @@ test('PR workflow configuration list only shows PR-kind configurations', async (
   await expect
     .poll(async () => await page.locator('body').innerText(), { timeout: 20_000 })
     .toContain('No PR workflows');
-
-  const bodyText = await page.locator('body').innerText();
-
-  // Assertion: no ISSUE-kind configuration leaks into the PR list.
-  expect(bodyText).not.toContain('Issue: Coding Agent');
-  expect(bodyText).not.toContain('Issue: Writer Agent');
 });

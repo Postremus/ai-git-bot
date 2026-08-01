@@ -24,26 +24,21 @@ test('admin can create a new issue-assigned workflow configuration', async ({ pa
     await page.goto(`${LIST_URL}/new`);
   }
   await page.waitForLoadState('networkidle');
-
-  const form = page.locator('form').first();
-  await form.waitFor({ state: 'visible', timeout: 30_000 });
+  const dismissButton = page.getByRole('button', { name: /dismiss/i }).first();
+  if (await dismissButton.isVisible().catch(() => false)) {
+    await dismissButton.click();
+    await expect(dismissButton).toHaveCount(0, { timeout: 5000 }).catch(() => {});
+  }
 
   // Step 3: Fill the configuration name input with a unique generated name.
-  const nameInput = form
-    .locator(
-      [
-        'input[name*="name" i]',
-        'input[id*="name" i]',
-        'input[type="text"]',
-      ].join(', '),
-    )
+  const nameInput = page
+    .locator('#name')
     .first();
   await nameInput.waitFor({ state: 'visible', timeout: 30_000 });
   await nameInput.fill(uniqueName);
 
   // Step 4: Submit the form.
-  const submit = form
-    .locator('button[type="submit"], input[type="submit"], button:has-text("Create"), button:has-text("Save")')
+  const submit = page.locator('form[action="/system-settings/issue-workflow-configurations/save"] button[type="submit"]')
     .first();
   await submit.waitFor({ state: 'visible', timeout: 30_000 });
   await submit.click();
