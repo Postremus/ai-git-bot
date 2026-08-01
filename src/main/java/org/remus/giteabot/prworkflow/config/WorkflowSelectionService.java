@@ -338,8 +338,8 @@ public class WorkflowSelectionService {
                 // wins regardless of order. Any other field takes the last
                 // submitted value; the "true"-wins rule must not leak to them.
                 String effective = isBooleanField(workflowKey, fieldName)
-                        ? (values.contains("true") ? "true" : "false")
-                        : values.get(values.size() - 1);
+                        ? (Boolean.toString(values.contains("true")))
+                        : values.getLast();
                 grouped.computeIfAbsent(workflowKey, k -> new LinkedHashMap<>())
                         .put(fieldName, effective);
             }

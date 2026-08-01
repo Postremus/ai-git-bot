@@ -48,7 +48,6 @@ public class IssueWorkflowRegistry {
             log.info("Registered IssueWorkflow '{}' ({}) [{}]",
                     workflow.displayName(), key, workflow.getClass().getSimpleName());
         }
-        workflowsByKey.clear();
         workflowsByKey.putAll(indexed);
     }
 

@@ -215,7 +215,6 @@ class IssueWorkflowOrchestratorTest {
     @Test
     void runComment_workflowThrows_recordsErrorOnly() {
         RecordingWorkflow failing = new RecordingWorkflow() {
-            @Override public String key() { return "issue-x"; }
             @Override public void onIssueComment(IssueWorkflowContext context) {
                 throw new RuntimeException("comment boom");
             }
