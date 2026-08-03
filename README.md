@@ -406,6 +406,11 @@ For a quick local test, run AI-Git-Bot with a single Docker command using the bu
 docker run -p 8080:8080 tmseidel/ai-git-bot:latest
 ```
 
+The image is published as a multi-arch manifest for **`linux/amd64`** and
+**`linux/arm64`**, so the same command works on x86-64 servers, Apple Silicon,
+AWS Graviton and 64-bit Raspberry Pi. See
+[Architectures](doc/DEPLOYMENT.md#architectures) for details.
+
 Then:
 
 1. Open `http://localhost:8080`
