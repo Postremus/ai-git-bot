@@ -41,6 +41,22 @@ class ApiPayloadSizeLimitFilterTest {
     }
 
     @Test
+    void doFilter_rejectsPayloadUnderServletContextPath() throws Exception {
+        ApiPayloadSizeLimitFilter filter = new ApiPayloadSizeLimitFilter(10);
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.setContextPath("/bot");
+        request.setRequestURI("/bot/api/webhook/test-secret");
+        request.setContent("01234567890".getBytes(StandardCharsets.UTF_8));
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        filter.doFilter(request, response, (ignoredRequest, ignoredResponse) -> {
+            throw new AssertionError("The filter must reject the oversized API request");
+        });
+
+        assertEquals(413, response.getStatus());
+    }
+
+    @Test
     void doFilter_stopsChunkedPayloadAboveTheLimit() throws Exception {
         ApiPayloadSizeLimitFilter filter = new ApiPayloadSizeLimitFilter(10);
         MockHttpServletRequest request = new MockHttpServletRequest() {

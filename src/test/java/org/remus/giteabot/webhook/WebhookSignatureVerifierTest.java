@@ -57,6 +57,16 @@ class WebhookSignatureVerifierTest {
                 RepositoryType.GITHUB, SECRET, Map.of("X-Hub-Signature-256", "sha256=invalid"), BODY));
     }
 
+    @Test
+    void isValid_rejectsInvalidGiteaGitLabAndBitbucketValues() {
+        assertFalse(WebhookSignatureVerifier.isValid(
+                RepositoryType.GITEA, SECRET, Map.of("X-Gitea-Signature", "invalid"), BODY));
+        assertFalse(WebhookSignatureVerifier.isValid(
+                RepositoryType.GITLAB, SECRET, Map.of("X-Gitlab-Token", "invalid"), BODY));
+        assertFalse(WebhookSignatureVerifier.isValid(
+                RepositoryType.BITBUCKET, SECRET, Map.of("X-Hub-Signature", "sha256=invalid"), BODY));
+    }
+
     private static String hmacSha256(String secret, byte[] body) {
         try {
             Mac mac = Mac.getInstance("HmacSHA256");

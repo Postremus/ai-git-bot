@@ -34,6 +34,9 @@ public class ApiPayloadSizeLimitFilter extends OncePerRequestFilter {
 
     private final long maxBodyBytes;
 
+    /**
+     * @param maxBodyBytes maximum accepted request body size for {@code /api/**}
+     */
     public ApiPayloadSizeLimitFilter(
             @Value("${giteabot.api.max-body-bytes:2097152}") long maxBodyBytes) {
         this.maxBodyBytes = maxBodyBytes;
@@ -41,7 +44,9 @@ public class ApiPayloadSizeLimitFilter extends OncePerRequestFilter {
 
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
-        return !request.getRequestURI().startsWith("/api/");
+        String pathWithinApplication = request.getRequestURI()
+                .substring(request.getContextPath().length());
+        return !pathWithinApplication.startsWith("/api/");
     }
 
     @Override
