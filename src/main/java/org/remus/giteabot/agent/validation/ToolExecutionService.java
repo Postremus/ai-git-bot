@@ -4,6 +4,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.remus.giteabot.agent.tools.ToolCatalog;
 import org.remus.giteabot.config.AgentConfigProperties;
+import org.remus.giteabot.util.WorkspacePaths;
 import org.springframework.stereotype.Service;
 
 import java.io.BufferedReader;
@@ -567,6 +568,7 @@ public class ToolExecutionService {
         List<String> matches = new ArrayList<>();
         try (Stream<Path> stream = Files.walk(basePath, MAX_SEARCH_DEPTH)) {
             List<Path> files = stream
+                    .filter(path -> !isGitInternalPath(path))
                     .filter(Files::isRegularFile)
                     .filter(this::isReasonableTextFile)
                     .sorted()
@@ -686,6 +688,7 @@ public class ToolExecutionService {
         try (Stream<Path> stream = Files.walk(basePath)) {
             List<String> matches = stream
                     .filter(path -> !path.equals(basePath))
+                    .filter(path -> !isGitInternalPath(path))
                     .filter(Files::isRegularFile)
                     .sorted()
                     .map(workspaceDir::relativize)
@@ -896,6 +899,7 @@ public class ToolExecutionService {
 
         try (Stream<Path> stream = Files.walk(basePath, maxDepth)) {
             List<String> lines = stream
+                    .filter(path -> !isGitInternalPath(path))
                     .sorted(Comparator.naturalOrder())
                     .map(path -> formatTreeEntry(basePath, path))
                     .toList();
@@ -1252,21 +1256,21 @@ public class ToolExecutionService {
 
 
     private Path resolveWorkspacePath(Path workspaceDir, String relativePath) throws IOException {
-        // Stage 1: normalize() resolves any ".." segments without touching the filesystem.
-        Path normalized = workspaceDir.resolve(relativePath).normalize();
-        if (!normalized.startsWith(workspaceDir.normalize())) {
-            throw new IOException("Path escapes workspace: " + relativePath);
+        try {
+            return WorkspacePaths.resolveInsideWorkspace(workspaceDir, relativePath);
+        } catch (IllegalArgumentException e) {
+            throw new IOException(e.getMessage(), e);
         }
-        // Stage 2: if the target already exists, re-check after symlink resolution so that
-        // a symlink inside the workspace pointing outside is also caught.
-        if (Files.exists(normalized)) {
-            Path realBase = workspaceDir.toRealPath();
-            Path realPath = normalized.toRealPath();
-            if (!realPath.startsWith(realBase)) {
-                throw new IOException("Path escapes workspace via symlink: " + relativePath);
+    }
+
+    /** True when any path segment belongs to the repository's internal Git metadata. */
+    private boolean isGitInternalPath(Path path) {
+        for (Path segment : path) {
+            if (".git".equals(segment.toString())) {
+                return true;
             }
         }
-        return normalized;
+        return false;
     }
 
     private ToolResult executeCommand(Path workspaceDir, String[] command) {

@@ -62,6 +62,22 @@ class PrTestWorkspaceManagerTest {
     }
 
     @Test
+    void resolveInsideWorkspaceRejectsGitMetadataAndIntermediateSymlinks(@TempDir Path tmp) throws IOException {
+        PrTestWorkspaceManager manager = PrTestWorkspaceManager.rootedAt(tmp);
+        Path workspace = manager.allocate(1L, E2eTestFramework.PLAYWRIGHT);
+        Path outside = tmp.resolve("outside");
+        Files.createDirectories(outside);
+        Files.createSymbolicLink(workspace.resolve("linked"), outside);
+
+        assertThatThrownBy(() -> manager.resolveInsideWorkspace(workspace, ".git/config"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining(".git internals");
+        assertThatThrownBy(() -> manager.resolveInsideWorkspace(workspace, "linked/secret.txt"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("symlinked directory");
+    }
+
+    @Test
     void cleanupRemovesEverythingUnderRunDir(@TempDir Path tmp) throws IOException {
         PrTestWorkspaceManager manager = PrTestWorkspaceManager.rootedAt(tmp);
         Path ws = manager.allocate(99L, E2eTestFramework.PLAYWRIGHT);
@@ -96,5 +112,4 @@ class PrTestWorkspaceManagerTest {
         assertThat(k6.resolve("scenarios")).isDirectory();
     }
 }
-
 

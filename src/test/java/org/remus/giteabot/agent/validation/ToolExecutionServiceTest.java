@@ -171,6 +171,36 @@ class ToolExecutionServiceTest {
         assertThat(result.output()).isEqualTo("src/main/java/org/example/BotWebhookService.java");
     }
 
+    @Test
+    void executeContextTool_rejectsGitInternalsAndSkipsThemDuringSearch() throws IOException {
+        Files.createDirectories(tempDir.resolve(".git"));
+        Files.writeString(tempDir.resolve(".git/config"), "token=should-not-be-visible");
+
+        ToolResult catResult = service.executeContextTool(tempDir, "cat", List.of(".git/config"));
+        ToolResult searchResult = service.executeContextTool(tempDir, "rg",
+                List.of("should-not-be-visible", "."));
+
+        assertThat(catResult.success()).isFalse();
+        assertThat(catResult.error()).contains("Access to .git internals is not allowed");
+        assertThat(searchResult.success()).isTrue();
+        assertThat(searchResult.output()).doesNotContain(".git/config");
+    }
+
+    @Test
+    void executeContextTool_rejectsPathThroughSymlinkedDirectory() throws IOException {
+        Path workspace = tempDir.resolve("workspace");
+        Path outside = tempDir.resolve("outside");
+        Files.createDirectories(workspace);
+        Files.createDirectories(outside);
+        Files.writeString(outside.resolve("secret.txt"), "should-not-be-visible");
+        Files.createSymbolicLink(workspace.resolve("linked"), outside);
+
+        ToolResult result = service.executeContextTool(workspace, "cat", List.of("linked/secret.txt"));
+
+        assertThat(result.success()).isFalse();
+        assertThat(result.error()).contains("symlinked directory");
+    }
+
     // ---- File tool tests ----
 
     @Test
