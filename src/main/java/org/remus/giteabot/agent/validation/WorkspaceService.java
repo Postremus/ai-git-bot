@@ -8,10 +8,13 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
+import java.nio.file.attribute.PosixFilePermission;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -31,6 +34,16 @@ import java.util.concurrent.TimeUnit;
 @Service
 public class WorkspaceService {
 
+    private static final String REPOSITORY_DIRECTORY_NAME = "repository";
+    private static final String WORKSPACE_ROOT_MARKER = ".agent-workspace";
+    private static final Set<PosixFilePermission> OWNER_DIRECTORY_PERMISSIONS = Set.of(
+            PosixFilePermission.OWNER_READ,
+            PosixFilePermission.OWNER_WRITE,
+            PosixFilePermission.OWNER_EXECUTE);
+    private static final Set<PosixFilePermission> OWNER_FILE_PERMISSIONS = Set.of(
+            PosixFilePermission.OWNER_READ,
+            PosixFilePermission.OWNER_WRITE);
+
     /**
      * Clones a repository workspace. When a branch-based shallow clone fails and
      * {@code prNumber} is non-null, falls back to cloning the default branch then
@@ -43,54 +56,53 @@ public class WorkspaceService {
      */
     public WorkspaceResult prepareWorkspace(String owner, String repo, String branch,
                                             String cloneBaseUrl, String token, Long prNumber) {
+        Path workspaceDir = null;
         Path credentialsFile = null;
         try {
-            Path tempDir = Files.createTempDirectory("agent-workspace-");
-            log.info("Cloning repository to {} for workspace", tempDir);
+            workspaceDir = createWorkspaceDirectory();
+            log.info("Cloning repository to {} for workspace", workspaceDir);
 
             String cloneUrl = buildCloneUrl(owner, repo, cloneBaseUrl);
-            credentialsFile = createCredentialsFile(cloneBaseUrl, token, tempDir);
+            credentialsFile = createCredentialsFile(cloneBaseUrl, token, workspaceDir);
             String[] credentialConfig = credentialConfigArgs(credentialsFile);
-            CommandResult cloneResult = runCommand(tempDir.getParent().toFile(),
+            CommandResult cloneResult = runCommand(workspaceDir.getParent().toFile(),
                     withCredentialConfig(credentialConfig,
                             "clone", "--depth", "1", "--branch", branch,
-                            cloneUrl, tempDir.getFileName().toString()),
+                            cloneUrl, workspaceDir.getFileName().toString()),
                     60);
 
             if (cloneResult.success()) {
-                persistCredentialHelper(tempDir, credentialsFile);
-                return WorkspaceResult.success(tempDir);
+                persistCredentialHelper(workspaceDir, credentialsFile);
+                return WorkspaceResult.success(workspaceDir);
             }
 
             // Fork PR fallback: clone default branch → fetch PR head ref
             if (prNumber != null) {
                 log.info("Branch clone failed, falling back to PR head ref for PR #{}: {}",
                         prNumber, cloneResult.output());
-                deleteDirectory(tempDir);
-                deleteCredentialsFile(credentialsFile);
-                tempDir = Files.createTempDirectory("agent-workspace-");
-                credentialsFile = createCredentialsFile(cloneBaseUrl, token, tempDir);
+                cleanupWorkspace(workspaceDir);
+                workspaceDir = createWorkspaceDirectory();
+                credentialsFile = createCredentialsFile(cloneBaseUrl, token, workspaceDir);
                 credentialConfig = credentialConfigArgs(credentialsFile);
 
-                CommandResult defaultCloneResult = runCommand(tempDir.getParent().toFile(),
+                CommandResult defaultCloneResult = runCommand(workspaceDir.getParent().toFile(),
                         withCredentialConfig(credentialConfig,
                                 "clone", "--depth", "1",
-                                cloneUrl, tempDir.getFileName().toString()),
+                                cloneUrl, workspaceDir.getFileName().toString()),
                         60);
 
                 if (!defaultCloneResult.success()) {
                     log.error("Fallback clone (default branch) also failed: {}",
                             defaultCloneResult.output());
-                    deleteDirectory(tempDir);
-                    deleteCredentialsFile(credentialsFile);
+                    cleanupWorkspace(workspaceDir);
                     return WorkspaceResult.failure(
                             "Failed to clone repository (branch: " + cloneResult.output()
                                     + "; default branch: " + defaultCloneResult.output() + ")");
                 }
 
-                persistCredentialHelper(tempDir, credentialsFile);
+                persistCredentialHelper(workspaceDir, credentialsFile);
 
-                CommandResult fetchResult = runCommand(tempDir.toFile(),
+                CommandResult fetchResult = runCommand(workspaceDir.toFile(),
                         new String[]{"git", "fetch", "origin",
                                 "refs/pull/" + prNumber + "/head"},
                         60);
@@ -98,37 +110,35 @@ public class WorkspaceService {
                 if (!fetchResult.success()) {
                     log.error("Failed to fetch PR head ref for PR #{}: {}", prNumber,
                             fetchResult.output());
-                    deleteDirectory(tempDir);
-                    deleteCredentialsFile(credentialsFile);
+                    cleanupWorkspace(workspaceDir);
                     return WorkspaceResult.failure(
                             "Failed to fetch PR head ref for PR #" + prNumber + ": "
                                     + fetchResult.output());
                 }
 
-                CommandResult checkoutResult = runCommand(tempDir.toFile(),
+                CommandResult checkoutResult = runCommand(workspaceDir.toFile(),
                         new String[]{"git", "checkout", "-B", branch, "FETCH_HEAD"}, 15);
 
                 if (!checkoutResult.success()) {
                     log.error("Failed to checkout FETCH_HEAD for PR #{}: {}", prNumber,
                             checkoutResult.output());
-                    deleteDirectory(tempDir);
-                    deleteCredentialsFile(credentialsFile);
+                    cleanupWorkspace(workspaceDir);
                     return WorkspaceResult.failure(
                             "Failed to checkout FETCH_HEAD for PR #" + prNumber + ": "
                                     + checkoutResult.output());
                 }
 
-                return WorkspaceResult.success(tempDir);
+                return WorkspaceResult.success(workspaceDir);
             }
 
             // No fallback — report the original clone error
             log.error("Failed to clone repository: {}", cloneResult.output());
-            deleteDirectory(tempDir);
-            deleteCredentialsFile(credentialsFile);
+            cleanupWorkspace(workspaceDir);
             return WorkspaceResult.failure("Failed to clone repository: " + cloneResult.output());
 
         } catch (IOException e) {
             log.error("Failed to prepare workspace: {}", e.getMessage());
+            cleanupWorkspace(workspaceDir);
             deleteCredentialsFile(credentialsFile);
             return WorkspaceResult.failure("Failed to prepare workspace: " + e.getMessage());
         }
@@ -280,14 +290,14 @@ public class WorkspaceService {
 
 
     /**
-     * Cleans up a workspace directory by deleting it recursively. Also removes
-     * the sibling git-credentials file created by {@link #prepareWorkspace}.
+     * Cleans up a workspace directory and its private temporary parent, including
+     * the external git credential-store file created by {@link #prepareWorkspace}.
      */
     public void cleanupWorkspace(Path workspaceDir) {
         if (workspaceDir != null) {
             try {
-                deleteDirectory(workspaceDir);
-                deleteCredentialsFile(credentialsFileFor(workspaceDir));
+                Path workspaceRoot = workspaceRootFor(workspaceDir);
+                deleteDirectory(workspaceRoot != null ? workspaceRoot : workspaceDir);
                 log.debug("Cleaned up workspace: {}", workspaceDir);
             } catch (IOException e) {
                 log.warn("Failed to clean up workspace {}: {}", workspaceDir, e.getMessage());
@@ -316,10 +326,9 @@ public class WorkspaceService {
     }
 
     /**
-     * Writes a git credential-store file <em>outside</em> the workspace
-     * (sibling of the workspace dir, named after it) so the token is never
-     * stored inside the cloned repository. Returns {@code null} for local
-     * paths or blank tokens.
+     * Writes a git credential-store file <em>outside</em> the workspace in its
+     * private temporary parent, so the token is never stored inside the cloned
+     * repository. Returns {@code null} for local paths or blank tokens.
      */
     Path createCredentialsFile(String cloneBaseUrl, String token, Path workspaceDir)
             throws IOException {
@@ -334,19 +343,63 @@ public class WorkspaceService {
         }
         String host = baseUrl.contains("/") ? baseUrl.substring(0, baseUrl.indexOf('/')) : baseUrl;
 
-        Path credentialsFile = credentialsFileFor(workspaceDir);
+        Path workspaceRoot = workspaceRootFor(workspaceDir);
+        if (workspaceRoot == null) {
+            throw new IOException("Workspace does not have a private credential directory");
+        }
+        Path credentialsFile = Files.createTempFile(workspaceRoot, "credentials-", ".store");
+        restrictToOwner(credentialsFile, false);
         Files.writeString(credentialsFile, protocol + "://oauth2:" + token + "@" + host + "\n");
-        // Best-effort owner-only permissions.
-        credentialsFile.toFile().setReadable(false, false);
-        credentialsFile.toFile().setWritable(false, false);
-        credentialsFile.toFile().setReadable(true, true);
-        credentialsFile.toFile().setWritable(true, true);
         return credentialsFile;
     }
 
-    /** The credential-store file associated with a workspace directory. */
-    private Path credentialsFileFor(Path workspaceDir) {
-        return workspaceDir.resolveSibling(workspaceDir.getFileName() + ".credentials");
+    /** Creates a private temporary parent and returns its repository child path. */
+    Path createWorkspaceDirectory() throws IOException {
+        Path workspaceRoot = Files.createTempDirectory("agent-workspace-");
+        try {
+            restrictToOwner(workspaceRoot, true);
+            Files.createFile(workspaceRoot.resolve(WORKSPACE_ROOT_MARKER));
+            return workspaceRoot.resolve(REPOSITORY_DIRECTORY_NAME);
+        } catch (IOException e) {
+            deleteDirectory(workspaceRoot);
+            throw e;
+        }
+    }
+
+    /** Returns the private temporary parent created for the supplied workspace, if any. */
+    private Path workspaceRootFor(Path workspaceDir) {
+        if (workspaceDir == null || workspaceDir.getFileName() == null
+                || !REPOSITORY_DIRECTORY_NAME.equals(workspaceDir.getFileName().toString())) {
+            return null;
+        }
+        Path workspaceRoot = workspaceDir.getParent();
+        if (workspaceRoot == null) {
+            return null;
+        }
+        Path marker = workspaceRoot.resolve(WORKSPACE_ROOT_MARKER);
+        return Files.isRegularFile(marker, LinkOption.NOFOLLOW_LINKS) ? workspaceRoot : null;
+    }
+
+    /** Applies owner-only permissions where the host filesystem supports them. */
+    private void restrictToOwner(Path path, boolean directory) throws IOException {
+        try {
+            Files.setPosixFilePermissions(path,
+                    directory ? OWNER_DIRECTORY_PERMISSIONS : OWNER_FILE_PERMISSIONS);
+            return;
+        } catch (UnsupportedOperationException ignored) {
+            // Windows ACLs do not expose POSIX permissions through NIO.
+        }
+        File file = path.toFile();
+        file.setReadable(false, false);
+        file.setWritable(false, false);
+        if (directory) {
+            file.setExecutable(false, false);
+        }
+        file.setReadable(true, true);
+        file.setWritable(true, true);
+        if (directory) {
+            file.setExecutable(true, true);
+        }
     }
 
     /**
@@ -385,10 +438,7 @@ public class WorkspaceService {
                         "store --file=" + credentialsFile.toAbsolutePath()}, 10);
     }
 
-    /**
-     * Deletes the credential-store file belonging to a workspace, if present.
-     * Called from {@link #cleanupWorkspace(Path)}.
-     */
+    /** Deletes a credential-store file after a failed workspace setup. */
     private void deleteCredentialsFile(Path credentialsFile) {
         if (credentialsFile != null) {
             try {

@@ -33,6 +33,23 @@ class WorkspacePathsTest {
         assertThatThrownBy(() -> WorkspacePaths.resolveInsideWorkspace(workspace, ".git/config"))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining(".git internals");
+        assertThatThrownBy(() -> WorkspacePaths.resolveInsideWorkspace(workspace, ".GIT/config"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining(".git internals");
+    }
+
+    @Test
+    void resolveInsideWorkspace_rejectsAbsoluteAndNormalizedTraversalPaths(@TempDir Path root) throws IOException {
+        Path workspace = root.resolve("workspace");
+        Files.createDirectories(workspace);
+
+        assertThatThrownBy(() -> WorkspacePaths.resolveInsideWorkspace(
+                workspace, workspace.resolve("inside.txt").toString()))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("relative");
+        assertThatThrownBy(() -> WorkspacePaths.resolveInsideWorkspace(workspace, "src/../inside.txt"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("traversal");
     }
 
     @Test

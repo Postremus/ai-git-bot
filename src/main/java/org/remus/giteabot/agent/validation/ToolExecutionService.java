@@ -13,6 +13,7 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -568,8 +569,8 @@ public class ToolExecutionService {
         List<String> matches = new ArrayList<>();
         try (Stream<Path> stream = Files.walk(basePath, MAX_SEARCH_DEPTH)) {
             List<Path> files = stream
-                    .filter(path -> !isGitInternalPath(path))
-                    .filter(Files::isRegularFile)
+                    .filter(this::isVisibleWorkspacePath)
+                    .filter(path -> Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS))
                     .filter(this::isReasonableTextFile)
                     .sorted()
                     .toList();
@@ -688,8 +689,8 @@ public class ToolExecutionService {
         try (Stream<Path> stream = Files.walk(basePath)) {
             List<String> matches = stream
                     .filter(path -> !path.equals(basePath))
-                    .filter(path -> !isGitInternalPath(path))
-                    .filter(Files::isRegularFile)
+                    .filter(this::isVisibleWorkspacePath)
+                    .filter(path -> Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS))
                     .sorted()
                     .map(workspaceDir::relativize)
                     .map(Path::toString)
@@ -899,7 +900,7 @@ public class ToolExecutionService {
 
         try (Stream<Path> stream = Files.walk(basePath, maxDepth)) {
             List<String> lines = stream
-                    .filter(path -> !isGitInternalPath(path))
+                    .filter(this::isVisibleWorkspacePath)
                     .sorted(Comparator.naturalOrder())
                     .map(path -> formatTreeEntry(basePath, path))
                     .toList();
@@ -1266,11 +1267,16 @@ public class ToolExecutionService {
     /** True when any path segment belongs to the repository's internal Git metadata. */
     private boolean isGitInternalPath(Path path) {
         for (Path segment : path) {
-            if (".git".equals(segment.toString())) {
+            if (".git".equalsIgnoreCase(segment.toString())) {
                 return true;
             }
         }
         return false;
+    }
+
+    /** Symlinks can point outside the workspace even when recursive walks do not follow directories. */
+    private boolean isVisibleWorkspacePath(Path path) {
+        return !isGitInternalPath(path) && !Files.isSymbolicLink(path);
     }
 
     private ToolResult executeCommand(Path workspaceDir, String[] command) {

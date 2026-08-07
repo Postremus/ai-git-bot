@@ -177,11 +177,14 @@ class ToolExecutionServiceTest {
         Files.writeString(tempDir.resolve(".git/config"), "token=should-not-be-visible");
 
         ToolResult catResult = service.executeContextTool(tempDir, "cat", List.of(".git/config"));
+        ToolResult caseVariantResult = service.executeContextTool(tempDir, "cat", List.of(".GIT/config"));
         ToolResult searchResult = service.executeContextTool(tempDir, "rg",
                 List.of("should-not-be-visible", "."));
 
         assertThat(catResult.success()).isFalse();
         assertThat(catResult.error()).contains("Access to .git internals is not allowed");
+        assertThat(caseVariantResult.success()).isFalse();
+        assertThat(caseVariantResult.error()).contains("Access to .git internals is not allowed");
         assertThat(searchResult.success()).isTrue();
         assertThat(searchResult.output()).doesNotContain(".git/config");
     }
@@ -199,6 +202,25 @@ class ToolExecutionServiceTest {
 
         assertThat(result.success()).isFalse();
         assertThat(result.error()).contains("symlinked directory");
+    }
+
+    @Test
+    void executeContextTool_skipsLeafSymlinksDuringRecursiveOperations() throws IOException {
+        Path workspace = tempDir.resolve("workspace");
+        Path outside = tempDir.resolve("outside");
+        Files.createDirectories(workspace);
+        Files.createDirectories(outside);
+        Files.writeString(outside.resolve("secret.txt"), "host-only-secret");
+        Files.createSymbolicLink(workspace.resolve("linked-secret.txt"), outside.resolve("secret.txt"));
+
+        ToolResult searchResult = service.executeContextTool(workspace, "rg", List.of("host-only-secret", "."));
+        ToolResult findResult = service.executeContextTool(workspace, "find", List.of("*", "."));
+        ToolResult treeResult = service.executeContextTool(workspace, "tree", List.of(".", "1"));
+
+        assertThat(searchResult.success()).isTrue();
+        assertThat(searchResult.output()).startsWith("No matches found");
+        assertThat(findResult.output()).doesNotContain("linked-secret.txt");
+        assertThat(treeResult.output()).doesNotContain("linked-secret.txt");
     }
 
     // ---- File tool tests ----

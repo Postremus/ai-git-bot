@@ -6,6 +6,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class WorkspaceServiceTest {
     private WorkspaceService workspaceService;
     @TempDir
@@ -82,19 +83,32 @@ class WorkspaceServiceTest {
 
     @Test
     void createCredentialsFile_keepsTokenOutsideWorkspaceAndCleanupRemovesIt() throws IOException {
-        Path workspace = tempDir.resolve("workspace");
-        Files.createDirectories(workspace);
+        Path workspace = workspaceService.createWorkspaceDirectory();
 
         Path credentials = workspaceService.createCredentialsFile(
                 "https://git.example.com", "test-token", workspace);
 
-        assertThat(credentials).isEqualTo(tempDir.resolve("workspace.credentials"));
+        assertThat(credentials.getParent()).isEqualTo(workspace.getParent());
+        assertThat(credentials.getFileName().toString()).startsWith("credentials-");
         assertThat(credentials).isNotEqualTo(workspace.resolve(".git-credentials"));
+        assertThat(credentials).isNotEqualTo(workspace.resolveSibling("repository.credentials"));
         assertThat(Files.readString(credentials)).isEqualTo("https://oauth2:test-token@git.example.com\n");
 
         workspaceService.cleanupWorkspace(workspace);
 
         assertThat(credentials).doesNotExist();
+        assertThat(workspace.getParent()).doesNotExist();
+    }
+
+    @Test
+    void createCredentialsFile_rejectsWorkspaceWithoutPrivateParent() throws IOException {
+        Path unmanagedWorkspace = tempDir.resolve("workspace");
+        Files.createDirectories(unmanagedWorkspace);
+
+        assertThatThrownBy(() -> workspaceService.createCredentialsFile(
+                "https://git.example.com", "test-token", unmanagedWorkspace))
+                .isInstanceOf(IOException.class)
+                .hasMessageContaining("private credential directory");
     }
 
     @Test

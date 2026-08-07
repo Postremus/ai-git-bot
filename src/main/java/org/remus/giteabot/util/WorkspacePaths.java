@@ -30,13 +30,23 @@ public final class WorkspacePaths {
         if (relativePath == null || relativePath.isBlank()) {
             throw new IllegalArgumentException("path must not be blank");
         }
+        Path requestedPath = Path.of(relativePath);
+        if (requestedPath.isAbsolute()) {
+            throw new IllegalArgumentException("Path must be relative: " + relativePath);
+        }
+        for (Path segment : requestedPath) {
+            if ("..".equals(segment.toString())) {
+                throw new IllegalArgumentException(
+                        "Path '" + relativePath + "' escapes the workspace via traversal");
+            }
+        }
         Path base = workspace.toAbsolutePath().normalize();
-        Path candidate = base.resolve(relativePath).normalize();
+        Path candidate = base.resolve(requestedPath).normalize();
         if (!candidate.startsWith(base)) {
             throw new IllegalArgumentException("Path '" + relativePath + "' escapes the workspace");
         }
         for (Path segment : candidate) {
-            if (".git".equals(segment.toString())) {
+            if (".git".equalsIgnoreCase(segment.toString())) {
                 throw new IllegalArgumentException("Access to .git internals is not allowed: " + relativePath);
             }
         }
