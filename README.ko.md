@@ -233,8 +233,9 @@ PR 을 봇에 할당하면 변경 사항에 대한 Playwright 테스트 스위�
 |-----------|----------|------|
 | **[PR 리뷰](doc/PR_WORKFLOWS_REVIEW.md)** | PR 열림 또는 리뷰 재요청 | 리뷰 코멘트 및 결과 |
 | **[대화형 Q&A](doc/PR_WORKFLOWS_REVIEW.md)** | PR 댓글에서 `@bot` 멘션 | 컨텍스트 인식 대화 |
-| **[이슈 → 코드](doc/CODING_AGENT.md)** | 이슈를 코드 봇에 할당 | 풀 리퀘스트 |
-| **[이슈 → 개선](doc/WRITER_AGENT.md)** | 이슈를 작성 봇에 할당 | 수용 기준이 있는 구조화된 이슈 |
+| **[이슈 → 코드](doc/CODING_AGENT.md)** | 코딩 에이전트 이슈 워크플로가 구성된 봇에 이슈 할당 | 풀 리퀘스트 |
+| **[이슈 → 개선](doc/WRITER_AGENT.md)** | 작성 에이전트 이슈 워크플로가 구성된 봇에 이슈 할당 | 수용 기준이 있는 구조화된 이슈 |
+| **[이슈 워크플로](doc/ISSUE_WORKFLOWS.md)** | 봇별로 구성 가능 | PR 워크플로와 독립적인 플러그형 이슈 할당 동작 |
 | **[유닛 테스트 생성](doc/PR_WORKFLOWS_UNIT_TEST.md)** | PR 열림 또는 명령 트리거 | 브랜치에 커밋된 생성 테스트 |
 | **[풀스택 QA](doc/PR_WORKFLOWS_E2E.md)** | PR 열림 | 프리뷰 환경에서 실행된 Playwright 스위트 |
 | **[README 동기화](doc/PR_WORKFLOWS_README_SYNC.md)** | PR 열림 또는 명령 트리거 | 코드 변경에 맞춰 업데이트된 문서 |

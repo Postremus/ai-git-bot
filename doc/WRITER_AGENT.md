@@ -1,6 +1,6 @@
 # Writer Agent: Issue → Better Issue
 
-> Category: **ISSUE** · Bot type: **Writer bot**.
+> Category: **ISSUE** · Issue-assigned workflow: **`issue-writer`** (Writer Agent).
 
 ## The problem it solves
 
@@ -90,7 +90,9 @@ JSON-in-prompt fallback. See [TOOL_CALLING.md](TOOL_CALLING.md).
 ## Enabling it
 
 1. Create an **AI Integration** and a **Git Integration** in the admin UI.
-2. Create a bot with **Bot Type: Writer bot**.
+2. Create a bot with **Issue-Assigned Workflow Configuration: Issue: Writer Agent**
+   (select the seeded empty **No PR workflows** PR configuration to keep the
+   bot silent on PRs, matching the historic writer-bot behavior).
 3. Configure your repository webhook to send **Issues** events to the bot URL.
 4. Grant the bot repository read/clone access for context, and issue write
    access to post comments and create the improved issue.

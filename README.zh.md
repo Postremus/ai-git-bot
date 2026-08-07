@@ -233,8 +233,9 @@ Bot 直接在线程中回答，并保持对话上下文。
 |-----------|----------|------|
 | **[PR 审查](doc/PR_WORKFLOWS_REVIEW.md)** | PR 打开或审查重新请求 | 审查评论和发现 |
 | **[交互式问答](doc/PR_WORKFLOWS_REVIEW.md)** | PR 评论中的 `@bot` 提及 | 上下文感知对话 |
-| **[Issue → 代码](doc/CODING_AGENT.md)** | Issue 分配给编码 bot | 拉取请求 |
-| **[Issue → 改进](doc/WRITER_AGENT.md)** | Issue 分配给写作 bot | 带验收标准的结构化 issue |
+| **[Issue → 代码](doc/CODING_AGENT.md)** | Issue 分配给配置了编码代理 issue 工作流的 bot | 拉取请求 |
+| **[Issue → 改进](doc/WRITER_AGENT.md)** | Issue 分配给配置了写作代理 issue 工作流的 bot | 带验收标准的结构化 issue |
+| **[Issue 工作流](doc/ISSUE_WORKFLOWS.md)** | 每个 bot 独立配置 | 可插拔的 issue 分派行为，独立于 PR 工作流 |
 | **[单元测试生成](doc/PR_WORKFLOWS_UNIT_TEST.md)** | PR 打开或命令触发 | 提交到分支的生成测试 |
 | **[全栈 QA](doc/PR_WORKFLOWS_E2E.md)** | PR 打开 | 在预览环境中执行的 Playwright 套件 |
 | **[README 同步](doc/PR_WORKFLOWS_README_SYNC.md)** | PR 打开或命令触发 | 文档随代码变更同步更新 |

@@ -54,6 +54,16 @@ public class Bot {
     @JoinColumn(name = "workflow_configuration_id")
     private WorkflowConfiguration workflowConfiguration;
 
+    /**
+     * The issue-assigned workflow configuration: which
+     * {@code IssueWorkflow}(s) run when the bot is assigned to an issue and
+     * when it receives follow-up issue comments. Independent from
+     * {@link #workflowConfiguration} (pull-request events).
+     */
+    @ManyToOne
+    @JoinColumn(name = "issue_workflow_configuration_id")
+    private WorkflowConfiguration issueWorkflowConfiguration;
+
     @ManyToOne
     @JoinColumn(name = "deployment_target_id")
     private DeploymentTarget deploymentTarget;
@@ -83,6 +93,14 @@ public class Bot {
     @Column(nullable = false)
     private boolean runOnPrUpdate = false;
 
+    /**
+     * @deprecated Issue behaviour is no longer dispatched via the bot type.
+     * It is resolved from {@link #getIssueWorkflowConfiguration()} (see the
+     * {@code issueworkflow} package); PR behaviour from
+     * {@link #getWorkflowConfiguration()}. The column is retained for one
+     * release as migration safety and is scheduled for removal.
+     */
+    @Deprecated
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private BotType botType = BotType.CODING;

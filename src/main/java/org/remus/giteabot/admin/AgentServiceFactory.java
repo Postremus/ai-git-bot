@@ -17,6 +17,7 @@ import org.remus.giteabot.mcp.McpToolCatalog;
 import org.remus.giteabot.repository.RepositoryApiClient;
 import org.remus.giteabot.systemsettings.BotToolSelectionService;
 import org.remus.giteabot.systemsettings.McpToolSelectionService;
+import org.springframework.stereotype.Component;
 
 /**
  * Creates the per-bot agent services ({@link IssueImplementationService} and
@@ -24,9 +25,15 @@ import org.remus.giteabot.systemsettings.McpToolSelectionService;
  * <p>
  * Extracted from {@link BotWebhookService} to keep webhook routing free of
  * object-construction concerns and to reduce its direct dependencies.
+ * <p>
+ * A shared Spring bean: injected by {@link BotWebhookService} (PR-comment
+ * agent path) and by the built-in issue workflows
+ * ({@code issue-coding} / {@code issue-writer}) which delegate to the
+ * services created here.
  */
+@Component
 @RequiredArgsConstructor
-class AgentServiceFactory {
+public class AgentServiceFactory {
 
     private final AiClientFactory aiClientFactory;
     private final GiteaClientFactory giteaClientFactory;
@@ -43,7 +50,7 @@ class AgentServiceFactory {
     /**
      * Creates a per-bot {@link IssueImplementationService} using the bot's AI and Git integrations.
      */
-    IssueImplementationService createIssueImplementationService(Bot bot) {
+    public IssueImplementationService createIssueImplementationService(Bot bot) {
         AiClient aiClient = getAiClient(bot);
         RepositoryApiClient repoClient = giteaClientFactory.getApiClient(bot.getGitIntegration());
         McpToolCatalog mcpToolCatalog = discoverMcpToolCatalog(bot);
@@ -69,7 +76,7 @@ class AgentServiceFactory {
     /**
      * Creates a per-bot {@link WriterAgentService} using the bot's AI and Git integrations.
      */
-    WriterAgentService createWriterAgentService(Bot bot) {
+    public WriterAgentService createWriterAgentService(Bot bot) {
         AiClient aiClient = getAiClient(bot);
         RepositoryApiClient repoClient = giteaClientFactory.getApiClient(bot.getGitIntegration());
         McpToolCatalog mcpToolCatalog = discoverMcpToolCatalog(bot);

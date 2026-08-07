@@ -232,7 +232,7 @@ before relying on them as a long-term regression baseline.
 - Use normal Git review controls first: request review, push fixes, re-request.
 - Keep bot Q&A in the PR so the bot has the right context.
 - Give concrete feedback when regenerating tests.
-- Prefer writer bots for vague work and coding bots for implementation-ready work.
+- Prefer the Writer Agent issue workflow for vague work and the Coding Agent issue workflow for implementation-ready work (both are per-bot configuration choices — see `ISSUE_WORKFLOWS.md` in the admin docs).
 - Review generated code and tests before merging.
 - If something looks wrong, include the provider, workflow, PR/issue link, and
   relevant bot comment when reporting it to your administrator.

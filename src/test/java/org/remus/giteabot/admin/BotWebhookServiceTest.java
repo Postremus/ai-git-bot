@@ -85,20 +85,47 @@ class BotWebhookServiceTest {
     @Mock private org.remus.giteabot.eventhook.EventHookPublisher eventHookPublisher;
 
     private BotWebhookService botWebhookService;
+    private org.remus.giteabot.prworkflow.config.WorkflowConfiguration codingIssueConfiguration;
+    private org.remus.giteabot.prworkflow.config.WorkflowConfiguration writerIssueConfiguration;
+    private org.remus.giteabot.prworkflow.config.WorkflowConfiguration emptyPrConfiguration;
 
     @BeforeEach
     void setUp() {
         // Real catalog – classification taxonomy is no longer mocked through TES.
         org.remus.giteabot.agent.tools.ToolCatalog toolCatalog =
                 new org.remus.giteabot.agent.tools.ToolCatalog(new AgentConfigProperties());
-        botWebhookService = new BotWebhookService(aiClientFactory, giteaClientFactory,
-                promptService, agentConfig,
-                agentSessionService, toolExecutionService, toolCatalog, workspaceService, botService,
-                mcpOrchestrationService, mcpToolSelectionService, botToolSelectionService,
+        // Real issue-workflow wiring: the webhook service now delegates to the
+        // orchestrator, which resolves workflows from the bot's issue-assigned
+        // configuration. Workflows and factory are real; the collaborators
+        // underneath stay mocked.
+        AgentServiceFactory agentServiceFactory = new AgentServiceFactory(aiClientFactory,
+                giteaClientFactory, promptService, agentConfig, agentSessionService,
+                toolExecutionService, toolCatalog, workspaceService,
+                mcpOrchestrationService, mcpToolSelectionService, botToolSelectionService);
+        org.remus.giteabot.issueworkflow.IssueWorkflowRegistry issueWorkflowRegistry =
+                new org.remus.giteabot.issueworkflow.IssueWorkflowRegistry(java.util.List.of(
+                        new org.remus.giteabot.issueworkflow.coding.CodingIssueWorkflow(agentServiceFactory),
+                        new org.remus.giteabot.issueworkflow.writer.WriterIssueWorkflow(agentServiceFactory)));
+        org.remus.giteabot.issueworkflow.IssueWorkflowOrchestrator issueWorkflowOrchestrator =
+                new org.remus.giteabot.issueworkflow.IssueWorkflowOrchestrator(
+                        issueWorkflowRegistry, workflowSelectionService, botService, eventHookPublisher,
+                        giteaClientFactory);
+        botWebhookService = new BotWebhookService(giteaClientFactory,
+                agentSessionService, botService,
                 prWorkflowOrchestrator, e2eTestPrCloseHandler,
                 e2eTestSlashCommandHandler, unitTestSlashCommandHandler,
                 agentReviewSlashCommandHandler, readmeSyncSlashCommandHandler,
-                i18nCoverageSlashCommandHandler, workflowSelectionService, eventHookPublisher);
+                i18nCoverageSlashCommandHandler, workflowSelectionService,
+                issueWorkflowOrchestrator);
+        codingIssueConfiguration = namedConfiguration(101L, "coding-issue-cfg");
+        writerIssueConfiguration = namedConfiguration(102L, "writer-issue-cfg");
+        emptyPrConfiguration = namedConfiguration(103L, "empty-pr-cfg");
+        lenient().when(workflowSelectionService.enabledWorkflowKeys(101L))
+                .thenReturn(java.util.List.of("issue-coding"));
+        lenient().when(workflowSelectionService.enabledWorkflowKeys(102L))
+                .thenReturn(java.util.List.of("issue-writer"));
+        lenient().when(workflowSelectionService.enabledWorkflowKeys(103L))
+                .thenReturn(java.util.List.of());
         lenient().when(mcpOrchestrationService.discoverTools(any())).thenReturn(McpToolCatalog.empty());
         lenient().when(mcpToolSelectionService.filterCatalogForPrompt(any(), any()))
                 .thenAnswer(invocation -> invocation.getArgument(1));
@@ -257,7 +284,7 @@ class BotWebhookServiceTest {
     @Test
     void writerBot_ignoresPullRequestReviewEvent() {
         Bot bot = createBot("writer", "writer_bot", false);
-        bot.setBotType(BotType.WRITER);
+        makeWriterBot(bot);
 
         botWebhookService.reviewPullRequest(bot, new WebhookPayload());
 
@@ -268,7 +295,7 @@ class BotWebhookServiceTest {
     @Test
     void writerBot_ignoresPullRequestClosedEvent() {
         Bot bot = createBot("writer", "writer_bot", false);
-        bot.setBotType(BotType.WRITER);
+        makeWriterBot(bot);
 
         botWebhookService.handlePrClosed(bot, new WebhookPayload());
 
@@ -279,7 +306,7 @@ class BotWebhookServiceTest {
     @Test
     void writerBot_assignedToIssueCreatesImprovedIssueWhenReady() {
         Bot bot = createBot("writer", "writer_bot", false);
-        bot.setBotType(BotType.WRITER);
+        makeWriterBot(bot);
         WebhookPayload payload = buildIssuePayload("Test", "my-repo", 12L, "Vague issue", "Do something");
         AgentSession session = new AgentSession("Test", "my-repo", 12L, "Vague issue");
 
@@ -311,7 +338,7 @@ class BotWebhookServiceTest {
     @Test
     void writerBot_assignedToIssueCreatesImprovedIssueWhenAiAddsIntroTextBeforeJson() {
         Bot bot = createBot("writer", "writer_bot", false);
-        bot.setBotType(BotType.WRITER);
+        makeWriterBot(bot);
         WebhookPayload payload = buildIssuePayload("Test", "my-repo", 12L, "Vague issue", "Do something");
         AgentSession session = new AgentSession("Test", "my-repo", 12L, "Vague issue");
 
@@ -347,7 +374,7 @@ class BotWebhookServiceTest {
     @Test
     void writerBot_concurrentAssignmentDuplicateSessionDoesNotStartSecondAgent() {
         Bot bot = createBot("writer", "writer_bot", false);
-        bot.setBotType(BotType.WRITER);
+        makeWriterBot(bot);
         WebhookPayload payload = buildIssuePayload("Test", "my-repo", 12L, "Vague issue", "Do something");
 
         when(giteaClientFactory.getApiClient(any())).thenReturn(repositoryApiClient);
@@ -369,7 +396,7 @@ class BotWebhookServiceTest {
     @Test
     void writerBot_assignmentKickoffFailureResetsSessionFromUpdating() {
         Bot bot = createBot("writer", "writer_bot", false);
-        bot.setBotType(BotType.WRITER);
+        makeWriterBot(bot);
         WebhookPayload payload = buildIssuePayload("Test", "my-repo", 12L, "Vague issue", "Do something");
         AgentSession session = new AgentSession("Test", "my-repo", 12L, "Vague issue");
 
@@ -395,7 +422,7 @@ class BotWebhookServiceTest {
     @Test
     void writerBot_commentWhenSessionCannotBeClaimedDoesNotStartSecondAgent() {
         Bot bot = createBot("writer", "writer_bot", false);
-        bot.setBotType(BotType.WRITER);
+        makeWriterBot(bot);
         WebhookPayload payload = buildIssueCommentPayload("Test", "my-repo", 12L,
                 "Vague issue", "Do something", "tom", "More details");
         AgentSession session = new AgentSession("Test", "my-repo", 12L, "Vague issue");
@@ -417,7 +444,7 @@ class BotWebhookServiceTest {
     @Test
     void writerBot_branchSwitcherRequestSwitchesWorkspaceBeforeContextTools() {
         Bot bot = createBot("writer", "writer_bot", false);
-        bot.setBotType(BotType.WRITER);
+        makeWriterBot(bot);
         WebhookPayload payload = buildIssuePayload("Test", "my-repo", 12L, "Vague issue", "Do something");
         AgentSession session = new AgentSession("Test", "my-repo", 12L, "Vague issue");
         Path workspace = Path.of("/tmp/writer-test-workspace");
@@ -459,7 +486,7 @@ class BotWebhookServiceTest {
     @Test
     void writerBot_existingCodingSessionPostsCloneNotice() {
         Bot bot = createBot("writer", "writer_bot", false);
-        bot.setBotType(BotType.WRITER);
+        makeWriterBot(bot);
         WebhookPayload payload = buildIssuePayload("Test", "my-repo", 12L, "Vague issue", "Do something");
         AgentSession codingSession = new AgentSession("Test", "my-repo", 12L, "Vague issue");
 
@@ -479,7 +506,7 @@ class BotWebhookServiceTest {
     @Test
     void writerBot_createIssueReturnsNullMarksSessionFailed() {
         Bot bot = createBot("writer", "writer_bot", false);
-        bot.setBotType(BotType.WRITER);
+        makeWriterBot(bot);
         WebhookPayload payload = buildIssuePayload("Test", "my-repo", 12L, "Vague issue", "Do something");
         AgentSession session = new AgentSession("Test", "my-repo", 12L, "Vague issue");
 
@@ -512,7 +539,7 @@ class BotWebhookServiceTest {
     @Test
     void writerBot_assignmentFailurePostsVisibleErrorComment() {
         Bot bot = createBot("writer", "writer_bot", false);
-        bot.setBotType(BotType.WRITER);
+        makeWriterBot(bot);
         WebhookPayload payload = buildIssuePayload("Test", "my-repo", 12L, "Vague issue", "Do something");
         AgentSession session = new AgentSession("Test", "my-repo", 12L, "Vague issue");
 
@@ -541,7 +568,7 @@ class BotWebhookServiceTest {
     @Test
     void writerBot_clarifyingQuestionsResetSessionToWaiting() {
         Bot bot = createBot("writer", "writer_bot", false);
-        bot.setBotType(BotType.WRITER);
+        makeWriterBot(bot);
         WebhookPayload payload = buildIssuePayload("Test", "my-repo", 12L, "Vague issue", "Do something");
         AgentSession session = new AgentSession("Test", "my-repo", 12L, "Vague issue");
 
@@ -572,7 +599,7 @@ class BotWebhookServiceTest {
     @Test
     void writerBot_contextRoundLimitResetsSessionAndPostsNotice() {
         Bot bot = createBot("writer", "writer_bot", false);
-        bot.setBotType(BotType.WRITER);
+        makeWriterBot(bot);
         WebhookPayload payload = buildIssuePayload("Test", "my-repo", 12L, "Vague issue", "Do something");
         AgentSession session = new AgentSession("Test", "my-repo", 12L, "Vague issue");
         Path workspace = Path.of("/tmp/writer-test-workspace");
@@ -609,7 +636,7 @@ class BotWebhookServiceTest {
     @Test
     void writerBot_canContinueThroughFourContextRoundsBeforeCreatingIssue() {
         Bot bot = createBot("writer", "writer_bot", false);
-        bot.setBotType(BotType.WRITER);
+        makeWriterBot(bot);
         WebhookPayload payload = buildIssuePayload("Test", "my-repo", 12L, "Vague issue", "Do something");
         AgentSession session = new AgentSession("Test", "my-repo", 12L, "Vague issue");
         Path workspace = Path.of("/tmp/writer-test-workspace");
@@ -650,7 +677,7 @@ class BotWebhookServiceTest {
     @Test
     void writerBot_followUpFailurePostsVisibleErrorCommentAndResetsSession() {
         Bot bot = createBot("writer", "writer_bot", false);
-        bot.setBotType(BotType.WRITER);
+        makeWriterBot(bot);
         WebhookPayload payload = buildIssueCommentPayload("Test", "my-repo", 12L,
                 "Vague issue", "Do something", "tom", "More details");
         AgentSession session = new AgentSession("Test", "my-repo", 12L, "Vague issue");
@@ -1190,7 +1217,7 @@ class BotWebhookServiceTest {
     @Test
     void issueAssignment_publishesStartedAndCompletedEventsOnSuccess() {
         Bot bot = createBot("writer", "writer_bot", false);
-        bot.setBotType(BotType.WRITER);
+        makeWriterBot(bot);
         WebhookPayload payload = buildIssuePayload("Test", "my-repo", 12L, "Vague issue", "Do something");
         AgentSession session = new AgentSession("Test", "my-repo", 12L, "Vague issue");
 
@@ -1230,7 +1257,7 @@ class BotWebhookServiceTest {
     @Test
     void issueAssignment_publishesStartedAndFailedEventsOnException() {
         Bot bot = createBot("writer", "writer_bot", false);
-        bot.setBotType(BotType.WRITER);
+        makeWriterBot(bot);
         WebhookPayload payload = buildIssuePayload("Test", "my-repo", 12L, "Vague issue", "Do something");
 
         when(giteaClientFactory.getApiClient(any())).thenThrow(new RuntimeException("gitea down"));
@@ -1253,7 +1280,7 @@ class BotWebhookServiceTest {
     @Test
     void issueAssignment_publishesNothingWhenCallerNotAllowed() {
         Bot bot = createBot("writer", "writer_bot", false);
-        bot.setBotType(BotType.WRITER);
+        makeWriterBot(bot);
         WebhookPayload payload = buildIssuePayload("Test", "my-repo", 12L, "Vague issue", "Do something");
 
         when(botService.getAllowedUsernames(bot)).thenReturn(Set.of("someone-else"));
@@ -1276,7 +1303,27 @@ class BotWebhookServiceTest {
         systemPrompt.setIssueAgentSystemPrompt("Agent prompt");
         systemPrompt.setWriterAgentSystemPrompt("Writer prompt");
         bot.setSystemPrompt(systemPrompt);
+        bot.setIssueWorkflowConfiguration(codingIssueConfiguration);
         return bot;
+    }
+
+    /**
+     * Simulates a migrated former-WRITER bot: writer-equivalent issue
+     * workflow configuration plus the seeded empty PR configuration
+     * ({@code No PR workflows}) that keeps the bot silent on PR events.
+     */
+    private void makeWriterBot(Bot bot) {
+        bot.setIssueWorkflowConfiguration(writerIssueConfiguration);
+        bot.setWorkflowConfiguration(emptyPrConfiguration);
+    }
+
+    private org.remus.giteabot.prworkflow.config.WorkflowConfiguration namedConfiguration(
+            Long id, String name) {
+        org.remus.giteabot.prworkflow.config.WorkflowConfiguration cfg =
+                new org.remus.giteabot.prworkflow.config.WorkflowConfiguration();
+        cfg.setId(id);
+        cfg.setName(name);
+        return cfg;
     }
 
     /**

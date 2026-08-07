@@ -15,51 +15,12 @@ package org.remus.giteabot.prworkflow;
  * runs for the same {@code (bot, repo, prNumber, workflowKey)} tuple, but
  * workflows may still be retried after transient failures.</p>
  */
-public interface PrWorkflow {
-
-    /**
-     * Stable, lowercase, kebab-case identifier persisted on
-     * {@link PrWorkflowRun#getWorkflowKey()} and referenced by the future
-     * workflow-configuration whitelist. Must be unique across all registered
-     * workflows; collisions are rejected on startup by
-     * {@link PrWorkflowRegistry}.
-     */
-    String key();
-
-    /**
-     * Human-readable name shown in the admin UI.
-     */
-    String displayName();
-
-    /**
-     * Short, human-readable summary (one or two sentences) of what the
-     * workflow does and when it triggers, shown beneath the workflow name in
-     * the workflow-selection UI.
-     *
-     * <p>The default implementation returns an empty string so the UI can
-     * omit the description line for workflows that do not supply one.</p>
-     */
-    default String description() {
-        return "";
-    }
+public interface PrWorkflow extends WorkflowDescriptor {
 
     /**
      * Coarse category for grouping in UI and for default-enable decisions.
      */
     PrWorkflowCategory category();
-
-    /**
-     * Declarative description of the parameters the workflow accepts. Used by
-     * the M2 workflow-configuration UI to render per-workflow form fields and
-     * to validate persisted {@code params_json} before a run.
-     *
-     * <p>The default implementation returns
-     * {@link WorkflowParamsSchema#empty()} — appropriate for workflows like
-     * {@code ReviewWorkflow} that do not expose any tunables.</p>
-     */
-    default WorkflowParamsSchema paramsSchema() {
-        return WorkflowParamsSchema.empty();
-    }
 
     /**
      * Executes the workflow for the given context. Must not throw checked

@@ -20,9 +20,12 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * CRUD UI for {@link WorkflowConfiguration} rows. Mirrors the structure of
- * the MCP / Bot-tool configuration controllers (list-on-System-settings,
- * dedicated form + sub-page for the workflow selection).
+ * CRUD UI for PR-kind {@link WorkflowConfiguration} rows. Mirrors the
+ * structure of the MCP / Bot-tool configuration controllers
+ * (list-on-System-settings, dedicated form + sub-page for the workflow
+ * selection). The issue-assigned counterpart is
+ * {@link IssueWorkflowConfigurationController}; both share the same
+ * templates, parameterized via the {@code workflowConfig*} model attributes.
  */
 @Slf4j
 @Controller
@@ -30,36 +33,60 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class WorkflowConfigurationController {
 
+    static final String BASE_URL = "/system-settings/workflow-configurations";
+    static final String KIND_LABEL = "PR workflow";
+    static final String SELECTION_HELP_TEXT =
+            "Tick the PR workflows that should run on every pull-request webhook for bots using"
+            + " this configuration. Workflows are executed sequentially in stable order"
+            + " (lexicographic by workflow key).";
+
+    private static final WorkflowConfigurationKind EXPECTED_KIND = WorkflowConfigurationKind.PR;
+
     private final WorkflowConfigurationService configurationService;
     private final WorkflowSelectionService selectionService;
+
+    /**
+     * Exposes the shared-template contract: which base URL the form actions
+     * post to and how the workflow kind is labelled in headings and help
+     * texts.
+     */
+    static void addTemplateAttributes(Model model) {
+        model.addAttribute("workflowConfigBaseUrl", BASE_URL);
+        model.addAttribute("workflowConfigKindLabel", KIND_LABEL);
+        model.addAttribute("workflowSelectionHelpText", SELECTION_HELP_TEXT);
+    }
 
     @GetMapping("/new")
     public String newForm(Model model) {
         model.addAttribute("workflowConfiguration", new WorkflowConfiguration());
         model.addAttribute("activeNav", "system-settings");
+        addTemplateAttributes(model);
         return "system-settings/workflow-configurations/form";
     }
 
     @GetMapping("/{id}/edit")
     public String editForm(@PathVariable Long id, Model model, RedirectAttributes redirectAttributes) {
-        return configurationService.findById(id)
-                .map(configuration -> {
-                    model.addAttribute("workflowConfiguration", configuration);
-                    model.addAttribute("activeNav", "system-settings");
-                    return "system-settings/workflow-configurations/form";
-                })
-                .orElseGet(() -> {
-                    redirectAttributes.addFlashAttribute("error", "Workflow configuration not found");
-                    return "redirect:/system-settings";
-                });
+        WorkflowConfiguration configuration = WorkflowConfigurationKindGuard.requireExpectedKind(id, EXPECTED_KIND, configurationService, redirectAttributes);
+        if (configuration == null) {
+            return "redirect:/system-settings";
+        }
+        model.addAttribute("workflowConfiguration", configuration);
+        model.addAttribute("activeNav", "system-settings");
+        addTemplateAttributes(model);
+        return "system-settings/workflow-configurations/form";
     }
 
     @GetMapping("/{id}/clone")
     public String cloneForm(@PathVariable Long id, Model model, RedirectAttributes redirectAttributes) {
+        WorkflowConfiguration configuration = WorkflowConfigurationKindGuard.requireExpectedKind(id, EXPECTED_KIND, configurationService, redirectAttributes);
+        if (configuration == null) {
+            return "redirect:/system-settings";
+        }
         try {
             WorkflowConfiguration clone = configurationService.cloneConfiguration(id);
             model.addAttribute("workflowConfiguration", clone);
             model.addAttribute("activeNav", "system-settings");
+            addTemplateAttributes(model);
             return "system-settings/workflow-configurations/form";
         } catch (IllegalArgumentException e) {
             redirectAttributes.addFlashAttribute("error", e.getMessage());
@@ -70,6 +97,11 @@ public class WorkflowConfigurationController {
     @PostMapping("/save")
     public String save(@ModelAttribute("workflowConfiguration") WorkflowConfiguration workflowConfiguration,
                        Model model, RedirectAttributes redirectAttributes) {
+        if (workflowConfiguration.getId() == null) {
+            workflowConfiguration.setKind(EXPECTED_KIND);
+        } else if (WorkflowConfigurationKindGuard.requireExpectedKind(workflowConfiguration.getId(), EXPECTED_KIND, configurationService, redirectAttributes) == null) {
+            return "redirect:/system-settings";
+        }
         try {
             WorkflowConfiguration saved = configurationService.save(workflowConfiguration);
             redirectAttributes.addFlashAttribute("success",
@@ -80,24 +112,23 @@ public class WorkflowConfigurationController {
             model.addAttribute("error", "Failed to save: " + e.getMessage());
             model.addAttribute("workflowConfiguration", workflowConfiguration);
             model.addAttribute("activeNav", "system-settings");
+            addTemplateAttributes(model);
             return "system-settings/workflow-configurations/form";
         }
     }
 
     @GetMapping("/{id}/workflows")
     public String workflowSelection(@PathVariable Long id, Model model, RedirectAttributes redirectAttributes) {
-        return configurationService.findById(id)
-                .map(configuration -> {
-                    List<WorkflowSelectionRow> rows = selectionService.loadAvailableWorkflows(id);
-                    model.addAttribute("workflowConfiguration", configuration);
-                    model.addAttribute("workflows", rows);
-                    model.addAttribute("activeNav", "system-settings");
-                    return "system-settings/workflow-configurations/workflows";
-                })
-                .orElseGet(() -> {
-                    redirectAttributes.addFlashAttribute("error", "Workflow configuration not found");
-                    return "redirect:/system-settings";
-                });
+        WorkflowConfiguration configuration = WorkflowConfigurationKindGuard.requireExpectedKind(id, EXPECTED_KIND, configurationService, redirectAttributes);
+        if (configuration == null) {
+            return "redirect:/system-settings";
+        }
+        List<WorkflowSelectionRow> rows = selectionService.loadAvailableWorkflows(id);
+        model.addAttribute("workflowConfiguration", configuration);
+        model.addAttribute("workflows", rows);
+        model.addAttribute("activeNav", "system-settings");
+        addTemplateAttributes(model);
+        return "system-settings/workflow-configurations/workflows";
     }
 
     @PostMapping("/{id}/workflows/save")
@@ -106,9 +137,12 @@ public class WorkflowConfigurationController {
                                         List<String> selectedWorkflowKeys,
                                         @RequestParam MultiValueMap<String, String> allParams,
                                         RedirectAttributes redirectAttributes) {
+        if (WorkflowConfigurationKindGuard.requireExpectedKind(id, EXPECTED_KIND, configurationService, redirectAttributes) == null) {
+            return "redirect:/system-settings";
+        }
         try {
             Map<String, Map<String, String>> workflowParams =
-                    extractWorkflowParams(allParams, selectedWorkflowKeys);
+                    selectionService.extractWorkflowParams(allParams, selectedWorkflowKeys);
             if (log.isDebugEnabled()) {
                 log.debug("saveWorkflowSelection id={} selectedKeys={} rawParamKeys={} workflowParams={}",
                         id, selectedWorkflowKeys,
@@ -126,6 +160,9 @@ public class WorkflowConfigurationController {
 
     @PostMapping("/{id}/delete")
     public String delete(@PathVariable Long id, RedirectAttributes redirectAttributes) {
+        if (WorkflowConfigurationKindGuard.requireExpectedKind(id, EXPECTED_KIND, configurationService, redirectAttributes) == null) {
+            return "redirect:/system-settings";
+        }
         try {
             configurationService.deleteById(id);
             redirectAttributes.addFlashAttribute("success", "Workflow configuration deleted successfully");
@@ -143,7 +180,8 @@ public class WorkflowConfigurationController {
     @GetMapping("/{id}/selected-workflows")
     @ResponseBody
     public ResponseEntity<List<Map<String, Object>>> selectedWorkflows(@PathVariable Long id) {
-        if (configurationService.findById(id).isEmpty()) {
+        WorkflowConfiguration configuration = configurationService.findById(id).orElse(null);
+        if (configuration == null || configuration.getKind() != EXPECTED_KIND) {
             return ResponseEntity.notFound().build();
         }
         List<Map<String, Object>> rows = selectionService.describeSelections(id).stream()
@@ -159,60 +197,5 @@ public class WorkflowConfigurationController {
         return ResponseEntity.ok(rows);
     }
 
-    /**
-     * Extracts the {@code params.<workflowKey>.<fieldName>} request
-     * parameters submitted by the workflow-selection form into a
-     * {@code workflowKey -> {fieldName -> value}} map — the
-     * {@link WorkflowSelectionService} validates each per-workflow map
-     * against the workflow's
-     * {@link org.remus.giteabot.prworkflow.WorkflowParamsSchema} and
-     * persists the entries as {@code workflow_selection_params} rows.
-     *
-     * <p>The dot separator is used (rather than the historic
-     * {@code __} double-underscore) because Thymeleaf's expression
-     * preprocessing eats any {@code __...__} pair from attribute values,
-     * which silently mangled the field names so the controller never
-     * received them.</p>
-     */
-    private Map<String, Map<String, String>> extractWorkflowParams(MultiValueMap<String, String> allParams,
-                                                                   List<String> selectedKeys) {
-        Map<String, Map<String, String>> grouped = new LinkedHashMap<>();
-        if (allParams != null) {
-            for (Map.Entry<String, List<String>> entry : allParams.entrySet()) {
-                String key = entry.getKey();
-                if (!key.startsWith("params.")) {
-                    continue;
-                }
-                String rest = key.substring("params.".length());
-                int sep = rest.indexOf('.');
-                if (sep < 0) {
-                    continue;
-                }
-                String workflowKey = rest.substring(0, sep);
-                String fieldName = rest.substring(sep + 1);
-                List<String> values = entry.getValue();
-                if (values == null || values.isEmpty()) {
-                    continue;
-                }
-                // A BOOLEAN field submits the hidden+checkbox pair — ["false"]
-                // when unchecked, ["false","true"] when checked — so "true"
-                // wins regardless of order. Any other field takes the last
-                // submitted value; the "true"-wins rule must not leak to them.
-                String effective = selectionService.isBooleanField(workflowKey, fieldName)
-                        ? (values.contains("true") ? "true" : "false")
-                        : values.get(values.size() - 1);
-                grouped.computeIfAbsent(workflowKey, k -> new LinkedHashMap<>())
-                        .put(fieldName, effective);
-            }
-        }
-        Map<String, Map<String, String>> result = new LinkedHashMap<>();
-        for (Map.Entry<String, Map<String, String>> entry : grouped.entrySet()) {
-            if (selectedKeys != null && !selectedKeys.contains(entry.getKey())) {
-                continue;
-            }
-            result.put(entry.getKey(), entry.getValue());
-        }
-        return result;
-    }
 }
 

@@ -1,6 +1,6 @@
 # Coding Agent: Issue → Pull Request
 
-> Category: **ISSUE** · Bot type: **Coding bot** · Agent must be **Enabled**.
+> Category: **ISSUE** · Issue-assigned workflow: **`issue-coding`** (Coding Agent) · Agent must be **Enabled**.
 
 ## The problem it solves
 
@@ -90,7 +90,8 @@ For example: `ai-agent/issue-42`.
 ## Enabling it
 
 1. Create an **AI Integration** and a **Git Integration** in the admin UI.
-2. Create a bot with **Bot Type: Coding bot** and keep **Agent Enabled** on.
+2. Create a bot with **Issue-Assigned Workflow Configuration: Issue: Coding Agent**
+   and keep **Agent Enabled** on.
 3. Configure your repository webhook to send **Issues** events to the bot URL.
 4. Grant the bot repository write access (create branches, push commits, open
    pull requests) and issue write access (progress/error comments).

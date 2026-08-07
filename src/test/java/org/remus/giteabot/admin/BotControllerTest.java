@@ -18,6 +18,7 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -80,6 +81,81 @@ class BotControllerTest {
         assertEquals("bots/form", view);
         assertEquals(Boolean.FALSE, model.getAttribute("missingAiIntegration"));
         assertEquals(Boolean.FALSE, model.getAttribute("missingGitIntegration"));
+    }
+
+    @Test
+    void newForm_exposesIssueWorkflowConfigurations_andNoBotTypes() {
+        WorkflowConfigurationService workflowConfigurationService =
+                mock(WorkflowConfigurationService.class);
+        org.remus.giteabot.prworkflow.config.WorkflowConfiguration issueDefault =
+                new org.remus.giteabot.prworkflow.config.WorkflowConfiguration();
+        issueDefault.setId(11L);
+        issueDefault.setKind(org.remus.giteabot.prworkflow.config.WorkflowConfigurationKind.ISSUE);
+        when(workflowConfigurationService.findDefault(
+                org.remus.giteabot.prworkflow.config.WorkflowConfigurationKind.ISSUE))
+                .thenReturn(Optional.of(issueDefault));
+        BotController controller = new BotController(
+                mock(BotService.class),
+                mock(AiIntegrationService.class),
+                mock(GitIntegrationService.class),
+                mock(SystemPromptService.class),
+                mock(McpConfigurationService.class),
+                mock(McpToolSelectionService.class),
+                mock(BotToolConfigurationService.class),
+                mock(BotToolSelectionService.class),
+                workflowConfigurationService,
+                mock(org.remus.giteabot.prworkflow.config.DeploymentTargetService.class));
+
+        org.springframework.ui.Model model = new org.springframework.ui.ExtendedModelMap();
+        String view = controller.newForm(model);
+
+        assertEquals("bots/form", view);
+        // The deprecated bot-type selector is gone; the issue-assigned
+        // workflow selector is fed (and pre-selected with the ISSUE default).
+        assertNull(model.getAttribute("botTypes"));
+        org.junit.jupiter.api.Assertions.assertNotNull(
+                model.getAttribute("issueWorkflowConfigurations"));
+        Bot formBot = (Bot) model.getAttribute("bot");
+        org.junit.jupiter.api.Assertions.assertSame(issueDefault,
+                formBot.getIssueWorkflowConfiguration());
+    }
+
+    @Test
+    void save_bindsIssueWorkflowConfigurationFromRequestParam() {
+        BotService botService = mock(BotService.class);
+        AiIntegrationService aiIntegrationService = mock(AiIntegrationService.class);
+        GitIntegrationService gitIntegrationService = mock(GitIntegrationService.class);
+        SystemPromptService systemPromptService = mock(SystemPromptService.class);
+        BotToolConfigurationService botToolConfigurationService = mock(BotToolConfigurationService.class);
+        WorkflowConfigurationService workflowConfigurationService =
+                mock(WorkflowConfigurationService.class);
+        when(aiIntegrationService.findById(1L)).thenReturn(Optional.of(new AiIntegration()));
+        when(gitIntegrationService.findById(2L)).thenReturn(Optional.of(new GitIntegration()));
+        when(systemPromptService.findById(3L))
+                .thenReturn(Optional.of(new org.remus.giteabot.systemsettings.SystemPrompt()));
+        when(botToolConfigurationService.findById(4L))
+                .thenReturn(Optional.of(new BotToolConfiguration()));
+        org.remus.giteabot.prworkflow.config.WorkflowConfiguration issueConfiguration =
+                new org.remus.giteabot.prworkflow.config.WorkflowConfiguration();
+        issueConfiguration.setId(9L);
+        issueConfiguration.setKind(org.remus.giteabot.prworkflow.config.WorkflowConfigurationKind.ISSUE);
+        when(workflowConfigurationService.findById(9L)).thenReturn(Optional.of(issueConfiguration));
+        BotController controller = new BotController(
+                botService, aiIntegrationService, gitIntegrationService, systemPromptService,
+                mock(McpConfigurationService.class), mock(McpToolSelectionService.class),
+                botToolConfigurationService, mock(BotToolSelectionService.class),
+                workflowConfigurationService,
+                mock(org.remus.giteabot.prworkflow.config.DeploymentTargetService.class));
+
+        Bot bot = new Bot();
+        String view = controller.save(bot, 1L, 2L, 3L, null, 4L, null, 9L, null,
+                new org.springframework.ui.ExtendedModelMap(),
+                new org.springframework.web.servlet.mvc.support.RedirectAttributesModelMap());
+
+        assertEquals("redirect:/bots", view);
+        org.junit.jupiter.api.Assertions.assertSame(issueConfiguration,
+                bot.getIssueWorkflowConfiguration());
+        org.mockito.Mockito.verify(botService).save(bot);
     }
 
     @Test
