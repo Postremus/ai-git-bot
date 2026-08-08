@@ -14,6 +14,13 @@ import java.nio.file.Path;
  * (which a pull request can commit). The naive leaf-only {@code isSymbolicLink}
  * check misses directory symlinks, so the nearest existing ancestor is
  * resolved against its real path instead.</p>
+ *
+ * <p><strong>Deliberately strict on {@code ..}:</strong> any path containing a
+ * {@code ..} segment is rejected up front, even when normalizing it would stay
+ * inside the workspace (e.g. {@code src/../inside.txt}). Tool contracts should
+ * always pass resolved {@code absolute/normalized} paths or plain relative
+ * paths without parent references; callers seeing a "traversal" error for a
+ * semantically in-bounds path should fix the caller, not loosen this guard.</p>
  */
 public final class WorkspacePaths {
 

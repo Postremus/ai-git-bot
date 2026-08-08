@@ -28,7 +28,7 @@ class WorkspaceServiceTest {
     }
     @Test
     void cleanupWorkspace_nullPath_doesNotThrow() {
-        workspaceService.cleanupWorkspace(null);
+        workspaceService.cleanupWorkspace((Path) null);
         // no exception expected
     }
 
@@ -70,6 +70,78 @@ class WorkspaceServiceTest {
         assertThat(content).isEqualTo("pr content");
 
         workspaceService.cleanupWorkspace(result.workspacePath());
+    }
+
+    @Test
+    void prepareWorkspace_fallbackRetainsExactlyOneWorkspaceDirectory() throws Exception {
+        // Regression for the agentic review BLOCKER: when the branch clone fails
+        // and the PR-ref fallback kicks in, the first workspace attempt must be
+        // fully removed before the second is created — otherwise a partial
+        // deletion could orphan the first attempt's credential-store file.
+        Path workspaceBaseDir = tempDir.resolve("sandbox-workspaces");
+        workspaceService = new WorkspaceService(workspaceBaseDir.toString());
+
+        Path remoteDir = tempDir.resolve("remote");
+        Files.createDirectories(remoteDir);
+        runGit(remoteDir, "init", "--bare");
+
+        Path localRepo = tempDir.resolve("local");
+        Files.createDirectories(localRepo);
+        runGit(localRepo, "init");
+        runGit(localRepo, "config", "user.email", "test@test.com");
+        runGit(localRepo, "config", "user.name", "Test");
+        runGit(localRepo, "branch", "-M", "main");
+        runGit(localRepo, "remote", "add", "origin", remoteDir.toAbsolutePath().toString());
+        Files.writeString(localRepo.resolve("README.md"), "pr content");
+        runGit(localRepo, "add", "README.md");
+        runGit(localRepo, "commit", "-m", "pr commit");
+        runGit(localRepo, "push", "-u", "origin", "main");
+        runGit(localRepo, "push", "origin", "main:refs/pull/42/head");
+
+        WorkspaceResult result = workspaceService.prepareWorkspace(
+                "any", "any", "nonexistent-branch",
+                remoteDir.toAbsolutePath().toString(), "dummy-token", 42L);
+
+        assertThat(result.success()).isTrue();
+
+        try (var children = Files.list(workspaceBaseDir)) {
+            assertThat(children
+                    .filter(path -> path.getFileName().toString().startsWith("agent-workspace-"))
+                    .count())
+                    .isEqualTo(1);
+        }
+
+        workspaceService.cleanupWorkspace(result.workspacePath());
+
+        try (var children = Files.list(workspaceBaseDir)) {
+            assertThat(children
+                    .filter(path -> path.getFileName().toString().startsWith("agent-workspace-"))
+                    .count())
+                    .isZero();
+        }
+    }
+
+    @Test
+    void cleanupWorkspace_setupDeletesCredentialFileAndRootTogether() throws IOException {
+        // The holder keeps the credential-file reference even when the file was
+        // never registered in the credentialsByWorkspace map — exactly the
+        // situation of the first attempt in the branch-clone fallback. Cleanup
+        // must remove the file and the private parent together.
+        WorkspaceSetup setup = workspaceService.createWorkspaceSetup();
+        Path credentials = workspaceService.createCredentialsFile(
+                "https://git.example.com", "test-token", setup.workspaceDir());
+        assertThat(credentials).isNotNull();
+
+        workspaceService.cleanupWorkspace(setup);
+
+        assertThat(credentials).doesNotExist();
+        assertThat(setup.workspaceRoot()).doesNotExist();
+    }
+
+    @Test
+    void cleanupWorkspace_setupNull_doesNotThrow() {
+        workspaceService.cleanupWorkspace((WorkspaceSetup) null);
+        // no exception expected
     }
     @Test
     void buildCloneUrl_http() {

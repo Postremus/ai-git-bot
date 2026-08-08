@@ -39,7 +39,7 @@ import java.util.concurrent.TimeUnit;
 @Service
 public class WorkspaceService {
 
-    private static final String REPOSITORY_DIRECTORY_NAME = "repository";
+    static final String REPOSITORY_DIRECTORY_NAME = "repository";
     private static final String WORKSPACE_ROOT_MARKER = ".agent-workspace";
     private static final Set<PosixFilePermission> OWNER_DIRECTORY_PERMISSIONS = Set.of(
             PosixFilePermission.OWNER_READ,
@@ -81,14 +81,15 @@ public class WorkspaceService {
      */
     public WorkspaceResult prepareWorkspace(String owner, String repo, String branch,
                                             String cloneBaseUrl, String token, Long prNumber) {
-        Path workspaceDir = null;
-        Path credentialsFile = null;
+        WorkspaceSetup setup = null;
         try {
-            workspaceDir = createWorkspaceDirectory();
+            setup = createWorkspaceSetup();
+            Path workspaceDir = setup.workspaceDir();
             log.info("Cloning repository to {} for workspace", workspaceDir);
 
             String cloneUrl = buildCloneUrl(owner, repo, cloneBaseUrl);
-            credentialsFile = createCredentialsFile(cloneBaseUrl, token, workspaceDir);
+            Path credentialsFile = createCredentialsFile(cloneBaseUrl, token, workspaceDir);
+            setup.setCredentialsFile(credentialsFile);
             String[] credentialConfig = credentialConfigArgs(credentialsFile);
             CommandResult cloneResult = runCommand(workspaceDir.getParent().toFile(),
                     withCredentialConfig(credentialConfig,
@@ -105,9 +106,15 @@ public class WorkspaceService {
             if (prNumber != null) {
                 log.info("Branch clone failed, falling back to PR head ref for PR #{}: {}",
                         prNumber, cloneResult.output());
-                cleanupWorkspace(workspaceDir);
-                workspaceDir = createWorkspaceDirectory();
+                // Tear down the failed attempt (private parent AND its credential
+                // file) before starting the retry, so a partial directory deletion
+                // can never orphan the token file — the setup holder keeps both
+                // references alive until both are deleted.
+                cleanupWorkspace(setup);
+                setup = createWorkspaceSetup();
+                workspaceDir = setup.workspaceDir();
                 credentialsFile = createCredentialsFile(cloneBaseUrl, token, workspaceDir);
+                setup.setCredentialsFile(credentialsFile);
                 credentialConfig = credentialConfigArgs(credentialsFile);
 
                 CommandResult defaultCloneResult = runCommand(workspaceDir.getParent().toFile(),
@@ -119,7 +126,7 @@ public class WorkspaceService {
                 if (!defaultCloneResult.success()) {
                     log.error("Fallback clone (default branch) also failed: {}",
                             defaultCloneResult.output());
-                    cleanupWorkspace(workspaceDir);
+                    cleanupWorkspace(setup);
                     return WorkspaceResult.failure(
                             "Failed to clone repository (branch: " + cloneResult.output()
                                     + "; default branch: " + defaultCloneResult.output() + ")");
@@ -135,7 +142,7 @@ public class WorkspaceService {
                 if (!fetchResult.success()) {
                     log.error("Failed to fetch PR head ref for PR #{}: {}", prNumber,
                             fetchResult.output());
-                    cleanupWorkspace(workspaceDir);
+                    cleanupWorkspace(setup);
                     return WorkspaceResult.failure(
                             "Failed to fetch PR head ref for PR #" + prNumber + ": "
                                     + fetchResult.output());
@@ -147,7 +154,7 @@ public class WorkspaceService {
                 if (!checkoutResult.success()) {
                     log.error("Failed to checkout FETCH_HEAD for PR #{}: {}", prNumber,
                             checkoutResult.output());
-                    cleanupWorkspace(workspaceDir);
+                    cleanupWorkspace(setup);
                     return WorkspaceResult.failure(
                             "Failed to checkout FETCH_HEAD for PR #" + prNumber + ": "
                                     + checkoutResult.output());
@@ -158,13 +165,12 @@ public class WorkspaceService {
 
             // No fallback — report the original clone error
             log.error("Failed to clone repository: {}", cloneResult.output());
-            cleanupWorkspace(workspaceDir);
+            cleanupWorkspace(setup);
             return WorkspaceResult.failure("Failed to clone repository: " + cloneResult.output());
 
         } catch (IOException e) {
             log.error("Failed to prepare workspace: {}", e.getMessage());
-            cleanupWorkspace(workspaceDir);
-            deleteCredentialsFile(credentialsFile);
+            cleanupWorkspace(setup);
             return WorkspaceResult.failure("Failed to prepare workspace: " + e.getMessage());
         }
     }
@@ -320,15 +326,31 @@ public class WorkspaceService {
      * the external git credential-store file created by {@link #prepareWorkspace}.
      */
     public void cleanupWorkspace(Path workspaceDir) {
-        if (workspaceDir != null) {
-            deleteCredentialsFile(credentialsByWorkspace.remove(workspaceKey(workspaceDir)));
-            try {
-                Path workspaceRoot = workspaceRootFor(workspaceDir);
-                deleteDirectory(workspaceRoot != null ? workspaceRoot : workspaceDir);
-                log.debug("Cleaned up workspace: {}", workspaceDir);
-            } catch (IOException e) {
-                log.warn("Failed to clean up workspace {}: {}", workspaceDir, e.getMessage());
-            }
+        if (workspaceDir == null) {
+            return;
+        }
+        Path workspaceRoot = workspaceRootFor(workspaceDir);
+        WorkspaceSetup setup = new WorkspaceSetup(workspaceRoot != null ? workspaceRoot : workspaceDir);
+        setup.setCredentialsFile(credentialsByWorkspace.remove(workspaceKey(workspaceDir)));
+        cleanupWorkspace(setup);
+    }
+
+    /**
+     * Cleans up a whole {@link WorkspaceSetup}: the credential-store file and
+     * the private temporary parent are deleted together. Keeping both
+     * references in one holder guarantees that no retry path can drop the
+     * credential file after a partial directory deletion.
+     */
+    void cleanupWorkspace(WorkspaceSetup setup) {
+        if (setup == null) {
+            return;
+        }
+        deleteCredentialsFile(setup.credentialsFile());
+        try {
+            deleteDirectory(setup.workspaceRoot());
+            log.debug("Cleaned up workspace: {}", setup.workspaceDir());
+        } catch (IOException e) {
+            log.warn("Failed to clean up workspace {}: {}", setup.workspaceDir(), e.getMessage());
         }
     }
 
@@ -382,6 +404,16 @@ public class WorkspaceService {
 
     /** Creates a private temporary parent and returns its repository child path. */
     Path createWorkspaceDirectory() throws IOException {
+        return createWorkspaceSetup().workspaceDir();
+    }
+
+    /**
+     * Creates a new workspace attempt as a single {@link WorkspaceSetup} holding
+     * the private temporary parent (with its marker file) and, once created, the
+     * external credential-store file. The holder is the unit of cleanup, so both
+     * always travel together through retry and error paths.
+     */
+    WorkspaceSetup createWorkspaceSetup() throws IOException {
         Path workspaceRoot;
         if (workspaceBaseDir == null) {
             workspaceRoot = Files.createTempDirectory("agent-workspace-");
@@ -392,7 +424,7 @@ public class WorkspaceService {
         try {
             restrictToOwner(workspaceRoot, true);
             Files.createFile(workspaceRoot.resolve(WORKSPACE_ROOT_MARKER));
-            return workspaceRoot.resolve(REPOSITORY_DIRECTORY_NAME);
+            return new WorkspaceSetup(workspaceRoot);
         } catch (IOException e) {
             deleteDirectory(workspaceRoot);
             throw e;
