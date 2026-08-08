@@ -16,6 +16,7 @@ import java.nio.file.attribute.PosixFilePermission;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -47,6 +48,11 @@ public class WorkspaceService {
     private static final Set<PosixFilePermission> OWNER_FILE_PERMISSIONS = Set.of(
             PosixFilePermission.OWNER_READ,
             PosixFilePermission.OWNER_WRITE);
+    private static final List<String> GIT_ENVIRONMENT_ALLOWLIST = List.of(
+            "PATH", "LANG", "LC_ALL", "LC_CTYPE", "TZ", "TMPDIR", "TMP", "TEMP",
+            "SystemRoot", "windir", "COMSPEC", "PATHEXT",
+            "HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY", "http_proxy", "https_proxy", "no_proxy",
+            "GIT_SSL_CAINFO", "GIT_SSL_CAPATH", "SSL_CERT_FILE", "SSL_CERT_DIR");
     private final Path workspaceBaseDir;
     private final ConcurrentMap<Path, Path> credentialsByWorkspace = new ConcurrentHashMap<>();
 
@@ -477,10 +483,29 @@ public class WorkspaceService {
     }
 
     private CommandResult runCommand(File workDir, String[] command, int timeoutSeconds) {
+        Path disabledHooksDirectory = null;
+        Path emptyGlobalGitConfig = null;
         try {
-            ProcessBuilder pb = new ProcessBuilder(command);
+            // Git reads repository-controlled configuration after untrusted code ran in the workspace.
+            disabledHooksDirectory = Files.createTempDirectory("ai-git-bot-empty-hooks-");
+            emptyGlobalGitConfig = Files.createTempFile(disabledHooksDirectory, "global-", ".gitconfig");
+            List<String> gitCommand = new ArrayList<>(command.length + 7);
+            gitCommand.add(command[0]);
+            gitCommand.add("-c");
+            gitCommand.add("core.hooksPath=" + disabledHooksDirectory.toAbsolutePath().normalize());
+            gitCommand.add("-c");
+            gitCommand.add("core.fsmonitor=false");
+            gitCommand.add("-c");
+            gitCommand.add("credential.helper=");
+            for (int index = 1; index < command.length; index++) {
+                gitCommand.add(command[index]);
+            }
+            ProcessBuilder pb = new ProcessBuilder(gitCommand);
             pb.directory(workDir);
             pb.redirectErrorStream(true);
+            scrubEnvironmentForGit(pb);
+            pb.environment().put("GIT_CONFIG_NOSYSTEM", "1");
+            pb.environment().put("GIT_CONFIG_GLOBAL", emptyGlobalGitConfig.toString());
 
             Process process = pb.start();
 
@@ -502,8 +527,40 @@ public class WorkspaceService {
             boolean success = process.exitValue() == 0;
             return new CommandResult(success, output.toString());
         } catch (IOException | InterruptedException e) {
+            if (e instanceof InterruptedException) {
+                Thread.currentThread().interrupt();
+            }
             log.error("Failed to run command: {}", e.getMessage());
             return new CommandResult(false, "Exception: " + e.getMessage());
+        } finally {
+            if (emptyGlobalGitConfig != null) {
+                try {
+                    Files.deleteIfExists(emptyGlobalGitConfig);
+                } catch (IOException e) {
+                    log.warn("Failed to remove empty global Git config {}: {}",
+                            emptyGlobalGitConfig, e.getMessage());
+                }
+            }
+            if (disabledHooksDirectory != null) {
+                try {
+                    Files.deleteIfExists(disabledHooksDirectory);
+                } catch (IOException e) {
+                    log.warn("Failed to remove empty Git hooks directory {}: {}",
+                            disabledHooksDirectory, e.getMessage());
+                }
+            }
+        }
+    }
+
+    /** Keeps credentials and application secrets out of Git subprocesses. */
+    private void scrubEnvironmentForGit(ProcessBuilder processBuilder) {
+        Map<String, String> environment = processBuilder.environment();
+        environment.clear();
+        for (String name : GIT_ENVIRONMENT_ALLOWLIST) {
+            String value = System.getenv(name);
+            if (value != null) {
+                environment.put(name, value);
+            }
         }
     }
 
