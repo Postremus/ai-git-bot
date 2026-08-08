@@ -4,7 +4,8 @@ This guide covers deploying the AI-Git-Bot Gateway using Docker Compose.
 
 ## Prerequisites
 
-- **Docker** and **Docker Compose** installed
+- **Docker** and **Docker Compose** installed on an `amd64` (x86-64) or
+  `arm64` (aarch64) host — see [Architectures](#architectures)
 - A **Git hosting platform** configured:
   - Gitea: See [Gitea Setup](GITEA_SETUP.md)
   - GitHub / GitHub Enterprise: See [GitHub Setup](GITHUB_SETUP.md)
@@ -141,13 +142,45 @@ After upgrade, edit or clone prompt entries in the UI instead of editing bot pro
 The Dockerfile uses a **multi-stage build**:
 
 1. **Build stage** (`eclipse-temurin:21-jdk-alpine`): Compiles the application with Maven
-2. **Runtime stage** (`eclipse-temurin:21-jre-alpine`): Runs the JAR as a non-root user
+2. **Runtime stage** (`eclipse-temurin:21-jre-noble`): Runs the JAR as a non-root user
 
 Key features:
 - Maven dependency layer caching for fast rebuilds
 - Non-root `appuser` for security
 - Health check via `/actuator/health` (interval: 30s, start period: 30s)
 - JVM tuning: `UseContainerSupport` and `MaxRAMPercentage=75.0`
+
+### Architectures
+
+The published image is a **multi-arch manifest** covering `linux/amd64` and
+`linux/arm64`, so `docker pull` / `docker compose up` selects the right variant
+automatically — including on Apple Silicon, AWS Graviton and Raspberry Pi 4/5
+(64-bit OS).
+
+Both variants ship the same agent toolchain (JDK/Maven, Node.js 22, Python,
+Go, Rust, .NET SDK, C/C++, Ruby, k6, Playwright and Cypress). Two
+architecture-specific details are worth knowing:
+
+- **k6** is installed from the Grafana APT repository on `amd64` and from the
+  official release tarball on `arm64`, because that repository publishes no
+  `arm64` packages. The tarball version is pinned by the `K6_VERSION` build
+  argument.
+- **Cypress on `arm64`** can only drive its bundled Electron browser; Cypress
+  ships no Arm builds of Chrome or Firefox. Playwright runs Chromium on both
+  architectures, so E2E workflows that need a real Chromium should use the
+  Playwright runner on Arm hosts.
+
+Building the image yourself for a single architecture needs no extra flags.
+To build the full manifest locally:
+
+```bash
+docker buildx build --platform linux/amd64,linux/arm64 -t ai-git-bot:local .
+```
+
+Cross-building `arm64` on an `amd64` host requires QEMU
+(`docker run --privileged --rm tonistiigi/binfmt --install arm64`) and is
+**slow** — this image compiles and downloads a large toolchain. Prefer building
+each architecture on a native host.
 
 ## Database
 

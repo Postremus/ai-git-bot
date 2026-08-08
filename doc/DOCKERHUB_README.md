@@ -93,6 +93,21 @@ Two issue-driven agents let you assign bots to issues:
 
 ---
 
+## Supported Architectures
+
+| Tag | `linux/amd64` | `linux/arm64` |
+|---|---|---|
+| `latest`, `<version>` | ✅ | ✅ |
+
+The tags are multi-arch manifest lists, so Docker pulls the matching variant
+automatically on x86-64, Apple Silicon, AWS Graviton and 64-bit Raspberry Pi.
+
+> On `arm64`, Cypress can only drive its bundled Electron browser (Cypress ships
+> no Arm builds of Chrome/Firefox). Playwright runs Chromium on both
+> architectures.
+
+---
+
 ## Quick Start
 
 ```bash
