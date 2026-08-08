@@ -41,15 +41,29 @@ public class BotService {
     }
 
     public Bot save(Bot bot) {
+        return save(bot, false);
+    }
+
+    /**
+     * Saves a bot, resolving the webhook signing secret from the form input.
+     *
+     * <p>The secret field is a one-way write: the stored value is never echoed
+     * back into the form. A blank field therefore means "keep the stored
+     * value", while {@code clearSigningSecret} requests explicit removal (the
+     * Clear button in the UI).</p>
+     */
+    public Bot save(Bot bot, boolean clearSigningSecret) {
         if (bot.getWebhookSecret() == null) {
             bot.setWebhookSecret(UUID.randomUUID().toString());
         }
         // Encrypt a newly provided webhook signing secret; keep the stored one
         // when the form field is left blank on update (same pattern as the
-        // git integration token).
+        // git integration token). The explicit Clear button overrides keeping.
         String signingSecret = bot.getWebhookSigningSecret();
         if (signingSecret != null && !signingSecret.isBlank()) {
             bot.setWebhookSigningSecret(encryptionService.encrypt(signingSecret));
+        } else if (clearSigningSecret) {
+            bot.setWebhookSigningSecret(null);
         } else if (bot.getId() != null) {
             botRepository.findById(bot.getId())
                     .ifPresent(existing -> bot.setWebhookSigningSecret(existing.getWebhookSigningSecret()));

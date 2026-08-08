@@ -214,9 +214,17 @@
 
                         <div class="col-12">
                             <label for="webhookSigningSecret" class="form-label">Webhook signing secret <span class="text-secondary">(optional, recommended)</span></label>
-                            <input type="password" class="form-control font-monospace" id="webhookSigningSecret"
-                                   name="webhookSigningSecret" autocomplete="new-password"
-                                   th:placeholder="${bot.id != null and bot.webhookSigningSecret != null} ? 'configured - leave blank to keep' : 'shared secret configured at the provider'"/>
+                            <div class="input-group">
+                                <input type="password" class="form-control font-monospace" id="webhookSigningSecret"
+                                       name="webhookSigningSecret" autocomplete="new-password"
+                                       th:placeholder="${bot.id != null and bot.webhookSigningSecret != null} ? 'configured - leave blank to keep' : 'shared secret configured at the provider'"/>
+                                <button class="btn btn-outline-secondary" type="button" id="clearWebhookSigningSecretBtn"
+                                        th:if="${bot.id != null and bot.webhookSigningSecret != null}"
+                                        title="Remove the stored signing secret">
+                                    <i class="bi bi-trash"></i> Clear
+                                </button>
+                            </div>
+                            <input type="hidden" id="clearWebhookSigningSecret" name="clearWebhookSigningSecret" value="false"/>
                             <div class="form-text">
                                 When set, the bot verifies the provider's webhook signature
                                 (<code>X-Hub-Signature-256</code> for GitHub, <code>X-Gitea-Signature</code> for Gitea,
@@ -788,6 +796,19 @@
                             alert(error.message);
                         });
                 });
+
+                // ---- Webhook signing secret: remember that the operator wants
+                // it removed on save (an empty field alone means "keep the
+                // stored value", so we need an explicit marker). ----
+                const clearWebhookSigningSecretBtn = document.getElementById('clearWebhookSigningSecretBtn');
+                if (clearWebhookSigningSecretBtn) {
+                    clearWebhookSigningSecretBtn.addEventListener('click', function() {
+                        const secretInput = document.getElementById('webhookSigningSecret');
+                        secretInput.value = '';
+                        secretInput.placeholder = 'signing secret will be removed on save';
+                        document.getElementById('clearWebhookSigningSecret').value = 'true';
+                    });
+                }
             });
             /*]]>*/
         </script>

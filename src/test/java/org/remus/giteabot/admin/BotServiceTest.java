@@ -102,6 +102,34 @@ class BotServiceTest {
     }
 
     @Test
+    void save_clearsStoredWebhookSigningSecretWhenClearRequested() {
+        Bot bot = newBotWithDefaultToolConfig();
+        bot.setId(1L);
+        bot.setWebhookSigningSecret(" ");
+        when(botRepository.save(any(Bot.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        Bot result = botService.save(bot, true);
+
+        assertNull(result.getWebhookSigningSecret());
+        verify(encryptionService, never()).encrypt(anyString());
+        verify(botRepository, never()).findById(1L);
+    }
+
+    @Test
+    void save_newSecretWinsEvenWhenClearRequested() {
+        Bot bot = newBotWithDefaultToolConfig();
+        bot.setId(1L);
+        bot.setWebhookSigningSecret("plain-signing-secret");
+        when(encryptionService.encrypt("plain-signing-secret")).thenReturn("encrypted-signing-secret");
+        when(botRepository.save(any(Bot.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        Bot result = botService.save(bot, true);
+
+        assertEquals("encrypted-signing-secret", result.getWebhookSigningSecret());
+        verify(encryptionService).encrypt("plain-signing-secret");
+    }
+
+    @Test
     void getDecryptedWebhookSigningSecret_decryptsStoredSecret() {
         Bot bot = new Bot();
         bot.setWebhookSigningSecret("encrypted-signing-secret");
