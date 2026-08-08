@@ -94,6 +94,7 @@ public class BotController {
                         @RequestParam(required = false) Long workflowConfigurationId,
                         @RequestParam(required = false) Long issueWorkflowConfigurationId,
                         @RequestParam(required = false) Long deploymentTargetId,
+                        @RequestParam(defaultValue = "false") boolean clearWebhookSigningSecret,
                         Model model,
                         RedirectAttributes redirectAttributes) {
         try {
@@ -139,7 +140,7 @@ public class BotController {
                         .orElseThrow(() -> new IllegalArgumentException("Deployment target not found"));
             }
             bot.setDeploymentTarget(deploymentTarget);
-            botService.save(bot);
+            botService.save(bot, clearWebhookSigningSecret);
             redirectAttributes.addFlashAttribute("success", "Bot saved successfully");
         } catch (Exception e) {
             log.error("Failed to save Bot", e);

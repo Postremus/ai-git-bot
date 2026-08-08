@@ -43,15 +43,34 @@ class ArchitectureTest {
             noClasses().that().resideOutsideOfPackage(BASE + ".webhook")
                     .should().dependOnClassesThat().resideInAPackage(BASE + ".webhook");
 
-    /** MVC controllers are entry points and must not be used by other classes. */
+    /** MVC controllers are entry points and must not be used by other classes.
+     * Classes nested inside a controller (e.g. lambdas capturing {@code this},
+     * compiled to synthetic inner classes whose constructor takes the enclosing
+     * controller) are exempt — that dependency is compiler-generated. */
     @ArchTest
     static final ArchRule controllers_are_not_depended_upon =
             noClasses()
+                    .that(DescribedPredicate.describe("are not nested inside a controller",
+                            origin -> !isNestedInsideController(origin)))
                     .should().dependOnClassesThat(
-                            DescribedPredicate.describe("are controllers",
-                                    target -> !target.isAnnotation()
-                                            && (target.isAnnotatedWith(org.springframework.stereotype.Controller.class)
-                                            || target.isAnnotatedWith(org.springframework.web.bind.annotation.RestController.class))));
+                            DescribedPredicate.describe("are controllers", ArchitectureTest::isController));
+
+    private static boolean isController(com.tngtech.archunit.core.domain.JavaClass javaClass) {
+        return !javaClass.isAnnotation()
+                && (javaClass.isAnnotatedWith(org.springframework.stereotype.Controller.class)
+                || javaClass.isAnnotatedWith(org.springframework.web.bind.annotation.RestController.class));
+    }
+
+    private static boolean isNestedInsideController(com.tngtech.archunit.core.domain.JavaClass javaClass) {
+        var enclosing = javaClass.getEnclosingClass();
+        while (enclosing.isPresent()) {
+            if (isController(enclosing.get())) {
+                return true;
+            }
+            enclosing = enclosing.get().getEnclosingClass();
+        }
+        return false;
+    }
 
     /** The {@code config} package is a leaf and must not depend on any feature package. */
     @ArchTest

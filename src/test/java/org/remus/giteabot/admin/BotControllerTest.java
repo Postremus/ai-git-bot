@@ -148,14 +148,14 @@ class BotControllerTest {
                 mock(org.remus.giteabot.prworkflow.config.DeploymentTargetService.class));
 
         Bot bot = new Bot();
-        String view = controller.save(bot, 1L, 2L, 3L, null, 4L, null, 9L, null,
+        String view = controller.save(bot, 1L, 2L, 3L, null, 4L, null, 9L, null, false,
                 new org.springframework.ui.ExtendedModelMap(),
                 new org.springframework.web.servlet.mvc.support.RedirectAttributesModelMap());
 
         assertEquals("redirect:/bots", view);
         org.junit.jupiter.api.Assertions.assertSame(issueConfiguration,
                 bot.getIssueWorkflowConfiguration());
-        org.mockito.Mockito.verify(botService).save(bot);
+        org.mockito.Mockito.verify(botService).save(bot, false);
     }
 
     @Test
