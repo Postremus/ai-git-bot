@@ -101,6 +101,22 @@ class WorkspaceServiceTest {
     }
 
     @Test
+    void createWorkspaceDirectory_usesConfiguredBaseDirectory() throws IOException {
+        Path workspaceBaseDir = tempDir.resolve("sandbox-workspaces");
+        workspaceService = new WorkspaceService(workspaceBaseDir.toString());
+
+        Path workspace = workspaceService.createWorkspaceDirectory();
+
+        assertThat(workspace.startsWith(workspaceBaseDir.toAbsolutePath().normalize())).isTrue();
+        assertThat(workspace.getParent().getParent()).isEqualTo(workspaceBaseDir.toAbsolutePath().normalize());
+
+        workspaceService.cleanupWorkspace(workspace);
+
+        assertThat(workspace).doesNotExist();
+        assertThat(workspaceBaseDir).exists();
+    }
+
+    @Test
     void createCredentialsFile_rejectsWorkspaceWithoutPrivateParent() throws IOException {
         Path unmanagedWorkspace = tempDir.resolve("workspace");
         Files.createDirectories(unmanagedWorkspace);

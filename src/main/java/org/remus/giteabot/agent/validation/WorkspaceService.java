@@ -1,6 +1,8 @@
 package org.remus.giteabot.agent.validation;
 
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.io.BufferedReader;
@@ -45,7 +47,21 @@ public class WorkspaceService {
     private static final Set<PosixFilePermission> OWNER_FILE_PERMISSIONS = Set.of(
             PosixFilePermission.OWNER_READ,
             PosixFilePermission.OWNER_WRITE);
+    private final Path workspaceBaseDir;
     private final ConcurrentMap<Path, Path> credentialsByWorkspace = new ConcurrentHashMap<>();
+
+    /** Creates a service that places workspaces under the system temporary directory. */
+    public WorkspaceService() {
+        this(null);
+    }
+
+    /** Creates a service that places private workspace parents under the configured directory. */
+    @Autowired
+    public WorkspaceService(@Value("${giteabot.workspaces.dir:#{null}}") String configuredDir) {
+        this.workspaceBaseDir = configuredDir == null || configuredDir.isBlank()
+                ? null
+                : Path.of(configuredDir).toAbsolutePath().normalize();
+    }
 
     /**
      * Clones a repository workspace. When a branch-based shallow clone fails and
@@ -360,7 +376,13 @@ public class WorkspaceService {
 
     /** Creates a private temporary parent and returns its repository child path. */
     Path createWorkspaceDirectory() throws IOException {
-        Path workspaceRoot = Files.createTempDirectory("agent-workspace-");
+        Path workspaceRoot;
+        if (workspaceBaseDir == null) {
+            workspaceRoot = Files.createTempDirectory("agent-workspace-");
+        } else {
+            Files.createDirectories(workspaceBaseDir);
+            workspaceRoot = Files.createTempDirectory(workspaceBaseDir, "agent-workspace-");
+        }
         try {
             restrictToOwner(workspaceRoot, true);
             Files.createFile(workspaceRoot.resolve(WORKSPACE_ROOT_MARKER));
