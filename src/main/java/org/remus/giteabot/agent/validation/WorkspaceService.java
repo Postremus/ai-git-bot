@@ -14,6 +14,7 @@ import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.attribute.PosixFilePermission;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
@@ -521,7 +522,7 @@ public class WorkspaceService {
             // Git reads repository-controlled configuration after untrusted code ran in the workspace.
             disabledHooksDirectory = Files.createTempDirectory("ai-git-bot-empty-hooks-");
             emptyGlobalGitConfig = Files.createTempFile(disabledHooksDirectory, "global-", ".gitconfig");
-            List<String> gitCommand = new ArrayList<>(command.length + 7);
+            List<String> gitCommand = new ArrayList<>(command.length + 6);
             gitCommand.add(command[0]);
             gitCommand.add("-c");
             gitCommand.add("core.hooksPath=" + disabledHooksDirectory.toAbsolutePath().normalize());
@@ -529,9 +530,7 @@ public class WorkspaceService {
             gitCommand.add("core.fsmonitor=false");
             gitCommand.add("-c");
             gitCommand.add("credential.helper=");
-            for (int index = 1; index < command.length; index++) {
-                gitCommand.add(command[index]);
-            }
+            gitCommand.addAll(Arrays.asList(command).subList(1, command.length));
             ProcessBuilder pb = new ProcessBuilder(gitCommand);
             pb.directory(workDir);
             pb.redirectErrorStream(true);
