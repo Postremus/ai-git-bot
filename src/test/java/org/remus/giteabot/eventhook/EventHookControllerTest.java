@@ -117,6 +117,25 @@ class EventHookControllerTest {
 
     @Test
     @WithMockUser(roles = "ADMIN")
+    void saveIgnoresDirectBindingOfEncryptedFields() throws Exception {
+        mvc.perform(post("/admin/event-hooks/save").with(csrf())
+                        .param("name", "Protected fields")
+                        .param("url", "https://example.com/hook")
+                        .param("eventTypes", "PR_WORKFLOW_STARTED")
+                        .param("secret", "plain-secret")
+                        .param("authorizationHeader", "Bearer token123456")
+                        .param("customHeaders", "{\"X-Api-Key\":\"token123456\"}"))
+                .andExpect(status().is3xxRedirection())
+                .andExpect(redirectedUrl("/admin/event-hooks"));
+
+        EventHookEndpoint endpoint = endpointRepository.findAll().getFirst();
+        assertNull(endpoint.getSecret());
+        assertNull(endpoint.getAuthorizationHeader());
+        assertNull(endpoint.getCustomHeaders());
+    }
+
+    @Test
+    @WithMockUser(roles = "ADMIN")
     void toggleFlipsEnabledFlag() throws Exception {
         EventHookEndpoint endpoint = endpointRepository.save(endpoint("Toggle me", "https://example.com/hook"));
         assertTrue(endpoint.isEnabled());

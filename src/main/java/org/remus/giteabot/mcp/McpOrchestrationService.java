@@ -10,6 +10,7 @@ import io.modelcontextprotocol.spec.McpClientTransport;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.ProtocolVersions;
 import lombok.extern.slf4j.Slf4j;
+import org.remus.giteabot.admin.EncryptionService;
 import org.remus.giteabot.agent.validation.ToolResult;
 import org.remus.giteabot.systemsettings.McpConfiguration;
 import org.springframework.stereotype.Service;
@@ -48,6 +49,17 @@ public class McpOrchestrationService {
     private final McpServerDiscovery serverDiscovery = new McpServerDiscovery(configurationParser);
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final Map<CacheKey, McpToolCatalog> toolCache = new ConcurrentHashMap<>();
+    private final EncryptionService encryptionService;
+
+    public McpOrchestrationService(EncryptionService encryptionService) {
+        this.encryptionService = encryptionService;
+    }
+
+    /** The MCP configuration JSON is stored encrypted - decrypt before parsing. */
+    private String decryptedJson(McpConfiguration configuration) {
+        String json = configuration.getJsonContent();
+        return (json == null || json.isBlank()) ? json : encryptionService.decrypt(json);
+    }
 
     public McpToolCatalog discoverTools(McpConfiguration configuration) {
         if (configuration == null) {
@@ -71,7 +83,7 @@ public class McpOrchestrationService {
         if (toolDefinition == null) {
             return new ToolResult(false, -1, "", "MCP tool '" + qualifiedToolName + "' is not available");
         }
-        McpServerDefinition server = serverDiscovery.discover(configuration).stream()
+        McpServerDefinition server = serverDiscovery.discover(decryptedJson(configuration)).stream()
                 .filter(definition -> sanitizeName(definition.name()).equals(toolDefinition.serverName()))
                 .findFirst()
                 .orElse(null);
@@ -112,7 +124,7 @@ public class McpOrchestrationService {
     }
 
     private McpToolCatalog fetchToolCatalog(McpConfiguration configuration) {
-        List<McpToolDefinition> tools = serverDiscovery.discover(configuration).stream()
+        List<McpToolDefinition> tools = serverDiscovery.discover(decryptedJson(configuration)).stream()
                 .flatMap(server -> fetchServerTools(server).stream())
                 .toList();
         log.info("Discovered {} MCP tools for configuration '{}'", tools.size(), configuration.getName());
@@ -474,5 +486,4 @@ public class McpOrchestrationService {
         }
     }
 }
-
 
