@@ -1,5 +1,6 @@
 package org.remus.giteabot.webhook;
 
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -83,7 +84,7 @@ public class UnifiedWebhookController {
                     }
                     Map<String, Object> payload;
                     try {
-                        payload = objectMapper.readValue(rawBody, Map.class);
+                        payload = objectMapper.readValue(rawBody, new TypeReference<>() {});
                     } catch (Exception e) {
                         return ResponseEntity.badRequest().body("invalid JSON payload");
                     }
