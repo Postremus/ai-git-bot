@@ -28,6 +28,7 @@ public class OAuthLoginController {
         return "oauth-login-error";
     }
 
+    /** Displays the public confirmation page after a local OAuth logout. */
     @GetMapping("/signed-out")
     public String signedOut() {
         return "signed-out";
