@@ -112,6 +112,23 @@ class WorkspaceServiceTest {
     }
 
     @Test
+    void credentialConfigForWorkspace_usesExternalCredentialStore() throws IOException {
+        Path workspace = workspaceService.createWorkspaceDirectory();
+        Path credentials = workspaceService.createCredentialsFile(
+                "https://git.example.com", "test-token", workspace);
+
+        try {
+            workspaceService.registerCredentialsFile(workspace, credentials);
+
+            assertThat(workspaceService.credentialConfigForWorkspace(workspace)).containsExactly(
+                    "-c", "credential.helper=",
+                    "-c", "credential.helper=store --file=" + credentials.toAbsolutePath());
+        } finally {
+            workspaceService.cleanupWorkspace(workspace);
+        }
+    }
+
+    @Test
     void hasUncommittedChanges_detectsModifiedTrackedFile() throws IOException, InterruptedException {
         initGitRepository(tempDir);
         Path file = tempDir.resolve("README.md");

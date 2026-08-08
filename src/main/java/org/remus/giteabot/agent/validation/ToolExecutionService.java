@@ -4,7 +4,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.remus.giteabot.agent.tools.ToolCatalog;
 import org.remus.giteabot.config.AgentConfigProperties;
-import org.remus.giteabot.util.WorkspacePaths;
 import org.springframework.stereotype.Service;
 
 import java.io.BufferedReader;
@@ -1258,7 +1257,7 @@ public class ToolExecutionService {
 
     private Path resolveWorkspacePath(Path workspaceDir, String relativePath) throws IOException {
         try {
-            return WorkspacePaths.resolveInsideWorkspace(workspaceDir, relativePath);
+            return org.remus.giteabot.util.WorkspacePaths.resolveInsideWorkspace(workspaceDir, relativePath);
         } catch (IllegalArgumentException e) {
             throw new IOException(e.getMessage(), e);
         }

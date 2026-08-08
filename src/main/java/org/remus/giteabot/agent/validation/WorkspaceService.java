@@ -15,6 +15,8 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -43,6 +45,7 @@ public class WorkspaceService {
     private static final Set<PosixFilePermission> OWNER_FILE_PERMISSIONS = Set.of(
             PosixFilePermission.OWNER_READ,
             PosixFilePermission.OWNER_WRITE);
+    private final ConcurrentMap<Path, Path> credentialsByWorkspace = new ConcurrentHashMap<>();
 
     /**
      * Clones a repository workspace. When a branch-based shallow clone fails and
@@ -72,7 +75,7 @@ public class WorkspaceService {
                     60);
 
             if (cloneResult.success()) {
-                persistCredentialHelper(workspaceDir, credentialsFile);
+                registerCredentialsFile(workspaceDir, credentialsFile);
                 return WorkspaceResult.success(workspaceDir);
             }
 
@@ -100,11 +103,11 @@ public class WorkspaceService {
                                     + "; default branch: " + defaultCloneResult.output() + ")");
                 }
 
-                persistCredentialHelper(workspaceDir, credentialsFile);
+                registerCredentialsFile(workspaceDir, credentialsFile);
 
                 CommandResult fetchResult = runCommand(workspaceDir.toFile(),
-                        new String[]{"git", "fetch", "origin",
-                                "refs/pull/" + prNumber + "/head"},
+                        withCredentialConfig(credentialConfigForWorkspace(workspaceDir),
+                                "fetch", "origin", "refs/pull/" + prNumber + "/head"),
                         60);
 
                 if (!fetchResult.success()) {
@@ -200,7 +203,8 @@ public class WorkspaceService {
         }
 
         CommandResult pushResult = runCommand(workspaceDir.toFile(),
-                new String[]{"git", "push", "origin", branchName}, 60);
+                withCredentialConfig(credentialConfigForWorkspace(workspaceDir),
+                        "push", "origin", branchName), 60);
         if (!pushResult.success()) {
             log.error("git push failed: {}", pushResult.output());
             return false;
@@ -295,6 +299,7 @@ public class WorkspaceService {
      */
     public void cleanupWorkspace(Path workspaceDir) {
         if (workspaceDir != null) {
+            deleteCredentialsFile(credentialsByWorkspace.remove(workspaceKey(workspaceDir)));
             try {
                 Path workspaceRoot = workspaceRootFor(workspaceDir);
                 deleteDirectory(workspaceRoot != null ? workspaceRoot : workspaceDir);
@@ -404,7 +409,7 @@ public class WorkspaceService {
 
     /**
      * git {@code -c} arguments that authenticate via the credential-store file
-     * (used for the initial clone, before the repo-local config exists).
+     * used for every authenticated Git command.
      */
     private String[] credentialConfigArgs(Path credentialsFile) {
         if (credentialsFile == null) {
@@ -423,19 +428,19 @@ public class WorkspaceService {
         return command;
     }
 
-    /**
-     * Persists the credential helper into the cloned repo's local config so
-     * later fetches/pushes authenticate without any environment state.
-     */
-    private void persistCredentialHelper(Path workspaceDir, Path credentialsFile) {
+    void registerCredentialsFile(Path workspaceDir, Path credentialsFile) {
         if (credentialsFile == null) {
             return;
         }
-        runCommand(workspaceDir.toFile(),
-                new String[]{"git", "config", "--local", "credential.helper", ""}, 10);
-        runCommand(workspaceDir.toFile(),
-                new String[]{"git", "config", "--local", "--add", "credential.helper",
-                        "store --file=" + credentialsFile.toAbsolutePath()}, 10);
+        credentialsByWorkspace.put(workspaceKey(workspaceDir), credentialsFile);
+    }
+
+    String[] credentialConfigForWorkspace(Path workspaceDir) {
+        return credentialConfigArgs(credentialsByWorkspace.get(workspaceKey(workspaceDir)));
+    }
+
+    private Path workspaceKey(Path workspaceDir) {
+        return workspaceDir.toAbsolutePath().normalize();
     }
 
     /** Deletes a credential-store file after a failed workspace setup. */
