@@ -6,6 +6,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.remus.giteabot.issueworkflow.IssueWorkflowRegistry;
 import org.remus.giteabot.prworkflow.PrWorkflow;
 import org.remus.giteabot.prworkflow.PrWorkflowCategory;
 import org.remus.giteabot.prworkflow.PrWorkflowContext;
@@ -38,9 +39,11 @@ class WorkflowSelectionServiceTest {
 
     @BeforeEach
     void setUp() {
-        PrWorkflowRegistry registry = new PrWorkflowRegistry(List.of(new ReviewLike(), new TestsLike()));
+        PrWorkflowRegistry registry = new PrWorkflowRegistry(
+                List.of(new ReviewLike(), new TestsLike(), new BooleanLike()));
+        IssueWorkflowRegistry issueRegistry = new IssueWorkflowRegistry(List.of());
         service = new WorkflowSelectionService(configurationRepository, selectionRepository,
-                registry, paramsValidator);
+                registry, issueRegistry, paramsValidator);
     }
 
     @Test
@@ -124,9 +127,44 @@ class WorkflowSelectionServiceTest {
         when(selectionRepository.findByConfigurationId(1L)).thenReturn(List.of(orphan));
 
         List<WorkflowSelectionRow> rows = service.loadAvailableWorkflows(1L);
-        // 2 registered + 1 orphan
-        assertEquals(3, rows.size());
+        // 3 registered + 1 orphan
+        assertEquals(4, rows.size());
         assertNotNull(rows.stream().filter(r -> r.workflowKey().equals("ghost")).findFirst().orElseThrow());
+    }
+
+    @Test
+    void extractWorkflowParams_trueWinsForBooleanOnly_othersTakeLastValue() {
+        org.springframework.util.MultiValueMap<String, String> allParams =
+                new org.springframework.util.LinkedMultiValueMap<>();
+        // Checked boolean: hidden "false" + checkbox "true".
+        allParams.add("params.boolean-like.enableFormalReviewDecision", "false");
+        allParams.add("params.boolean-like.enableFormalReviewDecision", "true");
+        // Non-boolean field submitting duplicate values — last one wins.
+        allParams.add("params.boolean-like.mode", "first");
+        allParams.add("params.boolean-like.mode", "second");
+        // Keys outside the selection and non-param inputs are dropped.
+        allParams.add("params.tests-like.command", "mvn test");
+        allParams.add("foo", "ignored");
+
+        Map<String, Map<String, String>> extracted =
+                service.extractWorkflowParams(allParams, List.of("boolean-like"));
+
+        assertEquals(Map.of("enableFormalReviewDecision", "true", "mode", "second"),
+                extracted.get("boolean-like"));
+        assertEquals(1, extracted.size());
+    }
+
+    @Test
+    void extractWorkflowParams_uncheckedBooleanPersistsFalse() {
+        org.springframework.util.MultiValueMap<String, String> allParams =
+                new org.springframework.util.LinkedMultiValueMap<>();
+        // Unchecked boolean: only the hidden "false" is submitted.
+        allParams.add("params.boolean-like.enableFormalReviewDecision", "false");
+
+        Map<String, Map<String, String>> extracted =
+                service.extractWorkflowParams(allParams, List.of("boolean-like"));
+
+        assertEquals("false", extracted.get("boolean-like").get("enableFormalReviewDecision"));
     }
 
     private WorkflowConfiguration configuration() {
@@ -163,6 +201,20 @@ class WorkflowSelectionServiceTest {
                             WorkflowParamField.ParamType.STRING, true, null, "Test command", List.of()),
                     new WorkflowParamField("timeoutSeconds", "Timeout",
                             WorkflowParamField.ParamType.INTEGER, false, "300", "Timeout in seconds", List.of()));
+        }
+    }
+
+    private static final class BooleanLike implements PrWorkflow {
+        @Override public String key() { return "boolean-like"; }
+        @Override public String displayName() { return "Boolean-like"; }
+        @Override public PrWorkflowCategory category() { return PrWorkflowCategory.REVIEW; }
+        @Override public WorkflowResult run(PrWorkflowContext context) { return WorkflowResult.skipped("noop"); }
+        @Override public WorkflowParamsSchema paramsSchema() {
+            return WorkflowParamsSchema.of(
+                    new WorkflowParamField("enableFormalReviewDecision", "Formal decision",
+                            WorkflowParamField.ParamType.BOOLEAN, false, "false", "Toggle", List.of()),
+                    new WorkflowParamField("mode", "Mode",
+                            WorkflowParamField.ParamType.STRING, false, null, "Mode", List.of()));
         }
     }
 }

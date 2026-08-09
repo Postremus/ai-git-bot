@@ -3,6 +3,7 @@ package org.remus.giteabot.systemsettings;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.remus.giteabot.prworkflow.config.DeploymentTargetService;
+import org.remus.giteabot.prworkflow.config.WorkflowConfigurationKind;
 import org.remus.giteabot.prworkflow.config.WorkflowConfigurationService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Controller;
@@ -38,7 +39,10 @@ public class SystemSettingsController {
         model.addAttribute("systemPrompts", systemPromptService.findAll());
         model.addAttribute("mcpConfigurations", mcpConfigurationService.findAll());
         model.addAttribute("botToolConfigurations", botToolConfigurationService.findAll());
-        model.addAttribute("workflowConfigurations", workflowConfigurationService.findAll());
+        model.addAttribute("workflowConfigurations",
+                workflowConfigurationService.findAll(WorkflowConfigurationKind.PR));
+        model.addAttribute("issueWorkflowConfigurations",
+                workflowConfigurationService.findAll(WorkflowConfigurationKind.ISSUE));
         model.addAttribute("deploymentTargets", deploymentTargetService.findAll());
         model.addAttribute("activeNav", "system-settings");
         return "system-settings/list";
@@ -55,7 +59,8 @@ public class SystemSettingsController {
     public String editMcpForm(@PathVariable Long id, Model model, RedirectAttributes redirectAttributes) {
         return mcpConfigurationService.findById(id)
                 .map(mcpConfiguration -> {
-                    model.addAttribute("mcpConfiguration", mcpConfiguration);
+                    // The stored JSON is encrypted - render the decrypted view in the form.
+                    model.addAttribute("mcpConfiguration", mcpConfigurationService.decryptedView(mcpConfiguration));
                     model.addAttribute("activeNav", "system-settings");
                     return "system-settings/mcp-form";
                 })

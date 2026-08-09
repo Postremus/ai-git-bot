@@ -24,6 +24,9 @@ class BotServiceTest {
     @Mock
     private BotToolConfigurationRepository botToolConfigurationRepository;
 
+    @Mock
+    private EncryptionService encryptionService;
+
     @InjectMocks
     private BotService botService;
 
@@ -70,16 +73,86 @@ class BotServiceTest {
     }
 
     @Test
-    void save_writerBotDisablesCodingAgentCheckbox() {
+    void save_encryptsWebhookSigningSecret() {
+        Bot bot = newBotWithDefaultToolConfig();
+        bot.setWebhookSigningSecret("plain-signing-secret");
+        when(encryptionService.encrypt("plain-signing-secret")).thenReturn("encrypted-signing-secret");
+        when(botRepository.save(any(Bot.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        Bot result = botService.save(bot);
+
+        assertEquals("encrypted-signing-secret", result.getWebhookSigningSecret());
+        verify(encryptionService).encrypt("plain-signing-secret");
+    }
+
+    @Test
+    void save_keepsStoredWebhookSigningSecretWhenUpdateLeavesItBlank() {
+        Bot bot = newBotWithDefaultToolConfig();
+        bot.setId(1L);
+        bot.setWebhookSigningSecret(" ");
+        Bot existing = new Bot();
+        existing.setWebhookSigningSecret("encrypted-signing-secret");
+        when(botRepository.findById(1L)).thenReturn(Optional.of(existing));
+        when(botRepository.save(any(Bot.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        Bot result = botService.save(bot);
+
+        assertEquals("encrypted-signing-secret", result.getWebhookSigningSecret());
+        verify(encryptionService, never()).encrypt(anyString());
+    }
+
+    @Test
+    void save_clearsStoredWebhookSigningSecretWhenClearRequested() {
+        Bot bot = newBotWithDefaultToolConfig();
+        bot.setId(1L);
+        bot.setWebhookSigningSecret(" ");
+        when(botRepository.save(any(Bot.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        Bot result = botService.save(bot, true);
+
+        assertNull(result.getWebhookSigningSecret());
+        verify(encryptionService, never()).encrypt(anyString());
+        verify(botRepository, never()).findById(1L);
+    }
+
+    @Test
+    void save_newSecretWinsEvenWhenClearRequested() {
+        Bot bot = newBotWithDefaultToolConfig();
+        bot.setId(1L);
+        bot.setWebhookSigningSecret("plain-signing-secret");
+        when(encryptionService.encrypt("plain-signing-secret")).thenReturn("encrypted-signing-secret");
+        when(botRepository.save(any(Bot.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        Bot result = botService.save(bot, true);
+
+        assertEquals("encrypted-signing-secret", result.getWebhookSigningSecret());
+        verify(encryptionService).encrypt("plain-signing-secret");
+    }
+
+    @Test
+    void getDecryptedWebhookSigningSecret_decryptsStoredSecret() {
+        Bot bot = new Bot();
+        bot.setWebhookSigningSecret("encrypted-signing-secret");
+        when(encryptionService.decrypt("encrypted-signing-secret")).thenReturn("plain-signing-secret");
+
+        String result = botService.getDecryptedWebhookSigningSecret(bot);
+
+        assertEquals("plain-signing-secret", result);
+        verify(encryptionService).decrypt("encrypted-signing-secret");
+    }
+
+    @Test
+    void save_preservesAgentEnabledFlag() {
+        // The deprecated botType no longer forces agentEnabled off; the flag
+        // is an independent toggle consumed only by the issue-coding workflow.
         Bot bot = newBotWithDefaultToolConfig();
         bot.setWebhookSecret("existing-secret");
-        bot.setBotType(BotType.WRITER);
         bot.setAgentEnabled(true);
         when(botRepository.save(any(Bot.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         Bot result = botService.save(bot);
 
-        assertFalse(result.isAgentEnabled());
+        assertTrue(result.isAgentEnabled());
     }
 
     @Test

@@ -71,6 +71,15 @@ We welcome contributions to AI-Git-Bot! This document provides guidelines and in
 
 6. Push to your fork and open a pull request against the `develop` branch
 
+### Pull Request Description
+
+Every pull request must include a description with the following four sections:
+
+1. **What has been done?** — A concise summary of the changes (new feature, bug fix, refactoring, etc.).
+2. **Why?** — The motivation behind the change. What problem does it solve or what value does it add?
+3. **What has been tested?** — Which tests were added or updated, and what manual testing (if any) was performed.
+4. **How AI was used?** — If AI tools (e.g., code generation, suggestions, reviews) contributed to this work, describe how they were used.
+
 ### Commit Messages
 
 Follow the [Conventional Commits](https://www.conventionalcommits.org/) format:
@@ -96,15 +105,27 @@ See [Architecture Documentation](doc/ARCHITECTURE.md) for detailed component des
 
 ```
 src/main/java/org/remus/giteabot/
-├── admin/        # Admin controllers, services, entities (Bots, Integrations)
-├── ai/           # AI provider abstraction layer and implementations
-├── config/       # Configuration classes and prompt service
-├── gitea/        # Gitea webhook controller, API client, and models
-├── github/       # GitHub webhook controller, API client, and models
-├── repository/   # Repository provider abstraction and metadata
-├── agent/        # Issue implementation agent
-├── review/       # Code review orchestration
-└── session/      # Session management and persistence
+├── admin/           # Admin controllers, services, entities (Bots, Integrations)
+├── agent/           # Issue implementation agent (critic, issueimpl, loop, model, session, shared, tools, validation, writerimpl)
+├── ai/              # AI provider abstraction and implementations (anthropic, google, llamacpp, ollama, openai)
+├── ausage/          # AI usage tracking
+├── audit/           # Audit trail
+├── bitbucket/       # Bitbucket integration
+├── config/          # Configuration classes and prompt service
+├── eventhook/       # Event hook handling
+├── gitea/           # Gitea webhook controller, API client, and models
+├── github/          # GitHub webhook controller, API client, and models
+├── gitlab/          # GitLab integration
+├── issueworkflow/   # Issue workflows (coding, writer)
+├── mcp/             # MCP server handling
+├── metrics/         # Metrics and monitoring
+├── prworkflow/      # PR workflows (agentreview, config, deployment, e2e, i18n, readmesync, review, unittest)
+├── repository/      # Repository provider abstraction and metadata
+├── review/          # Code review orchestration and enrichment
+├── session/         # Session management and persistence
+├── systemsettings/  # System-wide settings
+├── util/            # Shared utilities
+└── webhook/         # Webhook handling
 ```
 
 ### Testing

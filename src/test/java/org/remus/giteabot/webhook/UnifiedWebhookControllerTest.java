@@ -15,7 +15,11 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
+import java.util.HexFormat;
 import java.util.Map;
 import java.util.Optional;
 
@@ -78,6 +82,44 @@ class UnifiedWebhookControllerTest {
         verify(gitHubHandler).handleWebhook(eq(bot), eq("pull_request"), any(Map.class));
         verify(giteaHandler, never()).handleWebhook(any(), any());
         verify(bitbucketHandler, never()).handleWebhook(any(), any(), any());
+    }
+
+    @Test
+    void handleWebhook_githubBot_acceptsValidSignature() throws Exception {
+        Bot bot = createTestBot(RepositoryType.GITHUB);
+        String payload = "{\"action\":\"opened\",\"pull_request\":{\"number\":1}}";
+        when(botService.findByWebhookSecret("test-secret")).thenReturn(Optional.of(bot));
+        when(botService.getDecryptedWebhookSigningSecret(bot)).thenReturn("webhook-secret");
+        when(gitHubHandler.handleWebhook(eq(bot), eq("pull_request"), any())).thenReturn(ResponseEntity.ok("review triggered"));
+
+        mockMvc.perform(post("/api/webhook/test-secret")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("X-GitHub-Event", "pull_request")
+                        .header("X-Hub-Signature-256", "sha256=" + hmacSha256("webhook-secret", payload))
+                        .content(payload))
+                .andExpect(status().isOk())
+                .andExpect(content().string("review triggered"));
+
+        verify(gitHubHandler).handleWebhook(eq(bot), eq("pull_request"), any(Map.class));
+    }
+
+    @Test
+    void handleWebhook_githubBot_rejectsInvalidSignatureBeforeDispatch() throws Exception {
+        Bot bot = createTestBot(RepositoryType.GITHUB);
+        bot.setWebhookSigningSecret("encrypted-signing-secret");
+        when(botService.findByWebhookSecret("test-secret")).thenReturn(Optional.of(bot));
+        when(botService.getDecryptedWebhookSigningSecret(bot)).thenReturn("webhook-secret");
+
+        mockMvc.perform(post("/api/webhook/test-secret")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("X-GitHub-Event", "pull_request")
+                        .header("X-Hub-Signature-256", "sha256=invalid")
+                        .content("{\"action\":\"opened\",\"pull_request\":{\"number\":1}}"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(content().string("invalid signature"));
+
+        verify(gitHubHandler, never()).handleWebhook(any(), any(), any());
+        verify(botService, never()).incrementWebhookCallCount(bot);
     }
 
     @Test
@@ -192,5 +234,14 @@ class UnifiedWebhookControllerTest {
 
         return bot;
     }
-}
 
+    private static String hmacSha256(String secret, String body) {
+        try {
+            Mac mac = Mac.getInstance("HmacSHA256");
+            mac.init(new SecretKeySpec(secret.getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
+            return HexFormat.of().formatHex(mac.doFinal(body.getBytes(StandardCharsets.UTF_8)));
+        } catch (Exception e) {
+            throw new IllegalStateException(e);
+        }
+    }
+}

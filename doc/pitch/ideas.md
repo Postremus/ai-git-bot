@@ -1,22 +1,34 @@
-# Future PR workflow ideas
+# Future workflow ideas
 
-A brainstorm of additional `PrWorkflow` implementations that would
-plug into AI-Git-Bot's existing orchestrator
-(`PrWorkflowOrchestrator` + `PrWorkflowRegistry`) without architectural
-changes. Every idea here:
+A brainstorm of additional `PrWorkflow` and `IssueWorkflow`
+implementations that would plug into AI-Git-Bot's existing
+orchestrators (`PrWorkflowOrchestrator` + `PrWorkflowRegistry` on the
+PR side, `IssueWorkflowOrchestrator` + `IssueWorkflowRegistry` on the
+issue side) without architectural changes. Every idea here:
 
-- Implements `PrWorkflow` and registers itself via Spring DI.
+- Implements `PrWorkflow` (pull-request events) or `IssueWorkflow`
+  (issues created, assigned, or commented on) and registers itself via
+  Spring DI.
 - Reuses the existing `AgentLoop` + tool-whitelist infrastructure
   (`BotToolConfiguration`, `McpConfiguration`, `AgentToolRouter`).
 - Optionally consumes a `DeploymentTarget` if it needs a per-PR
-  preview.
+  preview (PR workflows only).
 - Persists its run via `PrWorkflowRun` / `PrWorkflowStep` and
-  contributes Micrometer meters out of the box.
+  contributes Micrometer meters out of the box (PR workflows; issue
+  workflows intentionally run without run/step persistence — see
+  `IssueWorkflowOrchestrator`).
 
 Use this list as a backlog — pick the one(s) that hurt most for the
 roles your team actually has, and convert them into user stories
 following the template in
 [`../doc/agentic-workflows/`](../agentic-workflows/README.md).
+
+**Deliberately excluded:** anything a one-line CI job, a GitHub
+Action, or a dedicated scanner already does better (secret scanning,
+licence allow-listing, IaC cost estimation, runtime compat matrices,
+stale-issue sweeps). The bot earns its keep where an LLM adds
+judgement — triage, explanation, drafting, follow-up PRs — not where
+a deterministic tool is the right answer.
 
 ---
 
@@ -27,8 +39,8 @@ following the template in
 | **Workflow key** | The lower-case-kebab `key()` returned by the workflow. |
 | **Category** | Reuses `PrWorkflowCategory` (`REVIEW` / `TESTING` / `SECURITY` / `DOCS` / `CUSTOM`). |
 | **Persona** | The role that should ask their team to enable the workflow. |
-| **Triggers** | The webhook events that should cause it to run. |
-| **Outputs** | What lands on the PR (comment, status check, artifact, follow-up PR, …). |
+| **Triggers** | The webhook events that should cause it to run (PR events for `PrWorkflow`; issue created / assigned / commented for `IssueWorkflow`). |
+| **Outputs** | What lands on the PR or issue (comment, status check, artifact, follow-up PR, labels, …). |
 | **Needs deployment target?** | `yes` if a per-PR preview is required. |
 | **New tools?** | Built-in tools that would have to ship in `ToolKind.PR_WORKFLOW` — or MCP tools the operator already has. |
 
@@ -76,7 +88,9 @@ branch and tags any test that fails non-deterministically.
   reproduction stats; optionally opens a follow-up issue assigned
   to the test owner.
 - **Why it matters:** Flakes destroy trust in CI faster than any
-  other class of bug.
+  other class of bug. Kept here (not a CI job) because the valuable
+  part is the LLM diagnosis of *why* the test is flaky and the
+  owner-routed follow-up issue — not the re-run loop itself.
 
 ### A4. `accessibility-audit`
 **Category:** `TESTING` · **Persona:** product designer / frontend lead · **Deployment target?** **yes (`STATIC` / `WEBHOOK` / …)**
@@ -116,7 +130,9 @@ inline image attachment.
 - **Outputs:** Side-by-side image grid in the PR comment; configurable
   pixel-diff threshold.
 - **Why it matters:** "It looks the same to me" is the worst kind of
-  review.
+  review. Kept here (Percy/Chromatic do the capture part) because the
+  differentiator is reusing the bot's deployment targets and having
+  the LLM *explain* whether a diff is intentional.
 
 ### A7. `seed-data-author`
 **Category:** `TESTING` · **Persona:** QA / backend dev · **Deployment target?** **yes (`MCP` recommended)**
@@ -149,21 +165,9 @@ upgrade path.
 - **Outputs:** Severity-grouped CVE table + suggested fix; optional
   follow-up PR via the coding agent.
 - **Why it matters:** The reason Renovate exists, but explained in
-  English instead of a diff. Pairs naturally with B6
-  (`fix-and-pr`).
+  English instead of a diff. Pairs naturally with `auto-fix-pr` (B4).
 
-### B2. `secret-leak-guard`
-**Category:** `SECURITY` · **Persona:** security lead · **Deployment target?** no
-
-Runs `trufflehog` / `gitleaks` on the diff (not the whole history —
-fast). Refuses the PR with a status check on a hit and posts an
-inline comment on the offending line.
-
-- **Triggers:** every PR.
-- **Outputs:** Inline review comment; `ai-bot/secrets` status check.
-- **Why it matters:** Secrets leak in seconds, get cached forever.
-
-### B3. `sast-triage`
+### B2. `sast-triage`
 **Category:** `SECURITY` · **Persona:** AppSec engineer · **Deployment target?** no
 
 Wraps the team's existing SAST output (Snyk Code, SonarQube,
@@ -177,7 +181,7 @@ each.
 - **Why it matters:** SAST tools find 100 things per PR. The bot
   gives the AppSec engineer the 3 that matter.
 
-### B4. `iac-policy-check`
+### B3. `iac-policy-check`
 **Category:** `SECURITY` · **Persona:** SRE / cloud-ops · **Deployment target?** no
 
 Runs `tfsec` / `checkov` / `kube-score` on Terraform / k8s manifests
@@ -187,20 +191,11 @@ fix. Optional `@bot fix-iac` slash command opens a follow-up PR.
 - **Triggers:** PR touching `**/*.tf`, `**/*.yaml` under `k8s/` etc.
 - **Outputs:** Inline comments + optional follow-up PR.
 - **Why it matters:** The "S3 bucket public read" class of incident.
+  Kept here (tfsec/checkov actions annotate PRs fine) because the
+  value is the plain-English explanation and the `@bot fix-iac`
+  repair loop, not the scan.
 
-### B5. `licence-policy`
-**Category:** `SECURITY` · **Persona:** legal / OSS PMO · **Deployment target?** no
-
-Diffs the SBOM against the project's allow-list (`MIT`, `Apache-2.0`,
-…) and refuses the PR if a copyleft licence sneaks in via a
-transitive dependency.
-
-- **Triggers:** PR touching dependency lock-files.
-- **Outputs:** Status check + inline comment naming the offending
-  package and its parent.
-- **Why it matters:** "Why is GPL-3.0 in our SaaS frontend?"
-
-### B6. `auto-fix-pr`
+### B4. `auto-fix-pr`
 **Category:** `SECURITY` (or `CUSTOM`) · **Persona:** maintainer · **Deployment target?** no
 
 When `dependency-cve-scan`, `iac-policy-check`, etc. flag a fix
@@ -305,6 +300,8 @@ issue tracker (via MCP) for likely matches.
 - **Triggers:** PR opened.
 - **Outputs:** Status check `ai-bot/issue-linked`, optional follow-up
   comment with candidate issue links.
+- **Why it matters:** A branch-protection rule can demand a linked
+  issue, but only the bot can *find the issue you forgot to link*.
 
 ### D2. `pr-summarizer`
 **Category:** `CUSTOM` · **Persona:** reviewer / EM · **Deployment target?** no
@@ -338,6 +335,8 @@ neither → assign to the on-call human.
 - **Outputs:** Reassignment + a one-line comment explaining the
   routing decision.
 - **Why it matters:** Saves the EM ~30 min/day of inbox triage.
+- **Status:** unblocked — this is now a plain `IssueWorkflow` on the
+  issue-created trigger (see Group I); no new plumbing required.
 
 ### D5. `i18n-coverage`
 **Category:** `CUSTOM` · **Persona:** localization lead · **Deployment target?** no
@@ -387,16 +386,7 @@ If the PR touches alerting rules (`alerts.yaml`) or autoscaling
 - **Triggers:** PR touching `alerts.*` / `hpa.*` / `pagerduty.*`.
 - **Outputs:** Inline comment + optional follow-up commit.
 
-### E3. `cost-impact`
-**Category:** `CUSTOM` · **Persona:** FinOps / SRE · **Deployment target?** no
-
-Runs `infracost` on Terraform diffs and posts the monthly delta as a
-PR comment with a category breakdown.
-
-- **Triggers:** PR touching `**/*.tf`.
-- **Outputs:** Cost-delta table; optional status check on threshold.
-
-### E4. `feature-flag-audit`
+### E3. `feature-flag-audit`
 **Category:** `CUSTOM` · **Persona:** product / platform lead · **Deployment target?** no
 
 Detects new or removed feature-flag references in the diff
@@ -407,7 +397,7 @@ current rollout status fetched via the relevant MCP server. Flags
 - **Triggers:** PR touching feature-flag SDK calls.
 - **Outputs:** Inline comment with flag rollout state.
 
-### E5. `dashboard-stale`
+### E4. `dashboard-stale`
 **Category:** `CUSTOM` · **Persona:** SRE · **Deployment target?** no
 
 When a PR renames or removes a Prometheus metric, the bot scans the
@@ -470,6 +460,9 @@ the corresponding CHANGELOG bump.
 - **Triggers:** scheduled cron + label `release-train`.
 - **Outputs:** Follow-up PR bumping `package.json` / `pom.xml` /
   `Cargo.toml`.
+- **Why it matters:** release-please can bump versions, but it can't
+  argue *why* a change is minor vs. major when the commit prefixes
+  lie — the LLM judgement is the point here.
 
 ### G2. `release-rehearsal`
 **Category:** `TESTING` · **Persona:** release manager · **Deployment target?** **yes**
@@ -480,16 +473,6 @@ environment (versioned, frozen). Outputs a release-readiness report.
 
 - **Triggers:** PR with label `release-candidate`.
 - **Outputs:** Release-readiness checklist comment + status check.
-
-### G3. `compat-matrix`
-**Category:** `TESTING` · **Persona:** library maintainer · **Deployment target?** no
-
-For libraries published to multiple runtimes, runs the test matrix
-(`Node 18/20/22`, `Python 3.10/3.11/3.12`, `Java 17/21`, …) on the
-diff branch and posts a compact PASS/FAIL grid.
-
-- **Triggers:** PR opened/synchronized.
-- **Outputs:** Markdown matrix table.
 
 ---
 
@@ -511,7 +494,7 @@ own `e2e-test` workflow.
 
 When a feature flag has been at 100 % for &gt; X days (consulted via
 the LaunchDarkly / Unleash MCP), the bot opens a clean-up PR removing
-the flag from the codebase. Pairs with `auto-fix-pr` (B6) machinery.
+the flag from the codebase. Pairs with `auto-fix-pr` (B4) machinery.
 
 ### H3. `dead-code-sweeper`
 **Category:** `CUSTOM` · **Persona:** maintainer · **Deployment target?** no
@@ -538,6 +521,122 @@ selection** so only the relevant `e2e-test` / `unit-test-author` /
 
 ---
 
+## Group I — Issue lifecycle workflows (`IssueWorkflow` SPI)
+
+New family enabled by the issue-side orchestrator: these run when an
+issue is **created or changed** (opened, assigned, commented on) and
+are resolved from the bot's issue-assigned `WorkflowConfiguration`
+(kind `ISSUE`) — the same configuration model the shipped
+`issue-coding` and `issue-writer` workflows already use. Outputs land
+on the issue itself (comments, labels, assignments) rather than on a
+PR; there is intentionally no run/step persistence on this side.
+
+### I1. `issue-triage`
+**Category:** `CUSTOM` · **Persona:** EM / PM / OSS maintainer · **Deployment target?** no
+
+Classifies every new issue (bug / feature / question / docs), applies
+the matching labels, estimates severity from the text, and posts a
+one-line triage comment. Vague reports get an immediate, *specific*
+clarifying question instead of sitting unanswered in the inbox.
+
+- **Triggers:** issue opened.
+- **Outputs:** Labels + triage comment ("looks like a bug in the
+  login flow — severity medium; needs repro steps").
+- **Why it matters:** First-response time is the metric every user
+  remembers, and nobody on the team wants to own it.
+
+### I2. `duplicate-detector`
+**Category:** `CUSTOM` · **Persona:** maintainer / support lead · **Deployment target?** no
+
+Searches open and recently closed issues for likely duplicates (LLM
+comparison over title + body, optionally embeddings) and comments
+with the top 3 candidates. If the author confirms with a 👍
+reaction, the bot closes the issue as duplicate and links the
+canonical one.
+
+- **Triggers:** issue opened/edited.
+- **Outputs:** Candidate-duplicate comment; close + link on
+  confirmation.
+- **Why it matters:** Duplicate triage is pure toil, and it scales
+  linearly with project popularity.
+
+### I3. `repro-checker`
+**Category:** `CUSTOM` · **Persona:** maintainer / QA · **Deployment target?** no
+
+Checks incoming bug reports against the project's issue template:
+version, environment, minimal repro, logs. Whatever is missing is
+requested in one targeted comment. When the author edits the issue
+or replies, the bot re-checks and removes the `needs-info` label
+once the report is complete.
+
+- **Triggers:** issue opened/edited + follow-up comments.
+- **Outputs:** `needs-info` label + specific questions; label removal
+  on completion.
+- **Why it matters:** The "which version? can you share logs?"
+  ping-pong wastes the first 48 hours of every bug report. This is
+  the issue-trigger feature in its purest form: re-evaluation on
+  every change.
+
+### I4. `issue-to-plan`
+**Category:** `CUSTOM` · **Persona:** tech lead / PM · **Deployment target?** no
+
+On demand (`@bot plan`) or via a `plan` label, reads a refined issue
+and drafts an implementation plan: affected modules, approach
+options, acceptance criteria, and a suggested split into sub-issues —
+posted as a comment, ready for the coding bot to pick up.
+
+- **Triggers:** label / slash command on an issue.
+- **Outputs:** Structured plan comment; optionally child issues via
+  the repository API.
+- **Why it matters:** The `issue-coding` / `issue-writer` workflows
+  are only as good as the brief they're given. This workflow writes
+  the brief.
+
+### I5. `support-answerer`
+**Category:** `CUSTOM` · **Persona:** maintainer / DX lead · **Deployment target?** no
+
+For question-type issues (classified by I1 or by label), the bot
+drafts an answer grounded in the repo's docs, README, and code —
+posted as a *suggested reply* a maintainer approves with a 👍
+reaction before it is marked as the answer.
+
+- **Triggers:** issue opened/edited with `question` label.
+- **Outputs:** Draft-answer comment; resolved label on approval.
+- **Why it matters:** Half of most trackers is questions already
+  answered in the docs. The bot reads the docs so the maintainer
+  doesn't have to.
+
+### I6. `security-intake-shield`
+**Category:** `SECURITY` · **Persona:** security lead · **Deployment target?** no
+
+Detects when a public issue reads like a vulnerability report
+(keywords, exploitable stack traces, "I can RCE…") and reacts within
+seconds: posts the private-disclosure policy, applies a `security`
+label, and optionally locks or limits the issue until a human has
+reviewed it.
+
+- **Triggers:** issue opened/edited.
+- **Outputs:** Label + policy comment; optional lock.
+- **Why it matters:** A zero-day shouldn't spend its first hours in
+  a public tracker. Speed is the entire feature — exactly what a
+  webhook-driven bot is for.
+
+### I7. `resolution-recycler`
+**Category:** `DOCS` · **Persona:** technical writer / maintainer · **Deployment target?** no
+
+When an issue is closed and the resolution lives in the comment
+thread (not in a PR), the bot drafts a FAQ / troubleshooting entry
+capturing the problem and the accepted fix, and proposes it as a
+patch to `doc/faq.md` or the troubleshooting guide.
+
+- **Triggers:** issue closed (with comments).
+- **Outputs:** Docs patch proposal in a follow-up comment or PR.
+- **Why it matters:** Solved issues are an unindexed knowledge base.
+  This turns each one into searchable documentation while the
+  context is still fresh.
+
+---
+
 ## How to prioritise
 
 A quick scoring matrix when picking which two or three to build next:
@@ -560,10 +659,13 @@ sprint.
 Every idea above gets — **without writing it again** — the following
 infrastructure:
 
-- Spring DI registration via `PrWorkflowRegistry`.
+- Spring DI registration via `PrWorkflowRegistry` /
+  `IssueWorkflowRegistry`.
 - Persisted lifecycle (`PrWorkflowRun` / `PrWorkflowStep`) with the
   `RUNNING → SUCCESS / FAILED / WAITING_DEPLOY / CANCELLED` state
-  machine and the cancel-on-resync semantics.
+  machine and the cancel-on-resync semantics (PR side; the issue
+  side is intentionally unpersisted and publishes
+  `issueassignment.*` lifecycle events instead).
 - Provider-native function calling and the `agent.use_legacy_tool_calling`
   fallback.
 - Per-bot tool whitelist (`BotToolConfiguration`).
@@ -581,7 +683,6 @@ infrastructure:
   `prworkflow.run_duration_seconds{workflow}`.
 
 Building a new `PrWorkflow` is, in most cases, **a single Java class
-plus a JSON-Schema for its params**. That is the design intent of the
-SPI — and the reason every bullet on this page is small enough to
-actually ship.
-
+plus a JSON-Schema for its params** — and an `IssueWorkflow` is even
+smaller. That is the design intent of both SPIs — and the reason
+every bullet on this page is small enough to actually ship.

@@ -223,7 +223,7 @@ Assign an PR to a bot and it can generate a Playwright test suite for the change
 
 ### Coding Agents
 
-Assign an issue to a coding bot and it can create an implementation pull request on your behalf.
+Assign an issue to a bot with the Coding Agent issue workflow and it can create an implementation pull request on your behalf.
 
 <details>
 <summary>📸 Screenshot: Issue implementation agent</summary>
@@ -239,8 +239,9 @@ Assign an issue to a coding bot and it can create an implementation pull request
 |-----------|----------|---------|
 | **[PR Review](doc/PR_WORKFLOWS_REVIEW.md)** | PR opened or review re-requested | Review comments and findings |
 | **[Interactive Q&A](doc/PR_WORKFLOWS_REVIEW.md)** | `@bot` mention in PR comments | Context-aware conversation |
-| **[Issue → Code](doc/CODING_AGENT.md)** | Issue assigned to coding bot | Pull request |
-| **[Issue → Better Issue](doc/WRITER_AGENT.md)** | Issue assigned to writer bot | Structured issue with acceptance criteria |
+| **[Issue → Code](doc/CODING_AGENT.md)** | Issue assigned to a bot with the Coding Agent issue workflow | Pull request |
+| **[Issue → Better Issue](doc/WRITER_AGENT.md)** | Issue assigned to a bot with the Writer Agent issue workflow | Structured issue with acceptance criteria |
+| **[Issue Workflows](doc/ISSUE_WORKFLOWS.md)** | Configurable per bot | Pluggable issue-assigned behavior, independent from PR workflows |
 | **[Unit Test Generation](doc/PR_WORKFLOWS_UNIT_TEST.md)** | PR opened or command triggered | Generated tests committed to branch |
 | **[Full-Stack QA](doc/PR_WORKFLOWS_E2E.md)** | PR opened | Playwright suite executed against preview environment |
 | **[README Sync](doc/PR_WORKFLOWS_README_SYNC.md)** | PR opened or command triggered | Documentation updated to match code changes |
@@ -326,7 +327,7 @@ Automatically review pull requests and provide:
 
 ### ✏️ Issue Refinement
 
-Assign a writer bot to an issue.
+Assign a bot with the Writer Agent issue workflow to an issue.
 
 The bot transforms rough requirements into structured engineering work items containing:
 
@@ -385,7 +386,7 @@ the patterns you configure. Runs on PR open or on
 ---
 ### 🤖 Issue → Pull Request
 
-Assign a coding bot to an issue.
+Assign a bot with the Coding Agent issue workflow to an issue.
 
 The bot:
 
@@ -405,6 +406,11 @@ For a quick local test, run AI-Git-Bot with a single Docker command using the bu
 ```bash
 docker run -p 8080:8080 tmseidel/ai-git-bot:latest
 ```
+
+The image is published as a multi-arch manifest for **`linux/amd64`** and
+**`linux/arm64`**, so the same command works on x86-64 servers, Apple Silicon,
+AWS Graviton and 64-bit Raspberry Pi. See
+[Architectures](doc/DEPLOYMENT.md#architectures) for details.
 
 Then:
 

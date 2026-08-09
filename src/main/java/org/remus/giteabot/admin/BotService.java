@@ -23,6 +23,7 @@ public class BotService {
 
     private final BotRepository botRepository;
     private final BotToolConfigurationRepository botToolConfigurationRepository;
+    private final EncryptionService encryptionService;
 
     @Transactional(readOnly = true)
     public List<Bot> findAll() {
@@ -40,11 +41,34 @@ public class BotService {
     }
 
     public Bot save(Bot bot) {
+        return save(bot, false);
+    }
+
+    /**
+     * Saves a bot, resolving the webhook signing secret from the form input.
+     *
+     * <p>The secret field is a one-way write: the stored value is never echoed
+     * back into the form. A blank field therefore means "keep the stored
+     * value", while {@code clearSigningSecret} requests explicit removal (the
+     * Clear button in the UI).</p>
+     */
+    public Bot save(Bot bot, boolean clearSigningSecret) {
         if (bot.getWebhookSecret() == null) {
             bot.setWebhookSecret(UUID.randomUUID().toString());
         }
-        if (bot.getBotType() == BotType.WRITER) {
-            bot.setAgentEnabled(false);
+        // Encrypt a newly provided webhook signing secret; keep the stored one
+        // when the form field is left blank on update (same pattern as the
+        // git integration token). The explicit Clear button overrides keeping.
+        String signingSecret = bot.getWebhookSigningSecret();
+        if (signingSecret != null && !signingSecret.isBlank()) {
+            bot.setWebhookSigningSecret(encryptionService.encrypt(signingSecret));
+        } else if (clearSigningSecret) {
+            bot.setWebhookSigningSecret(null);
+        } else if (bot.getId() != null) {
+            botRepository.findById(bot.getId())
+                    .ifPresent(existing -> bot.setWebhookSigningSecret(existing.getWebhookSigningSecret()));
+        } else {
+            bot.setWebhookSigningSecret(null);
         }
         if (bot.getToolConfiguration() == null) {
             // Defensive fallback for callers that bypass the BotController
@@ -65,6 +89,19 @@ public class BotService {
                             + "explicitly before saving the bot.");
         }
         return botRepository.save(bot);
+    }
+
+    /**
+     * Returns the bot's decrypted webhook signing secret, or {@code null} when
+     * none is configured (signature verification then stays disabled).
+     */
+    @Transactional(readOnly = true)
+    public String getDecryptedWebhookSigningSecret(Bot bot) {
+        String secret = bot.getWebhookSigningSecret();
+        if (secret == null || secret.isBlank()) {
+            return null;
+        }
+        return encryptionService.decrypt(secret);
     }
 
     public void deleteById(Long id) {

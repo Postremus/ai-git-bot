@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.remus.giteabot.prworkflow.config.DeploymentTarget;
 import org.remus.giteabot.prworkflow.config.DeploymentTargetService;
 import org.remus.giteabot.prworkflow.config.WorkflowConfiguration;
+import org.remus.giteabot.prworkflow.config.WorkflowConfigurationKind;
 import org.remus.giteabot.prworkflow.config.WorkflowConfigurationService;
 import org.remus.giteabot.systemsettings.BotToolConfiguration;
 import org.remus.giteabot.systemsettings.BotToolConfigurationService;
@@ -60,6 +61,8 @@ public class BotController {
         systemPromptService.findDefault().ifPresent(bot::setSystemPrompt);
         botToolConfigurationService.findDefault().ifPresent(bot::setToolConfiguration);
         workflowConfigurationService.findDefault().ifPresent(bot::setWorkflowConfiguration);
+        workflowConfigurationService.findDefault(WorkflowConfigurationKind.ISSUE)
+                .ifPresent(bot::setIssueWorkflowConfiguration);
         model.addAttribute("bot", bot);
         addFormAttributes(model);
         model.addAttribute("missingAiIntegration", aiIntegrationService.findAll().isEmpty());
@@ -89,7 +92,9 @@ public class BotController {
                         @RequestParam(required = false) Long mcpConfigurationId,
                         @RequestParam Long toolConfigurationId,
                         @RequestParam(required = false) Long workflowConfigurationId,
+                        @RequestParam(required = false) Long issueWorkflowConfigurationId,
                         @RequestParam(required = false) Long deploymentTargetId,
+                        @RequestParam(defaultValue = "false") boolean clearWebhookSigningSecret,
                         Model model,
                         RedirectAttributes redirectAttributes) {
         try {
@@ -113,6 +118,14 @@ public class BotController {
             } else {
                 workflowConfiguration = workflowConfigurationService.findDefault().orElse(null);
             }
+            WorkflowConfiguration issueWorkflowConfiguration;
+            if (issueWorkflowConfigurationId != null) {
+                issueWorkflowConfiguration = workflowConfigurationService.findById(issueWorkflowConfigurationId)
+                        .orElseThrow(() -> new IllegalArgumentException("Issue workflow configuration not found"));
+            } else {
+                issueWorkflowConfiguration = workflowConfigurationService
+                        .findDefault(WorkflowConfigurationKind.ISSUE).orElse(null);
+            }
 
             bot.setAiIntegration(aiIntegration);
             bot.setGitIntegration(gitIntegration);
@@ -120,13 +133,14 @@ public class BotController {
             bot.setMcpConfiguration(mcpConfiguration);
             bot.setToolConfiguration(toolConfiguration);
             bot.setWorkflowConfiguration(workflowConfiguration);
+            bot.setIssueWorkflowConfiguration(issueWorkflowConfiguration);
             DeploymentTarget deploymentTarget = null;
             if (deploymentTargetId != null) {
                 deploymentTarget = deploymentTargetService.findById(deploymentTargetId)
                         .orElseThrow(() -> new IllegalArgumentException("Deployment target not found"));
             }
             bot.setDeploymentTarget(deploymentTarget);
-            botService.save(bot);
+            botService.save(bot, clearWebhookSigningSecret);
             redirectAttributes.addFlashAttribute("success", "Bot saved successfully");
         } catch (Exception e) {
             log.error("Failed to save Bot", e);
@@ -148,9 +162,11 @@ public class BotController {
         model.addAttribute("systemPrompts", systemPrompts);
         model.addAttribute("mcpConfigurations", mcpConfigurationService.findAll());
         model.addAttribute("toolConfigurations", botToolConfigurationService.findAll());
-        model.addAttribute("workflowConfigurations", workflowConfigurationService.findAll());
+        model.addAttribute("workflowConfigurations",
+                workflowConfigurationService.findAll(WorkflowConfigurationKind.PR));
+        model.addAttribute("issueWorkflowConfigurations",
+                workflowConfigurationService.findAll(WorkflowConfigurationKind.ISSUE));
         model.addAttribute("deploymentTargets", deploymentTargetService.findAll());
-        model.addAttribute("botTypes", BotType.values());
         model.addAttribute("activeNav", "bots");
     }
 

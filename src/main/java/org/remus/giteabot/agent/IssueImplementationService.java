@@ -363,12 +363,9 @@ public class IssueImplementationService {
         Path workspaceDir = null;
 
         try {
-            try {
-                repositoryClient.addReaction(owner, repo, commentId, "eyes");
-            } catch (Exception e) {
-                log.warn("Failed to add reaction to comment #{}: {}", commentId, e.getMessage());
-            }
-
+            // The 👀 acknowledgment is owned by the webhook entry points
+            // (IssueWorkflowOrchestrator for issue comments, BotWebhookService
+            // for PR comments) so every issue workflow gets it uniformly.
             sessionService.setStatus(session, AgentSession.AgentSessionStatus.UPDATING);
 
             // Compact persisted history before starting a new agent run to prevent
