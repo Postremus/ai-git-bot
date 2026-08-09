@@ -92,6 +92,7 @@ public class McpToolSelectionService {
         }
 
         mcpSelectedToolRepository.deleteByMcpConfigurationId(mcpConfigurationId);
+        mcpSelectedToolRepository.flush();
         mcpSelectedToolRepository.saveAll(replacement);
     }
 
