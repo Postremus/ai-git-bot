@@ -14,11 +14,11 @@ This file provides a compact, LLM-friendly overview of AI-Git-Bot. It is intende
 
 ## One-sentence summary
 
-AI-Git-Bot is a self-hosted AI gateway that connects Git platforms with AI providers to perform reviewer-triggered pull-request reviews, interactive PR conversations, AI unit-test authoring, autonomous issue implementation, and technical-writing issue refinement.
+AI-Git-Bot is a self-hosted AI gateway that connects Git platforms with AI providers to perform reviewer-triggered pull-request reviews, interactive PR conversations, AI unit-test authoring, autonomous issue implementation, technical-writing issue refinement, i18n coverage, README sync, and signed outgoing webhook notifications.
 
 ## What the project does
 
-AI-Git-Bot receives webhooks from Git hosting platforms, fetches repository context and diffs through provider APIs, sends prompts to configured AI providers, and writes results back to the Git platform. It centralizes configuration, credentials, prompts, bot personas, sessions, and optional MCP server tool access in a single application.
+AI-Git-Bot receives webhooks from Git hosting platforms, fetches repository context and diffs through provider APIs, sends prompts to configured AI providers, and writes results back to the Git platform. It centralizes configuration, credentials, prompts, bot personas, sessions, optional MCP server tool access, per-bot tool whitelists, workflow audit trails, and outgoing webhook subscriptions in a single application.
 
 Supported Git platforms include:
 
@@ -42,46 +42,70 @@ Supported AI/provider styles include:
 1. Reviewer-triggered AI pull-request reviews
    - The bot reviews a PR when assigned or re-requested as a reviewer.
    - It splits large diffs into manageable chunks and retries when provider token limits are reached.
-   - It can post review comments back to the source Git platform.
+   - It posts review comments back to the source Git platform.
 
 2. Interactive PR conversations
    - Users can mention the bot in PR comments or inline review threads.
    - The bot answers with PR/session context and remembers conversation history.
 
-3. Coding agent
+3. Agentic PR Review
+   - Optional `agentic-review` workflow explores the surrounding codebase before reviewing.
+   - Can approve or request changes based on deeper context.
+
+4. Coding agent
    - A coding bot can be assigned to an issue.
    - It checks out the target repository, plans and implements changes, validates them, commits to a branch, pushes, and opens a pull request.
-   - Validation can use common build tools such as Maven, Gradle, npm, .NET, and similar project-local tooling.
+   - Validation can use common build tools such as Maven, Gradle, npm, .NET, Go, Cargo, Ruby, Make, GCC/G++, and Python.
 
-4. Technical writer agent
+5. Technical writer agent
    - A writer bot inspects vague or incomplete issues.
    - It asks clarifying questions when necessary.
    - It can create a linked implementation-ready issue with assumptions, acceptance criteria, and testable requirements.
    - It uses a read-only issue drafting workflow and does not modify repository files.
 
-5. AI unit-test author workflow
+6. AI unit-test author workflow
    - Bots can opt into the `unit-test-author` PR workflow.
    - It generates focused white-box unit tests for the PR diff, runs them with the repository's own test runner, and can commit them onto the PR branch.
-   - Supported runners include Maven, Gradle, npm, pytest, Go, Cargo, .NET, Bundle, Make, GCC, and G++.
+   - Supported runners include Maven, Gradle, npm, pytest, Go, Cargo, .NET, Bundle, Make, GCC, G++, and others.
    - It can also be triggered explicitly with `@bot generate-tests` or re-run with `@bot rerun-unit-tests`.
 
-6. Self-hosted AI governance
-   - Teams can run the gateway in their own infrastructure.
-   - Credentials are centrally configured and encrypted at rest.
-   - Local LLM setups via Ollama or llama.cpp help with compliance and data residency requirements.
+7. Full-Stack QA / E2E workflow
+   - The `e2e-test` workflow plans, authors, and runs Playwright specs against a per-PR preview deployment.
+   - Deployment targets support `STATIC`, `WEBHOOK`, `MCP`, and `CI_ACTION` strategies.
+   - Generated suites can be ephemeral, committed to the PR, offered as a follow-up PR, or promoted on merge.
+
+8. README Sync
+   - The `readme-sync` workflow detects when a PR makes README or other Markdown docs inaccurate and updates them within the configured scope.
+   - Triggered on PR open or `@bot regenerate-readme <instruction>`.
+
+9. i18n Coverage
+   - The `i18n-coverage` workflow compares locale files against a baseline locale, drafts missing translations, and removes stale keys.
+   - Supports `messages_*.properties` and `i18n/*.json` files; triggered on PR open or `@bot regenerate-i18n <instruction>`.
+
+10. Self-hosted AI governance and observability
+    - Teams can run the gateway in their own infrastructure.
+    - Credentials are centrally configured and encrypted at rest.
+    - Local LLM setups via Ollama or llama.cpp help with compliance and data residency requirements.
+    - Built-in Prometheus metrics expose reviews, findings, AI usage, errors, tool calls, and outgoing webhooks.
+    - Signed, durable outgoing webhooks push workflow-run and issue-assignment events to external systems.
 
 ## Important documentation map
 
 ### Overview and operation
 
 - `README.md`: main project overview, feature list, diagrams, screenshots, quick start, and documentation index.  
+- `doc/README.md`: documentation hub organized by audience (user, administrator, tester, developer).
 - `doc/USER_GUIDE.md`: web UI guide for creating AI integrations, Git integrations, bots, prompts, and operating workflows.
+- `doc/USING_THE_BOT.md`: end-user guide for interacting with bots from the Git platform.
 - `doc/PR_WORKFLOWS.md`: what each PR workflow solves and the shared setup (workflow configurations, triggers, running workflows).
 - `doc/PR_WORKFLOWS_REVIEW.md`: the default always-on AI code review workflow.
-- `doc/PR_WORKFLOWS_UNIT_TEST.md`: AI unit-test workflow, supported toolchains, slash commands, and write-safety model.
-- `doc/PR_WORKFLOWS_E2E.md`: Full-stack QA workflow (generated Playwright tests against a per-PR preview).
 - `doc/PR_WORKFLOWS_AGENTIC_REVIEW.md`: deeper agentic PR review workflow.
+- `doc/PR_WORKFLOWS_UNIT_TEST.md`: AI unit-test workflow, supported toolchains, slash commands, and write-safety model.
+- `doc/PR_WORKFLOWS_E2E.md`: full-stack QA workflow (generated Playwright tests against a per-PR preview).
 - `doc/PR_WORKFLOWS_README_SYNC.md`: keeps README and Markdown docs in sync with code changes.
+- `doc/PR_WORKFLOWS_I18N_COVERAGE.md`: drafts missing translations across locale files against a baseline locale.
+- `doc/PR_WORKFLOWS_CI_ACTIONS.md`: per-provider native CI dispatch recipes for the `CI_ACTION` deployment strategy.
+- `doc/PR_WORKFLOWS_WEBHOOK_RECIPES.md`: callback recipes for the `WEBHOOK` deployment strategy.
 - `doc/DEPLOYMENT.md`: Docker Compose deployment, configuration, environment variables, and production notes.     
 - `doc/LOCAL_DEVELOPMENT.md`: local build/test instructions and project structure.
 - `CHANGELOG.md`: release and unreleased change notes.
@@ -93,8 +117,13 @@ Supported AI/provider styles include:
 
 - `doc/ARCHITECTURE.md`: gateway architecture, request flow, persistence, and component diagrams.
 - `doc/AGENT.md`: coding agent and technical writer agent design, prompts, tools, and workflow details.
+- `doc/CODING_AGENT.md`: issue → pull request workflow details.
+- `doc/WRITER_AGENT.md`: issue → better issue workflow details.
+- `doc/ISSUE_WORKFLOWS.md`: issue-assigned workflow configurations that replace the legacy bot-type selector.
 - `doc/BOT_TOOL_CONFIGURATIONS.md`: per-bot built-in tool whitelists for agent execution.
-- `doc/MCP_SERVER_HANDLING.md`: MCP server JSON configuration, selected-tool persistence, bot details UI, and transparency.
+- `doc/MCP_SERVER_HANDLING.md`: MCP server JSON configuration, selected-tool persistence, bot details UI, transparency, and deployment strategy integration.
+- `doc/TOOL_CALLING.md`: troubleshooting native vs legacy tool-calling mode for agentic workflows.
+- `doc/CONTEXT_WINDOW_MANAGEMENT.md`: four-layer strategy for managing long agent-session context windows.
 
 ### Git platform setup
 
@@ -108,11 +137,31 @@ Supported AI/provider styles include:
 - `doc/OLLAMA.md`: using Ollama with AI-Git-Bot.
 - `doc/LLAMACPP.md`: using llama.cpp, including grammar support details.
 
+### Outgoing events and observability
+
+- `doc/OUTGOING_WEBHOOKS.md`: signed, durable, retried event notifications to external systems; endpoint configuration, delivery semantics, and retention.
+- `doc/DEPLOYMENT.md#metrics-prometheus`: built-in Prometheus metrics endpoint.
+
+### Migration guides
+
+- `doc/MIGRATION_1.0_TO_1.1.md`
+- `doc/MIGRATION_1.6_TO_1.7.md`
+- `doc/MIGRATION_1.12_TO_1.13.md`
+- `doc/MIGRATION_1.13_TO_1.14.md`
+- `doc/MIGRATION_1.14_TO_1.15.md`
+
 ### Prompt templates
 
 - `prompts/default.md`: default review prompt.
 - `prompts/agent.md`: agent prompt for autonomous work.
 - `prompts/local-llm.md`: local-LLM-oriented prompt.
+- `src/main/resources/prompts/default.md`, `local-llm.md`, `critic.md`: packaged prompt variants and critic/reflection prompt.
+- `src/main/resources/prompts/native/*.md`: native function-calling protocol prompts for E2E, issue, and writer agents.
+
+### System tests and recipes
+
+- `systemtest/README.md`: hands-on Docker Compose scenarios for features.
+- `systemtest/README-ci-action.md`, `README-mcp-deployment.md`, `README-suite-promotion.md`: walkthroughs for specific deployment strategies and suite promotion.
 
 ## Source tree guide
 
@@ -120,17 +169,35 @@ Typical source locations:
 
 - `src/main/java/org/remus/giteabot/admin/`: admin UI controllers/services/entities for bots, integrations, dashboard, and setup.
 - `src/main/java/org/remus/giteabot/ai/`: AI abstraction and provider implementations.
-- `src/main/java/org/remus/giteabot/agent/`: issue implementation agent, writer agent, prompt building, validation, and notification behavior.
+- `src/main/java/org/remus/giteabot/agent/`: agent tools, tool catalog, prompt building, validation, and notification behavior.
+- `src/main/java/org/remus/giteabot/aiusage/`: AI usage and error logging.
+- `src/main/java/org/remus/giteabot/audit/`: tamper-evident workflow audit events.
+- `src/main/java/org/remus/giteabot/bitbucket/`: Bitbucket integration support.
 - `src/main/java/org/remus/giteabot/config/`: application configuration and prompt-related services.
+- `src/main/java/org/remus/giteabot/eventhook/`: outgoing webhook endpoints, delivery, retry, and garbage collection.
 - `src/main/java/org/remus/giteabot/gitea/`: Gitea webhook/controller/API support.
 - `src/main/java/org/remus/giteabot/github/`: GitHub webhook/controller/API support.
-- `src/main/java/org/remus/giteabot/gitlab/`: GitLab integration support when present.
-- `src/main/java/org/remus/giteabot/bitbucket/`: Bitbucket integration support when present.
+- `src/main/java/org/remus/giteabot/gitlab/`: GitLab integration support.
+- `src/main/java/org/remus/giteabot/issueworkflow/`: issue-assigned workflow orchestration and coding/writer implementations.
+- `src/main/java/org/remus/giteabot/mcp/`: MCP server discovery, tool catalog, and integration.
+- `src/main/java/org/remus/giteabot/metrics/`: Prometheus metrics registration.
+- `src/main/java/org/remus/giteabot/prworkflow/`: PR workflow orchestration, registry, runs, and shared configuration.
+- `src/main/java/org/remus/giteabot/prworkflow/review/`: default PR review workflow.
+- `src/main/java/org/remus/giteabot/prworkflow/agentreview/`: agentic PR review workflow.
+- `src/main/java/org/remus/giteabot/prworkflow/unittest/`: unit-test-author workflow.
+- `src/main/java/org/remus/giteabot/prworkflow/e2e/`: full-stack QA / E2E workflow.
+- `src/main/java/org/remus/giteabot/prworkflow/readmesync/`: README sync workflow.
+- `src/main/java/org/remus/giteabot/prworkflow/i18n/`: i18n coverage workflow.
+- `src/main/java/org/remus/giteabot/prworkflow/deployment/`: deployment strategies (STATIC, WEBHOOK, MCP, CI_ACTION) and callback handling.
 - `src/main/java/org/remus/giteabot/repository/`: repository provider abstraction and metadata.
-- `src/main/java/org/remus/giteabot/review/`: pull-request review orchestration.
+- `src/main/java/org/remus/giteabot/review/`: legacy pull-request review orchestration (migrating into prworkflow).
 - `src/main/java/org/remus/giteabot/session/`: conversation/session persistence.
+- `src/main/java/org/remus/giteabot/systemsettings/`: system settings entities such as MCP configurations.
+- `src/main/java/org/remus/giteabot/util/`: shared utilities.
+- `src/main/java/org/remus/giteabot/webhook/`: incoming webhook controller and signature verification.
 - `src/main/resources/db/`: database migrations.
 - `src/main/resources/templates/`: Thymeleaf admin UI templates.
+- `src/main/resources/prompts/`: packaged prompt templates.
 - `src/test/java/`: unit and integration tests.
 - `systemtest/`: local integration/system-test compose files.
 
@@ -160,33 +227,45 @@ After startup, open `http://localhost:8080`, create the initial admin account, c
 
 ## Configuration concepts
 
-- AI integrations: provider type, API endpoint/key/model, and provider-specific options.
+- AI integrations: provider type, API endpoint/key/model, and provider-specific options including native vs legacy tool calling.
 - Git integrations: provider type, base URL, token, and repository access configuration.
-- Bots: connect an AI integration, a Git integration, bot type, prompts, workflow configuration, deployment target, and webhook behavior.
-- Workflow configurations: named whitelists of PR workflows (review, agentic review, E2E tests, AI unit tests) plus their persisted parameters.
-- System prompts: reusable persona/instruction templates for review, coding-agent, and writer-agent workflows.    
+- Bots: connect an AI integration, a Git integration, prompts, a mandatory tool configuration, an optional MCP configuration, PR and issue-assigned workflow configurations, a deployment target, and webhook behavior.
+- Workflow configurations: named whitelists of PR workflows (review, agentic review, E2E tests, AI unit tests, README sync, i18n coverage) and issue-assigned workflows (coding agent, writer agent), plus their persisted parameters.
+- System prompts: reusable persona/instruction templates for review, coding-agent, writer-agent, i18n coverage, and README sync workflows.    
+- Tool configurations: named whitelists of built-in agent tools assigned per bot.
 - MCP server configurations: JSON-based remote tool definitions plus a persisted per-configuration whitelist.     
 - User whitelist: optional per-bot allow-list of Git usernames allowed to trigger AI-spending interactions.
+- Deployment targets: per-PR preview deployment definitions using STATIC, WEBHOOK, MCP, or CI_ACTION strategies.
+- Outgoing webhook endpoints: scoped global/per-bot/per-repo subscriptions for signed event delivery.
 - Sessions: PR and conversation history used for follow-up replies.
+- Audit trail: hash-chained append-only log of workflow runs, tool calls, and review decisions.
 
 ## Security and privacy model
 
 - AI-Git-Bot is designed for self-hosting.
-- Secrets such as API keys and tokens are encrypted at rest.
+- Secrets such as API keys, tokens, webhook secrets, and outgoing webhook credentials are encrypted at rest with AES-256-GCM.
 - Local LLM providers can be used to keep code and prompts inside controlled infrastructure.
 - Per-bot user whitelists can restrict token-spending interactions to trusted Git usernames.
+- Per-bot tool configurations and MCP whitelists limit the tools an agent can invoke.
 - Webhook endpoints should be protected according to provider-specific setup guides.
+- Outgoing webhooks are signed (optional HMAC-SHA256) and support static authorization headers.
 - Report vulnerabilities according to `SECURITY.md`.
 
 ## Search and classification keywords
 
-AI-Git-Bot, AI Git Bot, ai-git-bot, self-hosted AI code review, AI pull request review, pull request automation, AI unit tests, unit-test-author, white-box test generation, code review bot, Git bot, Gitea bot, GitHub bot, GitLab bot, Bitbucket bot, GitHub Enterprise AI review, coding agent, issue implementation agent, autonomous software agent, technical writer agent, AI issue triage, issue refinement, acceptance criteria generator, repository automation, webhook gateway, AI gateway, LLM gateway, Anthropic Claude, OpenAI, Gemini, Google AI, Ollama, llama.cpp, local LLM, Model Context Protocol, MCP server, MCP tool whitelist, Java, Spring Boot, PostgreSQL, Docker Compose, encrypted secrets, on-premise AI, compliance-friendly AI automation.
+AI-Git-Bot, AI Git Bot, ai-git-bot, self-hosted AI code review, AI pull request review, pull request automation, AI unit tests, unit-test-author, white-box test generation, code review bot, Git bot, Gitea bot, GitHub bot, GitLab bot, Bitbucket bot, GitHub Enterprise AI review, coding agent, issue implementation agent, autonomous software agent, technical writer agent, AI issue triage, issue refinement, acceptance criteria generator, repository automation, webhook gateway, AI gateway, LLM gateway, Anthropic Claude, OpenAI, Gemini, Google AI, Ollama, llama.cpp, local LLM, Model Context Protocol, MCP server, MCP tool whitelist, Java, Spring Boot, PostgreSQL, Docker Compose, encrypted secrets, on-premise AI, compliance-friendly AI automation, Prometheus metrics, outgoing webhooks, audit trail, i18n coverage, README sync.
 
 ## Guidance for LLMs and code agents
 
 - Start with `README.md` for product context and user-facing behavior.
 - Use `doc/ARCHITECTURE.md` before changing request flows, persistence, webhook handling, or provider abstractions.
 - Use `doc/AGENT.md` before modifying coding-agent or writer-agent behavior.
+- Use `doc/ISSUE_WORKFLOWS.md` before changing issue-assigned workflow dispatch or bot-type migration logic.
+- Use `doc/PR_WORKFLOWS.md` and the per-workflow guides before changing PR workflow behavior.
+- Use `doc/TOOL_CALLING.md` when investigating agent tool-call failures or provider-specific function-calling quirks.
+- Use `doc/CONTEXT_WINDOW_MANAGEMENT.md` when working on long-session agent context compaction.
+- Use `doc/BOT_TOOL_CONFIGURATIONS.md` and `doc/MCP_SERVER_HANDLING.md` before changing tool exposure or MCP integration.
+- Use `doc/OUTGOING_WEBHOOKS.md` before changing event delivery or webhook payload behavior.
 - Use the platform-specific setup guides before changing webhook payload or token permission logic.
 - Use `pom.xml` for Java/Spring Boot dependency and build metadata.
 - Use `src/test/java/` to understand intended behavior and to add regression coverage.
@@ -198,7 +277,3 @@ AI-Git-Bot, AI Git Bot, ai-git-bot, self-hosted AI code review, AI pull request 
 - Docker Hub short description: `doc/DOCKERHUB_SHORT_DESCRIPTION.txt`
 - Docker publishing workflow: `.github/workflows/docker-publish.yml`
 - CI workflow: `.github/workflows/ci.yml`
-
-
-
-

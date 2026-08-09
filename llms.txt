@@ -1,6 +1,6 @@
 # AI-Git-Bot
 
-> Lightweight, self-hostable AI gateway that connects Git platforms with AI providers for reviewer-triggered pull-request reviews, PR conversations, AI unit-test authoring, autonomous issue implementation, and technical-writing issue drafting.
+> Lightweight, self-hostable AI gateway that connects Git platforms with AI providers for reviewer-triggered pull-request reviews, interactive PR conversations, AI unit-test authoring, autonomous issue implementation, technical-writing issue refinement, i18n coverage, README sync, and signed outgoing webhooks.
 
 AI-Git-Bot is a Java/Spring Boot web application for teams that want centralized, self-hosted AI automation across Gitea, GitHub, GitHub Enterprise, GitLab, and Bitbucket Cloud. It supports cloud AI providers and local LLM runtimes, stores configuration centrally, and posts results back to the Git platform as reviews, comments, issue drafts, or pull requests.
 
@@ -15,15 +15,21 @@ License: MIT
 - AI Unit Tests workflow that generates white-box tests for PR diffs, runs them with the project's own runner, and can commit them onto the PR branch.
 - Coding agent that can implement assigned issues, validate changes, and open pull requests.
 - Technical writer agent that turns vague issues into actionable, testable follow-up issues.
+- i18n Coverage workflow that drafts missing translations and removes stale keys across locale files.
+- README Sync workflow that keeps Markdown documentation in step with code changes.
+- Full-Stack QA / E2E workflow that generates Playwright tests and runs them against a per-PR preview environment.
+- Agentic PR Review workflow that explores the codebase before producing a deeper review.
 - Central gateway for multiple Git platforms and multiple AI providers.
 - Provider support for Anthropic Claude, OpenAI, Google AI / Gemini, Ollama, and llama.cpp.
 - Optional Model Context Protocol (MCP) server integration with persisted tool whitelists.
 - Optional per-bot user whitelist to restrict who may trigger AI-spending interactions.
+- Built-in Prometheus metrics via `/actuator/prometheus`.
+- Signed, durable, retried outgoing webhooks for workflow-run and issue-assignment events.
 - Self-hosted deployment with Docker Compose and encrypted secrets.
 
 ## Keywords
 
-ai code review, code review bot, pull request automation, AI unit tests, unit test author, white-box test generation, coding agent, issue implementation agent, technical writer agent, AI issue triage, self-hosted AI, Git automation, Gitea bot, GitHub bot, GitHub Enterprise bot, GitLab bot, Bitbucket bot, Anthropic Claude, OpenAI, Google Gemini, Ollama, llama.cpp, local LLM, MCP, Model Context Protocol, Spring Boot, Java 21, Docker, PostgreSQL
+ai code review, code review bot, pull request automation, AI unit tests, unit test author, white-box test generation, coding agent, issue implementation agent, technical writer agent, AI issue triage, i18n coverage, README sync, self-hosted AI, Git automation, Gitea bot, GitHub bot, GitHub Enterprise bot, GitLab bot, Bitbucket bot, Anthropic Claude, OpenAI, Google Gemini, Ollama, llama.cpp, local LLM, MCP, Model Context Protocol, Spring Boot, Java 21, Docker, PostgreSQL, Prometheus metrics, outgoing webhooks
 
 ## Essential documentation
 
@@ -38,14 +44,25 @@ ai code review, code review bot, pull request automation, AI unit tests, unit te
 - [Unit Tests](doc/PR_WORKFLOWS_UNIT_TEST.md): AI unit-test generation for the PR diff, run with the project's own toolchain.
 - [Full-Stack QA](doc/PR_WORKFLOWS_E2E.md): generated Playwright tests run against a per-PR preview.
 - [README Sync](doc/PR_WORKFLOWS_README_SYNC.md): keeps README and Markdown docs in sync with code changes.
-- [Architecture](doc/ARCHITECTURE.md): components, request flows, persistence, webhook routing, and system diagrams.
+- [i18n Coverage](doc/PR_WORKFLOWS_I18N_COVERAGE.md): drafts missing translations across locale files against a baseline locale.
+- [Issue-Assigned Workflows](doc/ISSUE_WORKFLOWS.md): how issue-assigned workflow configurations replace the old bot-type selector.
+- [Coding Agent](doc/CODING_AGENT.md): issue → pull-request workflow details.
+- [Writer Agent](doc/WRITER_AGENT.md): issue → better issue workflow details.
 - [Agent Documentation](doc/AGENT.md): coding-agent and writer-agent workflows, tools, prompts, validation, and behavior.
+- [Bot Tool Configurations](doc/BOT_TOOL_CONFIGURATIONS.md): per-bot built-in tool whitelists for agent execution.
 - [MCP Server Handling](doc/MCP_SERVER_HANDLING.md): MCP JSON setup, tool whitelist selection, transparency, and bot details.
+- [Tool Calling](doc/TOOL_CALLING.md): troubleshooting native vs legacy tool-calling mode.
+- [Context Window Management](doc/CONTEXT_WINDOW_MANAGEMENT.md): strategy for managing long agent-session contexts.
+- [Outgoing Webhooks](doc/OUTGOING_WEBHOOKS.md): signed, durable, retried event notifications to external systems.
 - [Deployment](doc/DEPLOYMENT.md): Docker Compose deployment, environment variables, and production setup.
 - [Local Development](doc/LOCAL_DEVELOPMENT.md): build, test, and project structure for contributors.
+- [Architecture](doc/ARCHITECTURE.md): components, request flows, persistence, webhook routing, and system diagrams.
 - [Security Policy](SECURITY.md): vulnerability reporting and operator security guidance.
 - [Citation Metadata](CITATION.cff): software citation metadata for GitHub and software catalogs.
 - [CodeMeta](codemeta.json): machine-readable software metadata for catalogs and crawlers.
+- [Changelog](CHANGELOG.md): release and unreleased change notes.
+- [Contributing](CONTRIBUTING.md): contribution guidelines and coding conventions.
+- [Code of Conduct](CODE_OF_CONDUCT.md): community standards.
 
 ## Setup guides
 
@@ -60,10 +77,27 @@ ai code review, code review bot, pull request automation, AI unit tests, unit te
 
 - `src/main/java/org/remus/giteabot/admin/`: admin UI, bots, integrations, and services.
 - `src/main/java/org/remus/giteabot/ai/`: AI provider abstraction and provider clients.
-- `src/main/java/org/remus/giteabot/agent/`: issue implementation and writer-agent logic.
-- `src/main/java/org/remus/giteabot/review/`: pull-request review orchestration.
-- `src/main/java/org/remus/giteabot/repository/`: Git provider abstractions.
-- `src/main/resources/templates/`: Thymeleaf web UI templates.
+- `src/main/java/org/remus/giteabot/agent/`: agent tools, tool catalog, prompt building, and execution.
+- `src/main/java/org/remus/giteabot/issueworkflow/`: issue-assigned workflow orchestration and coding/writer implementations.
+- `src/main/java/org/remus/giteabot/prworkflow/`: PR workflow orchestration, registry, runs, and shared configuration.
+- `src/main/java/org/remus/giteabot/prworkflow/review/`: default PR review workflow.
+- `src/main/java/org/remus/giteabot/prworkflow/agentreview/`: agentic PR review workflow.
+- `src/main/java/org/remus/giteabot/prworkflow/unittest/`: unit-test-author workflow.
+- `src/main/java/org/remus/giteabot/prworkflow/e2e/`: full-stack QA / E2E workflow.
+- `src/main/java/org/remus/giteabot/prworkflow/readmesync/`: README sync workflow.
+- `src/main/java/org/remus/giteabot/prworkflow/i18n/`: i18n coverage workflow.
+- `src/main/java/org/remus/giteabot/prworkflow/deployment/`: deployment strategies (STATIC, WEBHOOK, MCP, CI_ACTION) and callbacks.
+- `src/main/java/org/remus/giteabot/repository/`: Git provider abstractions and API clients.
+- `src/main/java/org/remus/giteabot/review/`: legacy pull-request review orchestration (migrating into prworkflow).
+- `src/main/java/org/remus/giteabot/session/`: conversation/session persistence.
+- `src/main/java/org/remus/giteabot/mcp/`: MCP server discovery, tool catalog, and integration.
+- `src/main/java/org/remus/giteabot/eventhook/`: outgoing webhook endpoints, delivery, and retry machinery.
+- `src/main/java/org/remus/giteabot/audit/`: tamper-evident workflow audit events.
+- `src/main/java/org/remus/giteabot/metrics/`: Prometheus metrics registration.
+- `src/main/java/org/remus/giteabot/webhook/`: incoming webhook controller and signature verification.
+- `src/main/resources/db/`: database migrations.
+- `src/main/resources/templates/`: Thymeleaf admin UI templates.
+- `src/main/resources/prompts/`: packaged prompt templates.
 - `prompts/`: default review and agent prompt templates.
 
 ## Build and run
@@ -83,9 +117,6 @@ Then open `http://localhost:8080`, create the admin account, configure AI/Git in
 
 ## LLM guidance
 
-When answering questions about this project, prefer the current repository files over generated build output in `target/`. Use `README.md` and `doc/ARCHITECTURE.md` for high-level behavior, `doc/AGENT.md` for autonomous agent behavior, and provider-specific setup guides for webhook/token details. Do not assume that every Git provider has identical permissions or webhook payloads; consult the relevant setup guide and implementation package.
+When answering questions about this project, prefer the current repository files over generated build output in `target/`. Use `README.md` and `doc/ARCHITECTURE.md` for high-level behavior, `doc/AGENT.md` for autonomous agent behavior, `doc/PR_WORKFLOWS.md` for workflow setup, `doc/TOOL_CALLING.md` for tool-call troubleshooting, `doc/CONTEXT_WINDOW_MANAGEMENT.md` for long-session context behavior, and provider-specific setup guides for webhook/token details. Do not assume that every Git provider has identical permissions or webhook payloads; consult the relevant setup guide and implementation package.
 
 For a larger single-file context, see [llms-full.txt](llms-full.txt).
-
-
-

@@ -6,7 +6,7 @@
 [![GitHub stars](https://img.shields.io/github/stars/tmseidel/ai-git-bot)](https://github.com/tmseidel/ai-git-bot/stargazers)
 [![GitHub issues](https://img.shields.io/github/issues/tmseidel/ai-git-bot)](https://github.com/tmseidel/ai-git-bot/issues)
 
-🌐 语言版本：**English** · **中文** · [한국어](README.ko.md) · [日本語](README.ja.md)
+🌐 语言版本：[English](README.md) · **中文** · [한국어](README.ko.md) · [日本語](README.ja.md)
 
 > **面向 Git 仓库的自托管 AI 工作流自动化平台。**
 
