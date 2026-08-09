@@ -6,7 +6,7 @@
 [![GitHub stars](https://img.shields.io/github/stars/tmseidel/ai-git-bot)](https://github.com/tmseidel/ai-git-bot/stargazers)
 [![GitHub issues](https://img.shields.io/github/issues/tmseidel/ai-git-bot)](https://github.com/tmseidel/ai-git-bot/issues)
 
-🌐 言語選択：**English** · [中文](README.zh.md) · [한국어](README.ko.md) · **日本語**
+🌐 言語選択：[English](README.md) · [中文](README.zh.md) · [한국어](README.ko.md) · **日本語**
 
 > **Git リポジトリのためのセルフホスト型 AI ワークフロー自動化プラットフォーム。**
 
