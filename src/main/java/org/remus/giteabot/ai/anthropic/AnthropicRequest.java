@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Builder;
 import lombok.Data;
 import java.util.List;
+
 /**
  * Anthropic Messages-API request payload.
  *
@@ -19,7 +20,7 @@ public class AnthropicRequest {
     private String model;
     @JsonProperty("max_tokens")
     private int maxTokens;
-    private String system;
+    private List<ContentBlock> system;
     private List<Message> messages;
     /** Tools advertised to the model (Step 6). */
     private List<Tool> tools;
@@ -58,6 +59,9 @@ public class AnthropicRequest {
          * "Extra inputs are not permitted" on {@code tool_result} blocks.
          */
         private Object content;
+
+        @JsonProperty("cache_control")
+        private CacheControl cacheControl;
     }
     @Data
     @Builder
@@ -68,4 +72,13 @@ public class AnthropicRequest {
         @JsonProperty("input_schema")
         private Object inputSchema;
     }
+
+    @Data
+    @Builder
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    public static class CacheControl {
+        @Builder.Default
+        private String type = "ephemeral";
+        private String ttl;
+}
 }
