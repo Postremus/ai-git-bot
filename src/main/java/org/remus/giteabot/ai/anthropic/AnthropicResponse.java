@@ -38,5 +38,9 @@ public class AnthropicResponse {
         private int inputTokens;
         @JsonProperty("output_tokens")
         private int outputTokens;
+        @JsonProperty("cache_creation_input_tokens")
+        private int cacheCreationInputTokens;
+        @JsonProperty("cache_read_input_tokens")
+        private int cacheReadInputTokens;
     }
 }

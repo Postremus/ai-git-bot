@@ -65,7 +65,7 @@ public class AnthropicAiClient extends AbstractAiClient {
         AnthropicRequest request = AnthropicRequest.builder()
                 .model(effectiveModel)
                 .maxTokens(maxTokens)
-                .system(systemPrompt)
+                .system(toSystemBlocks(systemPrompt))
                 .messages(List.of(
                         AnthropicRequest.Message.builder()
                                 .role("user")
@@ -88,7 +88,7 @@ public class AnthropicAiClient extends AbstractAiClient {
         AnthropicRequest request = AnthropicRequest.builder()
                 .model(effectiveModel)
                 .maxTokens(maxTokens)
-                .system(systemPrompt)
+                .system(toSystemBlocks(systemPrompt))
                 .messages(anthropicMessages)
                 .build();
 
@@ -145,7 +145,7 @@ public class AnthropicAiClient extends AbstractAiClient {
         AnthropicRequest request = AnthropicRequest.builder()
                 .model(effectiveModel)
                 .maxTokens(effectiveMaxTokens)
-                .system(systemPrompt)
+                .system(toSystemBlocks(systemPrompt))
                 .messages(messages)
                 .tools(toolPayloads)
                 .build();
@@ -448,6 +448,18 @@ public class AnthropicAiClient extends AbstractAiClient {
                 .body(request)
                 .retrieve()
                 .body(AnthropicResponse.class);
+    }
+
+    /**
+     * Wraps a plain system-prompt string as a single-element content-block
+     * list, the shape required since {@link AnthropicRequest#getSystem()}
+     * became cache-controllable (must be an array, not a bare string)
+     */
+    private List<AnthropicRequest.ContentBlock> toSystemBlocks(String systemPrompt) {
+        return List.of(AnthropicRequest.ContentBlock.builder()
+                .type("text")
+                .text(systemPrompt)
+                .build());
     }
 }
 
