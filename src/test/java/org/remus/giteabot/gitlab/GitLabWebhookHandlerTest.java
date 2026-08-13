@@ -193,6 +193,50 @@ class GitLabWebhookHandlerTest {
         verify(botWebhookService, never()).reviewPullRequest(any(), any());
     }
 
+    @Test
+    void issueOpenedWithRunOnIssueCreation_triggersAgent() {
+        bot.setRunOnIssueCreation(true);
+        ResponseEntity<String> response = handler.handleWebhook(bot, "Issue Hook",
+                issuePayload("open"));
+
+        assertEquals("agent triggered", response.getBody());
+        verify(botWebhookService).handleIssueCreated(eq(bot), any(WebhookPayload.class));
+        verify(botWebhookService, never()).handleIssueAssigned(any(), any());
+    }
+
+    @Test
+    void issueReopenedWithRunOnIssueCreation_triggersAgent() {
+        bot.setRunOnIssueCreation(true);
+        ResponseEntity<String> response = handler.handleWebhook(bot, "Issue Hook",
+                issuePayload("reopen"));
+
+        assertEquals("agent triggered", response.getBody());
+        verify(botWebhookService).handleIssueCreated(eq(bot), any(WebhookPayload.class));
+    }
+
+    @Test
+    void issueOpenedWithoutRunOnIssueCreation_isIgnored() {
+        ResponseEntity<String> response = handler.handleWebhook(bot, "Issue Hook",
+                issuePayload("open"));
+
+        assertEquals("ignored", response.getBody());
+        verify(botWebhookService, never()).handleIssueCreated(any(), any());
+    }
+
+    @Test
+    void issueUpdateWithAssigneeChange_stillRoutesToHandleIssueAssigned() {
+        Map<String, Object> changes = Map.of("assignees", Map.of(
+                "previous", List.of(),
+                "current", List.of(user("ai_bot"))));
+
+        ResponseEntity<String> response = handler.handleWebhook(bot, "Issue Hook",
+                issuePayload("update", changes));
+
+        assertEquals("agent triggered", response.getBody());
+        verify(botWebhookService).handleIssueAssigned(eq(bot), any(WebhookPayload.class));
+        verify(botWebhookService, never()).handleIssueCreated(any(), any());
+    }
+
     private Map<String, Object> mergeRequestPayload(String action, List<Map<String, Object>> reviewers,
                                                     Map<String, Object> changes) {
         Map<String, Object> attrs = new HashMap<>();
@@ -227,6 +271,24 @@ class GitLabWebhookHandlerTest {
                 "title", "Test MR",
                 "description", "Some changes",
                 "author", user("developer")));
+        return payload;
+    }
+
+    private Map<String, Object> issuePayload(String action) {
+        return issuePayload(action, null);
+    }
+
+    private Map<String, Object> issuePayload(String action, Map<String, Object> changes) {
+        Map<String, Object> attrs = new HashMap<>();
+        attrs.put("action", action);
+        attrs.put("iid", 1);
+        attrs.put("title", "Test Issue");
+        attrs.put("description", "Some issue body");
+
+        Map<String, Object> payload = basePayload(attrs);
+        if (changes != null) {
+            payload.put("changes", changes);
+        }
         return payload;
     }
 

@@ -327,6 +327,41 @@ class GiteaWebhookHandlerTest {
         verify(botWebhookService, never()).handleIssueAssigned(any(), any());
     }
 
+    // ---- Issue creation routing ----
+
+    @Test
+    void issueOpenedWithRunOnIssueCreation_routesToHandleIssueCreated() {
+        bot.setRunOnIssueCreation(true);
+        Map<String, Object> payload = buildIssueCreatedPayload("opened");
+
+        ResponseEntity<String> response = handler.handleWebhook(bot, payload);
+
+        assertEquals("agent triggered", response.getBody());
+        verify(botWebhookService).handleIssueCreated(eq(bot), any(WebhookPayload.class));
+        verify(botWebhookService, never()).handleIssueAssigned(any(), any());
+    }
+
+    @Test
+    void issueReopenedWithRunOnIssueCreation_routesToHandleIssueCreated() {
+        bot.setRunOnIssueCreation(true);
+        Map<String, Object> payload = buildIssueCreatedPayload("reopened");
+
+        ResponseEntity<String> response = handler.handleWebhook(bot, payload);
+
+        assertEquals("agent triggered", response.getBody());
+        verify(botWebhookService).handleIssueCreated(eq(bot), any(WebhookPayload.class));
+    }
+
+    @Test
+    void issueOpenedWithoutRunOnIssueCreation_isIgnored() {
+        Map<String, Object> payload = buildIssueCreatedPayload("opened");
+
+        ResponseEntity<String> response = handler.handleWebhook(bot, payload);
+
+        assertEquals("ignored", response.getBody());
+        verify(botWebhookService, never()).handleIssueCreated(any(), any());
+    }
+
     // ---- Payload builder helpers ----
 
     /**
@@ -381,6 +416,19 @@ class GiteaWebhookHandlerTest {
         payload.put("sender", ownerMap("tom"));
         payload.put("repository", repositoryMap());
         payload.put("pull_request", pullRequestMap(140L));
+        return payload;
+    }
+
+    /**
+     * Builds a raw webhook payload for an issue-created event.
+     */
+    private Map<String, Object> buildIssueCreatedPayload(String action) {
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("action", action);
+        payload.put("sender", ownerMap("tom"));
+        payload.put("repository", repositoryMap());
+        payload.put("issue", issueMap(42L, false));
+        // no top-level pull_request → plain issue creation
         return payload;
     }
 

@@ -88,6 +88,51 @@ class GitHubWebhookHandlerTest {
     }
 
     @Test
+    void issueOpenedWithRunOnIssueCreation_triggersAgent() {
+        bot.setRunOnIssueCreation(true);
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("action", "opened");
+        payload.put("sender", ownerMap("tom"));
+        payload.put("repository", repositoryMap());
+        payload.put("issue", issueMapWithAssigneeAndRef(42L, null, null));
+
+        ResponseEntity<String> response = handler.handleWebhook(bot, "issues", payload);
+
+        assertEquals("agent triggered", response.getBody());
+        verify(botWebhookService).handleIssueCreated(eq(bot), any(WebhookPayload.class));
+        verify(botWebhookService, never()).handleIssueAssigned(any(), any());
+    }
+
+    @Test
+    void issueReopenedWithRunOnIssueCreation_triggersAgent() {
+        bot.setRunOnIssueCreation(true);
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("action", "reopened");
+        payload.put("sender", ownerMap("tom"));
+        payload.put("repository", repositoryMap());
+        payload.put("issue", issueMapWithAssigneeAndRef(42L, null, null));
+
+        ResponseEntity<String> response = handler.handleWebhook(bot, "issues", payload);
+
+        assertEquals("agent triggered", response.getBody());
+        verify(botWebhookService).handleIssueCreated(eq(bot), any(WebhookPayload.class));
+    }
+
+    @Test
+    void issueOpenedWithoutRunOnIssueCreation_isIgnored() {
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("action", "opened");
+        payload.put("sender", ownerMap("tom"));
+        payload.put("repository", repositoryMap());
+        payload.put("issue", issueMapWithAssigneeAndRef(42L, null, null));
+
+        ResponseEntity<String> response = handler.handleWebhook(bot, "issues", payload);
+
+        assertEquals("ignored", response.getBody());
+        verify(botWebhookService, never()).handleIssueCreated(any(), any());
+    }
+
+    @Test
     void pullRequestOpenedWithBotReviewer_triggersReview() {
         Map<String, Object> payload = prPayload("opened", List.of(ownerMap("ai_bot")));
 
