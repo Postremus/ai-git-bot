@@ -10,7 +10,6 @@ import org.remus.giteabot.ai.StopReason;
 import org.remus.giteabot.ai.ToolCall;
 import org.remus.giteabot.ai.ToolDescriptor;
 import org.remus.giteabot.ai.ToolNameSanitizer;
-import org.remus.giteabot.ai.anthropic.AnthropicRequest.ContentBlock;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClient;
 import tools.jackson.databind.JsonNode;
@@ -452,18 +451,15 @@ public class AnthropicAiClient extends AbstractAiClient {
     }
 
     /**
-    * Wraps a plain system-prompt string as a single-element content-block
-    * list, the shape required since {@link AnthropicRequest#getSystem()}
-    * became cache-controllable (must be an array, not a bare string)
-    */
-
-    private List<AnthropicRequest.ContentBlock> toSystemBlocks(String systemPrompt){
+     * Wraps a plain system-prompt string as a single-element content-block
+     * list, the shape required since {@link AnthropicRequest#getSystem()}
+     * became cache-controllable (must be an array, not a bare string)
+     */
+    private List<AnthropicRequest.ContentBlock> toSystemBlocks(String systemPrompt) {
         return List.of(AnthropicRequest.ContentBlock.builder()
-        .type("text")
-        .text(systemPrompt)
-        .build()
-
-    );
+                .type("text")
+                .text(systemPrompt)
+                .build());
     }
 }
 
