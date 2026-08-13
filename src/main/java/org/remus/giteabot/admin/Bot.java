@@ -101,6 +101,9 @@ public class Bot {
     @Column(nullable = false)
     private boolean runOnPrUpdate = false;
 
+    @Column(nullable = false)
+    private boolean runOnIssueCreation = false;
+
     /**
      * @deprecated Issue behaviour is no longer dispatched via the bot type.
      * It is resolved from {@link #getIssueWorkflowConfiguration()} (see the

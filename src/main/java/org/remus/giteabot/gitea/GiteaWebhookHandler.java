@@ -277,6 +277,15 @@ public class GiteaWebhookHandler {
             return ResponseEntity.ok("ignored");
         }
 
+        // Handle issue creation events when the bot is configured to run on issue creation.
+        if (("opened".equals(payload.getAction()) || "reopened".equals(payload.getAction()))
+                && payload.getIssue() != null
+                && payload.getPullRequest() == null
+                && bot.isRunOnIssueCreation()) {
+            botWebhookService.handleIssueCreated(bot, payload);
+            return ResponseEntity.ok("agent triggered");
+        }
+
         // Handle PR events
         if (payload.getPullRequest() == null) {
             log.debug("Gitea webhook event is not related to a pull request, ignoring");

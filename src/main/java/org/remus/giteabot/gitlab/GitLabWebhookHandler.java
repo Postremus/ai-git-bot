@@ -215,7 +215,9 @@ public class GitLabWebhookHandler {
 
     /**
      * Handles GitLab Issue Hook events.
-     * Detects when the bot is assigned to an issue and triggers the agent.
+     * Detects when the bot is assigned to an issue and triggers the agent,
+     * and optionally triggers on issue creation when {@code runOnIssueCreation}
+     * is enabled.
      */
     @SuppressWarnings("unchecked")
     private ResponseEntity<String> handleIssueEvent(Bot bot, Map<String, Object> payload) {
@@ -225,6 +227,25 @@ public class GitLabWebhookHandler {
         }
 
         String gitlabAction = (String) attrs.get("action");
+
+        // Trigger on issue creation when the bot opts in.
+        if ("open".equals(gitlabAction) || "reopen".equals(gitlabAction)) {
+            if (!bot.isRunOnIssueCreation()) {
+                log.debug("Ignoring GitLab issue {} — runOnIssueCreation is disabled", gitlabAction);
+                return ResponseEntity.ok("ignored");
+            }
+            WebhookPayload webhookPayload = translateIssuePayload(payload, attrs);
+            webhookPayload.setAction("open".equals(gitlabAction) ? "opened" : "reopened");
+
+            if (botWebhookService.isBotUser(bot, webhookPayload)) {
+                log.debug("Ignoring GitLab issue {} event from bot's own user '{}'",
+                        gitlabAction, bot.getUsername());
+                return ResponseEntity.ok("ignored");
+            }
+
+            botWebhookService.handleIssueCreated(bot, webhookPayload);
+            return ResponseEntity.ok("agent triggered");
+        }
 
         // We're interested in "update" actions where assignees changed
         if (!"update".equals(gitlabAction)) {
