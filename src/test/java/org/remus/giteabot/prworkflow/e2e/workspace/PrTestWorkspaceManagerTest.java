@@ -95,4 +95,13 @@ class PrTestWorkspaceManagerTest {
         Path k6 = manager.allocate(4L, E2eTestFramework.K6);
         assertThat(k6.resolve("scenarios")).isDirectory();
     }
+
+    @Test
+    void rejectsRelativeConfiguredRoot() {
+        // A relative root would silently resolve against the process working
+        // directory; the manager must fail fast instead.
+        assertThatThrownBy(() -> new PrTestWorkspaceManager("relative/root", false))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("absolute");
+    }
 }

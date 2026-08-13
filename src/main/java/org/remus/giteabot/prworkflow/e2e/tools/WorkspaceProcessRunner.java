@@ -1,5 +1,6 @@
 package org.remus.giteabot.prworkflow.e2e.tools;
 
+import org.remus.giteabot.util.ProcessSupport;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
@@ -18,6 +19,10 @@ import java.util.concurrent.TimeUnit;
  * stream because most test frameworks (Playwright, pytest, k6) interleave
  * them, and the agent only needs a single textual blob to reason about the
  * outcome.</p>
+ *
+ * <p>Commands execute with a scrubbed environment (no application secrets)
+ * and the strongest local lifetime control available, see
+ * {@link ProcessSupport}.</p>
  */
 @Component
 public class WorkspaceProcessRunner {
@@ -36,8 +41,8 @@ public class WorkspaceProcessRunner {
      * stdout/stderr (UTF-8) up to {@code maxOutputBytes} bytes and waiting
      * at most {@code timeout} ms before terminating the process.
      *
-     * @param extraEnv environment overrides applied on top of the inherited
-     *                 JVM environment (later entries win). Use this to inject
+     * @param extraEnv environment overrides applied on top of the scrubbed
+     *                 environment (later entries win). Use this to inject
      *                 {@code BASE_URL} for browser tests or
      *                 {@code PLAYWRIGHT_JSON_OUTPUT_NAME} to route the report.
      */
@@ -48,47 +53,19 @@ public class WorkspaceProcessRunner {
         ProcessBuilder pb = new ProcessBuilder(command)
                 .directory(workspace.toFile())
                 .redirectErrorStream(true);
+        ProcessSupport.scrubEnvironment(pb);
         // Make sure CI-style envs do not break the runner with interactive prompts.
-        pb.environment().putIfAbsent("CI", "1");
+        pb.environment().put("CI", "1");
         if (extraEnv != null) {
             for (Map.Entry<String, String> e : extraEnv.entrySet()) {
                 if (e.getKey() == null || e.getValue() == null) continue;
                 pb.environment().put(e.getKey(), e.getValue());
             }
         }
-        Process process = pb.start();
-        StringBuilder out = new StringBuilder();
-        Thread reader = new Thread(() -> {
-            try (var in = process.getInputStream()) {
-                byte[] buf = new byte[8192];
-                int read;
-                while ((read = in.read(buf)) > 0) {
-                    if (out.length() >= maxOutputBytes) {
-                        // Drain so the child does not block on a full pipe.
-                        continue;
-                    }
-                    int spare = Math.max(0, maxOutputBytes - out.length());
-                    int take = Math.min(read, spare);
-                    if (take > 0) {
-                        out.append(new String(buf, 0, take, java.nio.charset.StandardCharsets.UTF_8));
-                    }
-                }
-            } catch (IOException ignored) {
-                // process exited
-            }
-        }, "pr-test-run-reader");
-        reader.setDaemon(true);
-        reader.start();
-
-        boolean finished = process.waitFor(timeoutMs, TimeUnit.MILLISECONDS);
-        if (!finished) {
-            process.destroyForcibly();
-            reader.join(2_000);
-            long durationMs = (System.nanoTime() - start) / 1_000_000L;
-            return new ProcessResult(-1, out.toString(), durationMs, true);
-        }
-        reader.join(2_000);
+        ProcessSupport.CommandResult result = ProcessSupport.run(pb, timeoutMs,
+                TimeUnit.MILLISECONDS, maxOutputBytes);
         long durationMs = (System.nanoTime() - start) / 1_000_000L;
-        return new ProcessResult(process.exitValue(), out.toString(), durationMs, false);
+        return new ProcessResult(result.finished() ? result.exitCode() : -1,
+                result.output(), durationMs, !result.finished());
     }
 }

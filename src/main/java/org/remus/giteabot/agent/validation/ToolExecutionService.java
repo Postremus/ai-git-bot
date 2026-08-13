@@ -4,12 +4,11 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.remus.giteabot.agent.tools.ToolCatalog;
 import org.remus.giteabot.config.AgentConfigProperties;
+import org.remus.giteabot.util.ProcessSupport;
 import org.springframework.stereotype.Service;
 
-import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
-import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
@@ -1283,34 +1282,26 @@ public class ToolExecutionService {
             ProcessBuilder pb = new ProcessBuilder(command);
             pb.directory(workspaceDir.toFile());
             pb.redirectErrorStream(true);
-
-            Process process = pb.start();
-
-            StringBuilder output = new StringBuilder();
-            try (BufferedReader reader = new BufferedReader(
-                    new InputStreamReader(process.getInputStream()))) {
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    output.append(line).append("\n");
-                }
-            }
+            // Untrusted repository code (package-manager scripts, test fixtures) must
+            // never see application secrets such as database or AI provider keys.
+            ProcessSupport.scrubEnvironment(pb);
 
             int timeoutSeconds = agentConfig.getValidation().getToolTimeoutSeconds();
-            boolean finished = process.waitFor(timeoutSeconds, TimeUnit.SECONDS);
+            ProcessSupport.CommandResult result = ProcessSupport.run(pb, timeoutSeconds,
+                    TimeUnit.SECONDS, MAX_TOOL_OUTPUT_CHARS + 1_000);
 
-            if (!finished) {
-                process.destroyForcibly();
+            if (!result.finished()) {
                 return new ToolResult(false, -1, "",
                         "Tool execution timed out after " + timeoutSeconds + " seconds");
             }
 
-            int exitCode = process.exitValue();
+            int exitCode = result.exitCode();
             boolean success = exitCode == 0;
 
             log.info("Tool {} with exit code {}",
                     success ? "succeeded" : "failed", exitCode);
 
-            return new ToolResult(success, exitCode, truncateOutput(output.toString()), "");
+            return new ToolResult(success, exitCode, truncateOutput(result.output()), "");
 
         } catch (IOException e) {
             log.error("Failed to execute tool: {}", e.getMessage());
