@@ -4,6 +4,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
+import org.mockito.ArgumentCaptor;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.remus.giteabot.admin.Bot;
 import org.remus.giteabot.admin.BotWebhookService;
@@ -235,6 +236,28 @@ class GitLabWebhookHandlerTest {
         assertEquals("agent triggered", response.getBody());
         verify(botWebhookService).handleIssueAssigned(eq(bot), any(WebhookPayload.class));
         verify(botWebhookService, never()).handleIssueCreated(any(), any());
+    }
+
+    @Test
+    void issueOpenedTranslatesActionToOpened() {
+        bot.setRunOnIssueCreation(true);
+
+        handler.handleWebhook(bot, "Issue Hook", issuePayload("open"));
+
+        ArgumentCaptor<WebhookPayload> captor = ArgumentCaptor.forClass(WebhookPayload.class);
+        verify(botWebhookService).handleIssueCreated(eq(bot), captor.capture());
+        assertEquals("opened", captor.getValue().getAction());
+    }
+
+    @Test
+    void issueReopenedTranslatesActionToReopened() {
+        bot.setRunOnIssueCreation(true);
+
+        handler.handleWebhook(bot, "Issue Hook", issuePayload("reopen"));
+
+        ArgumentCaptor<WebhookPayload> captor = ArgumentCaptor.forClass(WebhookPayload.class);
+        verify(botWebhookService).handleIssueCreated(eq(bot), captor.capture());
+        assertEquals("reopened", captor.getValue().getAction());
     }
 
     private Map<String, Object> mergeRequestPayload(String action, List<Map<String, Object>> reviewers,

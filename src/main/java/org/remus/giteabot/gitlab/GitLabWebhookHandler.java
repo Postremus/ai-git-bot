@@ -235,7 +235,7 @@ public class GitLabWebhookHandler {
                 return ResponseEntity.ok("ignored");
             }
             WebhookPayload webhookPayload = translateIssuePayload(payload, attrs);
-            webhookPayload.setAction("opened".equals(gitlabAction) ? "opened" : "reopened");
+            webhookPayload.setAction("open".equals(gitlabAction) ? "opened" : "reopened");
 
             if (botWebhookService.isBotUser(bot, webhookPayload)) {
                 log.debug("Ignoring GitLab issue {} event from bot's own user '{}'",
