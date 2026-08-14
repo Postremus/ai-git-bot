@@ -86,5 +86,44 @@ class GiteaApiClientTest {
 
         server.verify();
     }
+
+    @Test
+    void assignIssue_patchesAssigneesAndVerifiesAssignment() {
+        RestClient.Builder builder = RestClient.builder().baseUrl("https://gitea.example.com");
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        GiteaApiClient client = new GiteaApiClient(builder.build(), CREDS);
+
+        server.expect(requestTo("https://gitea.example.com/api/v1/repos/owner/repo/issues/42"))
+                .andExpect(method(HttpMethod.PATCH))
+                .andExpect(jsonPath("$.assignees[0]").value("alice"))
+                .andRespond(withSuccess());
+        server.expect(requestTo("https://gitea.example.com/api/v1/repos/owner/repo/issues/42"))
+                .andExpect(method(HttpMethod.GET))
+                .andRespond(withSuccess("{\"number\":42,\"assignees\":[{\"login\":\"alice\"}]}",
+                        MediaType.APPLICATION_JSON));
+
+        client.assignIssue("owner", "repo", 42L, "alice");
+
+        server.verify();
+    }
+
+    @Test
+    void assignIssue_throwsWhenGiteaSilentlyDropsAssignee() {
+        RestClient.Builder builder = RestClient.builder().baseUrl("https://gitea.example.com");
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        GiteaApiClient client = new GiteaApiClient(builder.build(), CREDS);
+
+        server.expect(requestTo("https://gitea.example.com/api/v1/repos/owner/repo/issues/42"))
+                .andExpect(method(HttpMethod.PATCH))
+                .andRespond(withSuccess());
+        server.expect(requestTo("https://gitea.example.com/api/v1/repos/owner/repo/issues/42"))
+                .andExpect(method(HttpMethod.GET))
+                .andRespond(withSuccess("{\"number\":42,\"assignees\":[]}", MediaType.APPLICATION_JSON));
+
+        assertThrows(IllegalArgumentException.class,
+                () -> client.assignIssue("owner", "repo", 42L, "ghost"));
+
+        server.verify();
+    }
 }
 

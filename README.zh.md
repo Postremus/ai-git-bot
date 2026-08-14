@@ -13,6 +13,7 @@
 - 🔍 审查拉取请求
 - 🧪 生成测试
 - ✏️ 改进 issue
+- 🧭 分类并分派新 issue
 - 🤖 将 issue 转化为拉取请求
 - 🎬 创建和运行 E2E 测试
 - 📝 让文档与代码保持同步
@@ -235,6 +236,7 @@ Bot 直接在线程中回答，并保持对话上下文。
 | **[交互式问答](doc/PR_WORKFLOWS_REVIEW.md)** | PR 评论中的 `@bot` 提及 | 上下文感知对话 |
 | **[Issue → 代码](doc/CODING_AGENT.md)** | Issue 分配给配置了编码代理 issue 工作流的 bot | 拉取请求 |
 | **[Issue → 改进](doc/WRITER_AGENT.md)** | Issue 分配给配置了写作代理 issue 工作流的 bot | 带验收标准的结构化 issue |
+| **[Issue → 合适的负责人](doc/ISSUE_TRIAGE.md)** | Issue 打开或分配给配置了分类分派 issue 工作流的 bot | 分派理由评论和 issue 分派 |
 | **[Issue 工作流](doc/ISSUE_WORKFLOWS.md)** | 每个 bot 独立配置 | 可插拔的 issue 分派行为，独立于 PR 工作流 |
 | **[单元测试生成](doc/PR_WORKFLOWS_UNIT_TEST.md)** | PR 打开或命令触发 | 提交到分支的生成测试 |
 | **[全栈 QA](doc/PR_WORKFLOWS_E2E.md)** | PR 打开 | 在预览环境中执行的 Playwright 套件 |
@@ -316,6 +318,19 @@ AI-Git-Bot 帮助团队自动化代码周围的工作。
 - 内联评论
 - 建议改进
 - 后续讨论
+
+---
+
+### 🧭 Issue 分类与分派
+
+打开一个 issue（或将其分配给配置了分类分派 issue 工作流的 bot），bot 会决定由谁负责。
+
+通过可编辑的分派提示词，bot 会：
+
+1. 阅读 issue
+2. 从你配置的账号中选择唯一的负责人 —— 人员、bot 或 `none`
+3. 将分派理由发布为评论
+4. 分派 issue（`none` 时保持未分派）
 
 ---
 

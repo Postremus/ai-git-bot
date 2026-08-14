@@ -56,6 +56,7 @@ Cloud providers (Anthropic, OpenAI, Google AI / Gemini) only need an API key —
 | [Full-Stack QA](PR_WORKFLOWS_E2E.md) | Generated Playwright tests run against a per-PR preview |
 | [README Sync](PR_WORKFLOWS_README_SYNC.md) | Keeps README and Markdown docs in sync with code changes |
 | [i18n Coverage](PR_WORKFLOWS_I18N_COVERAGE.md) | Drafts missing translations across locale files against a baseline locale |
+| [Issue Triage](ISSUE_TRIAGE.md) | Routes new issues to the right assignee (person, bot, or `none`) with an editable prompt |
 
 > Preview/execution environments, MCP servers, and tool-calling are being
 > reworked and are intentionally not covered in the workflow guides above.

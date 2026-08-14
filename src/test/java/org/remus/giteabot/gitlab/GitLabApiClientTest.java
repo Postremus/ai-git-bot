@@ -13,6 +13,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.springframework.test.web.client.match.MockRestRequestMatchers.jsonPath;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
@@ -153,5 +154,40 @@ class GitLabApiClientTest {
 
         server.verify();
         assertEquals(42L, issueNumber);
+    }
+
+    @Test
+    void assignIssue_resolvesUserThenUpdatesIssue() {
+        RestClient.Builder builder = RestClient.builder().baseUrl("https://gitlab.example.com");
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        GitLabApiClient client = new GitLabApiClient(builder.build(), CREDS);
+
+        server.expect(requestTo("https://gitlab.example.com/api/v4/users?username=alice"))
+                .andExpect(method(HttpMethod.GET))
+                .andRespond(withSuccess("[{\"id\":7,\"username\":\"alice\"}]", MediaType.APPLICATION_JSON));
+        server.expect(requestTo("https://gitlab.example.com/api/v4/projects/owner%2Frepo/issues/42"))
+                .andExpect(method(HttpMethod.PUT))
+                .andExpect(jsonPath("$.assignee_ids[0]").value(7))
+                .andRespond(withSuccess("{\"iid\":42}", MediaType.APPLICATION_JSON));
+
+        client.assignIssue("owner", "repo", 42L, "alice");
+
+        server.verify();
+    }
+
+    @Test
+    void assignIssue_unknownUserThrowsWithoutUpdatingIssue() {
+        RestClient.Builder builder = RestClient.builder().baseUrl("https://gitlab.example.com");
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        GitLabApiClient client = new GitLabApiClient(builder.build(), CREDS);
+
+        server.expect(requestTo("https://gitlab.example.com/api/v4/users?username=ghost"))
+                .andExpect(method(HttpMethod.GET))
+                .andRespond(withSuccess("[]", MediaType.APPLICATION_JSON));
+
+        assertThrows(IllegalArgumentException.class,
+                () -> client.assignIssue("owner", "repo", 42L, "ghost"));
+
+        server.verify();
     }
 }
