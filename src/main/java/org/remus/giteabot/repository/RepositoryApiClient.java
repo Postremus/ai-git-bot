@@ -157,6 +157,19 @@ public interface RepositoryApiClient {
     }
 
     /**
+     * Assigns an issue to the given account.
+     * <p>
+     * The default implementation throws {@link UnsupportedOperationException};
+     * providers that support issue assignment override it. Implementations
+     * throw {@link IllegalArgumentException} when the account does not exist
+     * or is not assignable on the target repository, and the usual HTTP
+     * client exceptions for provider/permission failures.
+     */
+    default void assignIssue(String owner, String repo, Long issueNumber, String assignee) {
+        throw new UnsupportedOperationException("Issue assignment is not supported by this repository provider");
+    }
+
+    /**
      * Fetches the full pull-request payload (head / base refs, SHAs, title, …)
      * from the provider. Used to "hydrate" webhook payloads that lack the
      * pull-request object — most notably GitHub {@code issue_comment} events

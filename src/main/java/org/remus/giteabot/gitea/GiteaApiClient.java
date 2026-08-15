@@ -230,6 +230,36 @@ public class GiteaApiClient implements RepositoryApiClient {
     }
 
     @Override
+    public void assignIssue(String owner, String repo, Long issueNumber, String assignee) {
+        log.info("Assigning issue #{} in {}/{} to '{}'", issueNumber, owner, repo, assignee);
+        giteaRestClient.patch()
+                .uri("/api/v1/repos/{owner}/{repo}/issues/{index}", owner, repo, issueNumber)
+                .body(new EditIssueAssigneesRequest(List.of(assignee)))
+                .retrieve()
+                .toBodilessEntity();
+        // Gitea's EditIssue silently drops unknown or non-assignable usernames,
+        // so verify the assignment actually took effect.
+        Map<String, Object> issue = giteaRestClient.get()
+                .uri("/api/v1/repos/{owner}/{repo}/issues/{index}", owner, repo, issueNumber)
+                .retrieve()
+                .body(new ParameterizedTypeReference<>() {});
+        boolean assigned = issue != null
+                && issue.get("assignees") instanceof List<?> assignees
+                && assignees.stream()
+                        .filter(Map.class::isInstance)
+                        .map(Map.class::cast)
+                        .map(a -> a.get("login"))
+                        .filter(String.class::isInstance)
+                        .map(String.class::cast)
+                        .anyMatch(login -> login.equalsIgnoreCase(assignee));
+        if (!assigned) {
+            throw new IllegalArgumentException(
+                    "User '" + assignee + "' is not assignable on " + owner + "/" + repo);
+        }
+        log.info("Issue #{} assigned to '{}'", issueNumber, assignee);
+    }
+
+    @Override
     public void addReaction(String owner, String repo, Long commentId, String reaction) {
         log.info("Adding '{}' reaction to comment #{} in {}/{}", reaction, commentId, owner, repo);
         giteaRestClient.post()
@@ -575,4 +605,5 @@ public class GiteaApiClient implements RepositoryApiClient {
     record UpdateFileRequest(String content, String message, String branch, String sha) {}
     record CreatePullRequest(String title, String body, String head, String base) {}
     record CreateIssue(String title, String body) {}
+    record EditIssueAssigneesRequest(List<String> assignees) {}
 }

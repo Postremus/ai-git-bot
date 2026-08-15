@@ -144,6 +144,18 @@ public class GitHubApiClient implements RepositoryApiClient {
     }
 
     @Override
+    public void assignIssue(String owner, String repo, Long issueNumber, String assignee) {
+        log.info("Assigning issue #{} in {}/{} to '{}'", issueNumber, owner, repo, assignee);
+        // GitHub rejects unknown or non-collaborator assignees with 422.
+        restClient.post()
+                .uri("/repos/{owner}/{repo}/issues/{issue_number}/assignees", owner, repo, issueNumber)
+                .body(new AssigneesRequest(List.of(assignee)))
+                .retrieve()
+                .toBodilessEntity();
+        log.info("Issue #{} assigned to '{}'", issueNumber, assignee);
+    }
+
+    @Override
     public void addReaction(String owner, String repo, Long commentId, String reaction) {
         log.info("Adding '{}' reaction to comment #{} in {}/{}", reaction, commentId, owner, repo);
         restClient.post()
@@ -585,5 +597,6 @@ public class GitHubApiClient implements RepositoryApiClient {
     record InlineReviewRequest(String body, String event, List<InlineReviewComment> comments) {}
     record InlineReviewComment(String body, String path, int line) {}
     record CreatePullRequest(String title, String body, String head, String base) {}
+    record AssigneesRequest(List<String> assignees) {}
     record CreateIssue(String title, String body) {}
 }

@@ -17,17 +17,20 @@ behavior no longer means adding a new hardcoded bot category.
 
 ---
 
-## The two built-in workflows
+## The built-in workflows
 
 | Key | Display name | What it does | Replaces |
 |---|---|---|---|
 | `issue-coding` | Coding Agent | Implements the assigned issue (workspace, branch, validation, pull request) and continues on follow-up comments. | former **Coding bot** |
 | `issue-writer` | Writer Agent | Refines the assigned issue into a structured, testable work item and answers follow-up questions in comments. | former **Writer bot** |
+| `issue-triage` | Issue Triage | Routes a new or newly assigned issue to the right assignee (person, bot, or `none`) using an editable prompt, posts the routing reason as a comment, and performs the assignment. Never implements the issue. | — |
 
-Both workflows are seeded by Flyway migration `V39` as two ready-made
-configurations: **Issue: Coding Agent** (the ISSUE-kind default) and
-**Issue: Writer Agent**. See [Coding Agent](CODING_AGENT.md) and
-[Writer Agent](WRITER_AGENT.md) for the behavior details.
+The coding and writer workflows are seeded by Flyway migration `V39` as two
+ready-made configurations: **Issue: Coding Agent** (the ISSUE-kind default)
+and **Issue: Writer Agent**; `V42` adds the ready-made, non-default
+**Issue: Triage** configuration. See [Coding Agent](CODING_AGENT.md),
+[Writer Agent](WRITER_AGENT.md), and [Issue Triage](ISSUE_TRIAGE.md) for the
+behavior details.
 
 ## Configuring a bot
 

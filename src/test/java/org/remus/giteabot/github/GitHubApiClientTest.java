@@ -13,6 +13,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.springframework.test.web.client.match.MockRestRequestMatchers.content;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.jsonPath;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
@@ -108,6 +109,23 @@ class GitHubApiClientTest {
                 .andRespond(withSuccess());
 
         client.postReview("owner", "repo", 7L, "Just a comment", PostReviewAction.NONE);
+
+        server.verify();
+    }
+
+    @Test
+    void assignIssue_postsAssignees() {
+        RestClient.Builder builder = RestClient.builder().baseUrl("https://api.github.com");
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        GitHubApiClient client = new GitHubApiClient(builder.build(), CREDS);
+
+        server.expect(requestTo("https://api.github.com/repos/owner/repo/issues/42/assignees"))
+                .andExpect(method(HttpMethod.POST))
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.assignees[0]").value("alice"))
+                .andRespond(withSuccess("{\"number\":42}", MediaType.APPLICATION_JSON));
+
+        client.assignIssue("owner", "repo", 42L, "alice");
 
         server.verify();
     }
