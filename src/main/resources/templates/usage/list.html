@@ -80,7 +80,7 @@
                                 <table class="table table-hover align-middle mb-0">
                                     <thead class="table-group-divider">
                                     <tr>
-                                        <th th:each="col : ${ {'timestamp', 'aiIntegrationName', 'sessionId', 'inputTokens', 'outputTokens'} }">
+                                        <th th:each="col : ${ {'timestamp', 'aiIntegrationName', 'sessionId', 'inputTokens', 'outputTokens', 'cacheCreationInputTokens', 'cacheReadInputTokens'} }">
                                             <a class="sort-link"
                                                th:href="@{/usage(from=${from}, to=${to}, usagePage=0,
                                                           usageSort=${col},
@@ -89,7 +89,10 @@
                                                 <span th:text="${col == 'timestamp' ? 'Timestamp'
                                                         : (col == 'aiIntegrationName' ? 'AI-Integration'
                                                         : (col == 'sessionId' ? 'Session-ID'
-                                                        : (col == 'inputTokens' ? 'Input tokens' : 'Output tokens')))}">Column</span>
+                                                        : (col == 'inputTokens' ? 'Input tokens'
+                                                        : (col == 'outputTokens' ? 'Output tokens'
+                                                        : (col == 'cacheCreationInputTokens' ? 'Cache write'
+                                                        : 'Cache read')))))}">Column</span>
                                                 <i th:if="${usageSort == col}"
                                                    th:class="${usageDir == 'asc'} ? 'bi bi-caret-up-fill' : 'bi bi-caret-down-fill'"></i>
                                             </a>
@@ -103,6 +106,8 @@
                                         <td><code th:text="${entry.sessionId != null ? entry.sessionId : '—'}">session</code></td>
                                         <td th:text="${entry.inputTokens}">0</td>
                                         <td th:text="${entry.outputTokens}">0</td>
+                                        <td th:text="${entry.cacheCreationInputTokens}">0</td>
+                                        <td th:text="${entry.cacheReadInputTokens}">0</td>
                                     </tr>
                                     </tbody>
                                 </table>

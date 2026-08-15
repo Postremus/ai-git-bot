@@ -117,6 +117,10 @@ Build/test workflows can auto-detect common project types from files such as `po
 
 For **AI Integrations**, **Enable native tool calling** is on by default and recommended for frontier models. Turn it off only when a provider/model behaves poorly in agentic workflows; this forces the legacy JSON-in-prompt fallback. llama.cpp always uses legacy mode. See [TOOL_CALLING.md](TOOL_CALLING.md) for the troubleshooting playbook.
 
+## Prompt caching
+
+For Anthropic **AI Integrations**, **Enable prompt caching** is on by default. Agentic loops re-send the whole prompt prefix (system prompt, diff, previous tool results) on every round; caching marks breakpoints so repeated prefixes are billed as cache reads at roughly 1/10 of the input price, cutting review cost to a fraction. The Usage page records the raw provider figures — input tokens are the total processed (uncached + cache write + cache read, matching the Anthropic console) with separate **Cache write** / **Cache read** columns, so cache hits are directly visible. Other providers ignore the switch and record zeros in the cache columns.
+
 ## Security considerations
 
 - **No auto-merge:** the coding agent opens a PR; humans still review and merge.
