@@ -5,77 +5,105 @@ import lombok.extern.slf4j.Slf4j;
 import org.remus.giteabot.admin.AiClientFactory;
 import org.remus.giteabot.admin.Bot;
 import org.remus.giteabot.admin.GiteaClientFactory;
+import org.remus.giteabot.agent.issueimpl.AiResponseParser;
+import org.remus.giteabot.agent.loop.AgentBudget;
+import org.remus.giteabot.agent.loop.AgentLoop;
+import org.remus.giteabot.agent.loop.AgentRunContext;
+import org.remus.giteabot.agent.loop.LoopOutcome;
+import org.remus.giteabot.agent.loop.ToolingMode;
+import org.remus.giteabot.agent.session.AgentSession;
+import org.remus.giteabot.agent.session.AgentSessionService;
+import org.remus.giteabot.agent.shared.BranchRefs;
+import org.remus.giteabot.agent.shared.BranchSwitcher;
+import org.remus.giteabot.agent.shared.SystemPromptAssembler;
+import org.remus.giteabot.agent.tools.AgentToolRouter;
+import org.remus.giteabot.agent.tools.ToolCatalog;
+import org.remus.giteabot.agent.validation.ToolExecutionService;
+import org.remus.giteabot.agent.validation.WorkspaceResult;
+import org.remus.giteabot.agent.validation.WorkspaceService;
+import org.remus.giteabot.agent.writerimpl.WriterPromptBuilder;
 import org.remus.giteabot.ai.AiClient;
-import org.remus.giteabot.ai.ChatTurn;
-import org.remus.giteabot.ai.ToolCall;
-import org.remus.giteabot.ai.ToolDescriptor;
+import org.remus.giteabot.config.AgentConfigProperties;
 import org.remus.giteabot.gitea.model.WebhookPayload;
+import org.remus.giteabot.mcp.McpOrchestrationService;
+import org.remus.giteabot.mcp.McpToolCatalog;
 import org.remus.giteabot.repository.RepositoryApiClient;
+import org.remus.giteabot.systemsettings.BotToolSelectionService;
+import org.remus.giteabot.systemsettings.McpToolSelectionService;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClientResponseException;
-import tools.jackson.databind.JsonNode;
-import tools.jackson.databind.ObjectMapper;
-import tools.jackson.databind.node.ObjectNode;
 
+import java.nio.file.Path;
 import java.util.LinkedHashSet;
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
 /**
- * One-shot issue triage/routing for {@link TriageIssueWorkflow}: asks the
- * model to pick exactly one assignee from the configured account names,
- * posts the routing reason as an issue comment, and performs the assignment
- * through the provider API.
+ * Agentic issue triage/routing for {@link TriageIssueWorkflow}: runs an
+ * {@link AgentLoop} with the read-only repository/issue tool surface so the
+ * model can gather context (repository files, issue details, similar issues)
+ * before committing to a routing decision, then posts the routing reason as
+ * an issue comment and performs the assignment through the provider API.
  *
- * <p>Two output protocols share one validation path:</p>
- * <ul>
- *   <li><b>Tool-calling mode</b> when the bot's AI client supports native
- *   tools ({@link AiClient#supportsNativeTools()}, which already honors the
- *   per-integration legacy-tool-calling switch): the configured prompt gets
- *   the tool-call suffix and the model must emit exactly one
- *   {@code assign_issue} tool call.</li>
- *   <li><b>JSON-only mode</b> otherwise: the prompt gets the JSON suffix and
- *   the response is parsed for a single {@code {"assignment", "reason"}}
- *   object.</li>
- * </ul>
+ * <p>The run is deliberately session-less: triage is a one-shot routing
+ * decision, so the loop runs on a transient {@link AgentSession} (never
+ * persisted) and the workspace is cleaned up afterwards. Context gathering is
+ * read-only — the {@link TriageAgentStrategy} advertises the
+ * {@link ToolCatalog.Role#WRITER} tool surface through
+ * {@link AgentToolRouter.Mode#WRITER}, which never reaches a file-mutation,
+ * build/validation or git-write tool. The only writes are the issue comment
+ * and the final assignment.</p>
  *
- * <p>Model output is treated as untrusted: the assignment must be one of the
- * configured names (or the reserved {@code none}), the reason must be a
- * non-blank single line, and the model may not route the issue back to the
- * triage bot itself (that would retrigger the workflow in a loop). Any
- * violation, and any provider-side assignability failure, results in an
- * error comment on the issue plus a {@link TriageRoutingException} so the
- * orchestrator records the failure through the existing issue-workflow
- * error handling.</p>
+ * <p>Two output protocols share one validation path
+ * ({@link RoutingDecision#validate}): the terminal {@code assign_issue} tool
+ * call when the bot's AI client supports native tools, a single
+ * {@code {"assignment", "reason"}} JSON object otherwise. Model output is
+ * treated as untrusted: the assignment must be one of the configured names
+ * (or the reserved {@code none}), the reason must be a non-blank single
+ * line, and the model may not route the issue back to the triage bot itself
+ * (that would retrigger the workflow in a loop). Any violation that the
+ * agent does not correct within its retry budget, and any provider-side
+ * assignability failure, results in an error comment on the issue plus a
+ * {@link TriageRoutingException} so the orchestrator records the failure
+ * through the existing issue-workflow error handling.</p>
  */
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class IssueTriageService {
 
-    /** Reserved assignment value: post the reason but leave the issue unassigned. */
-    static final String NONE_ASSIGNEE = "none";
+    /**
+     * Default values, overridable via {@code AgentConfigProperties.triage.*}.
+     * Kept as constants so unit tests that construct the service without a
+     * fully-populated config still get sensible behaviour.
+     */
+    private static final int DEFAULT_MAX_TOOL_ROUNDS = 5;
+    private static final int DEFAULT_MAX_INITIAL_TREE_FILES = 100;
+    private static final int DEFAULT_CONTEXT_WINDOW_TOKENS = 200_000;
 
-    static final String TOOL_NAME = "assign_issue";
-
-    /** Routing answers are a single tool call / JSON object — keep the budget small. */
-    private static final int MAX_TOKENS = 1024;
-
-    /** Appended to the configured prompt when native tool calling is available. */
+    /** Appended to the initial user message when native tool calling is available. */
     static final String TOOL_CALL_SUFFIX = """
-            IMPORTANT: After reading the issue, you MUST call the assign_issue tool. Do not output plain text or JSON — always use the tool call.
+            Use your read-only tools to gather any repository or issue context you need \
+            before deciding (for example `tree`, `rg`, `ctags-signatures`, `cat`, \
+            `get-issue`, `search-issues`).
+
+            IMPORTANT: When you have gathered enough context, you MUST call the assign_issue tool \
+            with your final routing decision. Do not output plain text or JSON for the final \
+            answer — always use the tool call.
 
             The assign_issue tool has these parameters:
             - name: The assignment. Must be one of the known users
             - reason: A one-line justification for the assignment
 
-            Output ONLY the tool call. No explanation, no commentary.
+            Call assign_issue exactly once, in its own turn. No explanation, no commentary.
             """;
 
-    /** Appended to the configured prompt when native tool calling is not available. */
+    /** Appended to the initial user message when native tool calling is not available. */
     static final String JSON_SUFFIX = """
-            Output format — for every issue, respond with ONLY this JSON object:
+            Use requestFiles/requestTools to gather any repository or issue context you need \
+            before deciding.
+
+            Output format — when you have gathered enough context, respond with ONLY this JSON object:
 
             {
               "assignment": "<user>",
@@ -83,10 +111,19 @@ public class IssueTriageService {
             }
             """;
 
-    private static final ObjectMapper JSON = new ObjectMapper();
-
     private final AiClientFactory aiClientFactory;
     private final GiteaClientFactory giteaClientFactory;
+    private final AgentSessionService sessionService;
+    private final ToolExecutionService toolExecutionService;
+    private final ToolCatalog toolCatalog;
+    private final WorkspaceService workspaceService;
+    private final McpOrchestrationService mcpOrchestrationService;
+    private final McpToolSelectionService mcpToolSelectionService;
+    private final BotToolSelectionService botToolSelectionService;
+    private final AgentConfigProperties agentConfig;
+
+    private final WriterPromptBuilder promptBuilder = new WriterPromptBuilder();
+    private final SystemPromptAssembler systemPromptAssembler = new SystemPromptAssembler();
 
     /**
      * Runs one triage pass for an issue-created or issue-assigned event.
@@ -109,48 +146,137 @@ public class IssueTriageService {
         }
 
         Set<String> allowed = allowedAssignees(params);
-        String systemPrompt = configuredPrompt(params);
+        String configuredPrompt = configuredPrompt(params);
         AiClient aiClient = aiClientFactory.getClient(bot.getAiIntegration());
         RepositoryApiClient repoClient = giteaClientFactory.getApiClient(bot.getGitIntegration());
-        String userMessage = "Issue #" + issue.getNumber() + ": "
-                + nullToEmpty(issue.getTitle()) + "\n\n" + nullToEmpty(issue.getBody());
 
-        RoutingDecision decision;
+        String issueRef = BranchRefs.normalize(issue.getRef());
+        String baseBranch = issueRef != null && !issueRef.isBlank()
+                ? issueRef : repoClient.getDefaultBranch(owner, repo);
+
+        Path workspaceDir = null;
         try {
-            RoutingDecision raw = aiClient.supportsNativeTools()
-                    ? routeWithToolCall(aiClient, systemPrompt, userMessage, allowed)
-                    : routeWithJson(aiClient, systemPrompt, userMessage);
-            decision = validate(raw, allowed, bot);
-        } catch (InvalidRoutingOutputException e) {
-            postErrorComment(repoClient, owner, repo, issue.getNumber(),
-                    "Issue triage failed: the model returned an invalid routing decision ("
-                            + e.getMessage() + "). No assignment was made.");
-            throw new TriageRoutingException("Issue triage routing failed: " + e.getMessage(), e);
+            WorkspaceResult wsResult = workspaceService.prepareWorkspace(
+                    owner, repo, baseBranch, repoClient.getCloneUrl(), repoClient.getToken(), null);
+            if (!wsResult.success()) {
+                postErrorComment(repoClient, owner, repo, issue.getNumber(),
+                        "Issue triage failed: could not prepare the read-only repository context ("
+                                + wsResult.error() + "). No assignment was made.");
+                throw new TriageRoutingException(
+                        "Issue triage could not prepare the workspace: " + wsResult.error());
+            }
+            workspaceDir = wsResult.workspacePath();
+
+            RoutingDecision decision = runTriageLoop(bot, issue, owner, repo, baseBranch,
+                    workspaceDir, aiClient, repoClient, configuredPrompt, allowed);
+
+            log.info("[Bot '{}'] Triage routed issue #{} to '{}': {}", bot.getName(), issue.getNumber(),
+                    decision.assignee(), decision.reason());
+            executeDecision(repoClient, owner, repo, issue.getNumber(), decision);
+        } finally {
+            if (workspaceDir != null) {
+                workspaceService.cleanupWorkspace(workspaceDir);
+            }
         }
+    }
 
-        log.info("[Bot '{}'] Triage routed issue #{} to '{}': {}", bot.getName(), issue.getNumber(),
-                decision.assignee(), decision.reason());
+    /**
+     * Runs the agent loop and returns the validated routing decision. A loop
+     * that finishes without a valid decision is mapped to an error comment
+     * plus {@link TriageRoutingException}.
+     */
+    private RoutingDecision runTriageLoop(Bot bot, WebhookPayload.Issue issue, String owner, String repo,
+                                          String baseBranch, Path workspaceDir,
+                                          AiClient aiClient, RepositoryApiClient repoClient,
+                                          String configuredPrompt, Set<String> allowed) {
+        Set<String> allowedBuiltinTools = botToolSelectionService.allowedBuiltinTools(bot.getToolConfiguration());
+        McpToolCatalog mcpToolCatalog = mcpToolSelectionService.filterCatalogForPrompt(
+                bot.getMcpConfiguration(),
+                mcpOrchestrationService.discoverTools(bot.getMcpConfiguration()));
 
-        if (NONE_ASSIGNEE.equals(decision.assignee())) {
-            repoClient.postIssueComment(owner, repo, issue.getNumber(),
+        ToolingMode mode = aiClient.supportsNativeTools() ? ToolingMode.NATIVE : ToolingMode.LEGACY;
+        String systemPrompt = systemPromptAssembler.assemble(configuredPrompt, toolCatalog,
+                allowedBuiltinTools, mcpToolCatalog, mode, SystemPromptAssembler.PromptKind.WRITER_AGENT);
+
+        String treeContext = promptBuilder.buildTreeContext(
+                repoClient.getRepositoryTree(owner, repo, baseBranch), maxInitialTreeFiles());
+        String userMessage = buildInitialPrompt(issue, treeContext)
+                + (mode == ToolingMode.NATIVE ? TOOL_CALL_SUFFIX : JSON_SUFFIX);
+
+        AgentToolRouter toolRouter = new AgentToolRouter(toolExecutionService, toolCatalog,
+                mcpOrchestrationService, bot.getMcpConfiguration(), mcpToolCatalog,
+                repoClient, allowedBuiltinTools);
+        TriageAgentStrategy strategy = new TriageAgentStrategy(systemPrompt, toolRouter, toolCatalog,
+                mcpToolCatalog, allowedBuiltinTools, allowed, bot.getUsername(),
+                new AiResponseParser(), new BranchSwitcher(toolExecutionService), maxToolRounds());
+
+        // Mirror the writer: one extra iteration beyond the context-round limit so the model
+        // gets a chance to produce its terminal answer after exhausting context rounds.
+        AgentConfigProperties.BudgetConfig budgetCfg = agentConfig.getBudget();
+        AgentBudget budget = new AgentBudget(
+                maxToolRounds() + 1, maxToolRounds(), 0, budgetCfg.getMaxTokensPerCall(),
+                budgetCfg.getMaxToolResultChars(), budgetCfg.getMaxHistoryChars(),
+                contextWindowTokens(bot), budgetCfg.getProactiveCompactionThreshold());
+
+        AgentSession session = new AgentSession(owner, repo, issue.getNumber(), issue.getTitle());
+        AgentLoop loop = new AgentLoop(aiClient, sessionService, budget);
+        AgentRunContext ctx = new AgentRunContext(session, owner, repo, issue.getNumber(),
+                workspaceDir, baseBranch);
+        LoopOutcome outcome = loop.run(ctx, userMessage, strategy);
+
+        if (outcome.success() && outcome.payload() instanceof RoutingDecision decision) {
+            return decision;
+        }
+        String detail = outcome.payload() instanceof String s && !s.isBlank()
+                ? s : "the model returned no usable routing decision";
+        postErrorComment(repoClient, owner, repo, issue.getNumber(),
+                "Issue triage failed: " + detail + " No assignment was made.");
+        throw new TriageRoutingException("Issue triage routing failed: " + detail);
+    }
+
+    /**
+     * Posts the reason comment first (so the rationale stays visible even
+     * when the assignment itself fails), then assigns — or, for the reserved
+     * {@code none} outcome, leaves the issue unassigned.
+     */
+    private void executeDecision(RepositoryApiClient repoClient, String owner, String repo,
+                                 Long issueNumber, RoutingDecision decision) {
+        if (RoutingDecision.NONE_ASSIGNEE.equals(decision.assignee())) {
+            repoClient.postIssueComment(owner, repo, issueNumber,
                     "Issue triage: " + decision.reason() + " (no assignment)");
             return;
         }
-
-        // Reason comment first: even when the assignment itself fails, the
-        // rationale stays visible on the issue.
-        repoClient.postIssueComment(owner, repo, issue.getNumber(),
+        repoClient.postIssueComment(owner, repo, issueNumber,
                 "Issue triage: " + decision.reason() + " (routing to `" + decision.assignee() + "`)");
         try {
-            repoClient.assignIssue(owner, repo, issue.getNumber(), decision.assignee());
+            repoClient.assignIssue(owner, repo, issueNumber, decision.assignee());
         } catch (UnsupportedOperationException | IllegalArgumentException | RestClientResponseException e) {
-            postErrorComment(repoClient, owner, repo, issue.getNumber(),
+            postErrorComment(repoClient, owner, repo, issueNumber,
                     "Issue triage: could not assign to `" + decision.assignee() + "` — the account does"
                             + " not exist, is not assignable on this repository, or the bot lacks the"
                             + " necessary permission. No assignment was made.");
             throw new TriageRoutingException(
                     "Issue triage could not assign to '" + decision.assignee() + "': " + e.getMessage(), e);
         }
+    }
+
+    private String buildInitialPrompt(WebhookPayload.Issue issue, String treeContext) {
+        return """
+                ## Issue to triage
+                Number: #%d
+                Title: %s
+
+                Body:
+                %s
+
+                ## Repository files
+                %s
+
+                Decide who this issue should be routed to.
+                """.formatted(issue.getNumber(),
+                issue.getTitle() != null ? issue.getTitle() : "(no title)",
+                issue.getBody() != null && !issue.getBody().isBlank() ? issue.getBody() : "(empty)",
+                treeContext);
     }
 
     /**
@@ -165,11 +291,11 @@ public class IssueTriageService {
         Set<String> allowed = new LinkedHashSet<>();
         for (String part : text.split(",")) {
             String trimmed = part.trim();
-            if (!trimmed.isEmpty() && !NONE_ASSIGNEE.equalsIgnoreCase(trimmed)) {
+            if (!trimmed.isEmpty() && !RoutingDecision.NONE_ASSIGNEE.equalsIgnoreCase(trimmed)) {
                 allowed.add(trimmed);
             }
         }
-        allowed.add(NONE_ASSIGNEE);
+        allowed.add(RoutingDecision.NONE_ASSIGNEE);
         return allowed;
     }
 
@@ -177,118 +303,6 @@ public class IssueTriageService {
         Object raw = params.get(TriageParam.SYSTEM_PROMPT.key());
         return raw != null && !String.valueOf(raw).isBlank()
                 ? String.valueOf(raw) : TriageIssueWorkflow.DEFAULT_SYSTEM_PROMPT;
-    }
-
-    /**
-     * Tool-calling mode: one {@code chatWithTools} round advertising only the
-     * {@code assign_issue} tool; the model must answer with exactly one call
-     * to it.
-     */
-    private RoutingDecision routeWithToolCall(AiClient aiClient, String systemPrompt,
-                                              String userMessage, Set<String> allowed) {
-        String prompt = systemPrompt + "\n\n" + TOOL_CALL_SUFFIX;
-        ChatTurn turn = aiClient.chatWithTools(List.of(), userMessage,
-                List.of(assignIssueTool(allowed)), prompt, null, MAX_TOKENS);
-        if (turn == null || !turn.hasToolCalls()) {
-            throw new InvalidRoutingOutputException("model returned no tool call");
-        }
-        if (turn.toolCalls().size() != 1) {
-            throw new InvalidRoutingOutputException(
-                    "model returned " + turn.toolCalls().size() + " tool calls instead of exactly one");
-        }
-        ToolCall call = turn.toolCalls().getFirst();
-        if (!TOOL_NAME.equals(call.name())) {
-            throw new InvalidRoutingOutputException("model called unknown tool '" + call.name() + "'");
-        }
-        return new RoutingDecision(stringArg(call.args(), "name"), stringArg(call.args(), "reason"));
-    }
-
-    /**
-     * JSON-only mode: one plain {@code chat} round; the response is parsed
-     * for the {@code {"assignment", "reason"}} object (tolerating prose
-     * around the first JSON block).
-     */
-    private RoutingDecision routeWithJson(AiClient aiClient, String systemPrompt, String userMessage) {
-        String prompt = systemPrompt + "\n\n" + JSON_SUFFIX;
-        String response = aiClient.chat(List.of(), userMessage, prompt, null, MAX_TOKENS);
-        JsonNode node = extractJsonObject(response);
-        if (node == null) {
-            throw new InvalidRoutingOutputException("no parseable JSON object in the model response");
-        }
-        return new RoutingDecision(stringArg(node, "assignment"), stringArg(node, "reason"));
-    }
-
-    /**
-     * Validates the untrusted model output: exactly one assignment, from the
-     * configured names (canonicalized to the configured casing), with a
-     * non-blank single-line reason, and never the triage bot itself.
-     */
-    private RoutingDecision validate(RoutingDecision raw, Set<String> allowed, Bot bot) {
-        if (raw.assignee() == null || raw.assignee().isBlank()) {
-            throw new InvalidRoutingOutputException("missing assignment");
-        }
-        String canonical = allowed.stream()
-                .filter(a -> a.equalsIgnoreCase(raw.assignee().trim()))
-                .findFirst()
-                .orElseThrow(() -> new InvalidRoutingOutputException(
-                        "unsupported assignment '" + raw.assignee() + "'"));
-        if (bot.getUsername() != null && canonical.equalsIgnoreCase(bot.getUsername())) {
-            throw new InvalidRoutingOutputException(
-                    "refusing to self-assign to the triage bot '" + bot.getUsername() + "'");
-        }
-        if (raw.reason() == null || raw.reason().isBlank()) {
-            throw new InvalidRoutingOutputException("missing reason");
-        }
-        String reason = raw.reason().trim();
-        if (reason.contains("\n") || reason.contains("\r")) {
-            throw new InvalidRoutingOutputException("reason must be a single line");
-        }
-        return new RoutingDecision(canonical, reason);
-    }
-
-    private ToolDescriptor assignIssueTool(Set<String> allowed) {
-        ObjectNode schema = JSON.createObjectNode();
-        schema.put("type", "object");
-        ObjectNode props = schema.putObject("properties");
-        ObjectNode name = props.putObject("name");
-        name.put("type", "string");
-        name.put("description", "The assignment. Must be one of the known users.");
-        allowed.forEach(name.putArray("enum")::add);
-        ObjectNode reason = props.putObject("reason");
-        reason.put("type", "string");
-        reason.put("description", "A one-line justification for the assignment.");
-        schema.putArray("required").add("name").add("reason");
-        return new ToolDescriptor(TOOL_NAME,
-                "Assign the issue to one of the known users with a one-line justification.", schema);
-    }
-
-    private JsonNode extractJsonObject(String text) {
-        if (text == null) {
-            return null;
-        }
-        int start = text.indexOf('{');
-        int end = text.lastIndexOf('}');
-        if (start < 0 || end <= start) {
-            return null;
-        }
-        try {
-            JsonNode node = JSON.readTree(text.substring(start, end + 1));
-            return node != null && node.isObject() ? node : null;
-        } catch (Exception e) {
-            return null;
-        }
-    }
-
-    private static String stringArg(JsonNode node, String field) {
-        if (node == null) {
-            return null;
-        }
-        JsonNode value = node.get(field);
-        return value != null && value.isString() ? value.asString() : null;
-    }
-
-    private static String nullToEmpty(String value) {
-        return value == null ? "" : value;
     }
 
     /** Best-effort error comment; a comment failure never masks the routing failure. */
@@ -302,14 +316,24 @@ public class IssueTriageService {
         }
     }
 
-    /** One validated routing decision: the canonical assignee name plus the one-line reason. */
-    private record RoutingDecision(String assignee, String reason) {
+    private int maxToolRounds() {
+        if (agentConfig == null || agentConfig.getTriage() == null) {
+            return DEFAULT_MAX_TOOL_ROUNDS;
+        }
+        int configured = agentConfig.getTriage().getMaxToolRounds();
+        return configured > 0 ? configured : DEFAULT_MAX_TOOL_ROUNDS;
     }
 
-    /** Model output that failed parsing or validation. */
-    private static final class InvalidRoutingOutputException extends RuntimeException {
-        private InvalidRoutingOutputException(String message) {
-            super(message);
+    private int maxInitialTreeFiles() {
+        if (agentConfig == null || agentConfig.getTriage() == null) {
+            return DEFAULT_MAX_INITIAL_TREE_FILES;
         }
+        int configured = agentConfig.getTriage().getMaxInitialTreeFiles();
+        return configured > 0 ? configured : DEFAULT_MAX_INITIAL_TREE_FILES;
+    }
+
+    private int contextWindowTokens(Bot bot) {
+        return bot.getAiIntegration() != null
+                ? bot.getAiIntegration().getContextWindowTokens() : DEFAULT_CONTEXT_WINDOW_TOKENS;
     }
 }

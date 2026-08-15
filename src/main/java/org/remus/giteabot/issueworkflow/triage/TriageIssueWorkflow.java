@@ -9,7 +9,9 @@ import org.springframework.stereotype.Component;
 
 /**
  * Built-in issue-assigned workflow for initial issue triage and routing:
- * reads the issue, chooses exactly one assignee from the configured account
+ * runs an agent loop that reads the issue, gathers repository and issue
+ * context with read-only tools (file tree, search, file contents, issue
+ * details), then chooses exactly one assignee from the configured account
  * names (people, bots, or {@code none}) using the admin-editable system
  * prompt, posts the routing reason as an issue comment, and performs the
  * assignment through the provider API. It never implements the issue itself.
@@ -98,8 +100,9 @@ public class TriageIssueWorkflow implements IssueWorkflow {
     @Override
     public String description() {
         return "Routes a new or newly assigned issue to the right assignee (person, bot, or none)"
-                + " using an editable triage prompt, posts the routing reason as a comment, and"
-                + " performs the assignment. Never implements the issue itself.";
+                + " with an agent that gathers repository/issue context before deciding, posts the"
+                + " routing reason as a comment, and performs the assignment. Never implements the"
+                + " issue itself.";
     }
 
     @Override

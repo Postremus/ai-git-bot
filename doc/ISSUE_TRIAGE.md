@@ -34,12 +34,16 @@ The canonical clarification-bot name in the default prompt is **`issue_hemingway
 
 ## How routing works
 
-The workflow sends the issue title and body to the bot's AI model with your `systemPrompt` plus a protocol suffix, and expects exactly one routing decision: an assignee and a one-line reason.
+The workflow runs an **agent loop**: the model receives the issue title and body plus the repository file tree, and may gather more context on its own — reading files (`cat`, `tree`, `rg`, `ctags-signatures`, `git-log`, `git-blame`), looking up issues (`get-issue`, `search-issues`), and any enabled MCP tools — before it commits to a routing decision. All context tools are **read-only**; the only writes the workflow ever performs are the issue comment and the final assignment. The repository is cloned into a temporary read-only workspace for the duration of the run (no agent session is persisted).
 
-- **Tool-calling mode** — used when the bot's AI integration has native tool calling enabled and the provider supports it. The model must answer with exactly one `assign_issue` tool call (`name` + `reason`).
-- **JSON-only mode** — used when native tool calling is unavailable or switched off (see [Tool Calling](TOOL_CALLING.md)). The model must answer with a single `{"assignment": "...", "reason": "..."}` JSON object.
+When the model has gathered enough context it emits exactly one routing decision: an assignee and a one-line reason.
 
-Both modes validate against the same allowed set (your `assignees` parameter plus `none`).
+- **Tool-calling mode** — used when the bot's AI integration has native tool calling enabled and the provider supports it. Context tools are advertised alongside the terminal `assign_issue` tool (`name` + `reason`); the model must call it exactly once, in its own turn, for the final answer.
+- **JSON-only mode** — used when native tool calling is unavailable or switched off (see [Tool Calling](TOOL_CALLING.md)). Context is requested via `requestFiles`/`requestTools` JSON envelopes; the final answer is a single `{"assignment": "...", "reason": "..."}` JSON object.
+
+Both modes validate against the same allowed set (your `assignees` parameter plus `none`). A decision that fails validation (unknown assignee, empty or multi-line reason, self-assignment) is fed back to the model, which may correct itself; after the second invalid attempt the run fails. A model that never commits to a decision fails when the round budget is exhausted.
+
+The number of context-gathering rounds and the size of the initial file tree are tunable via `agent.triage.max-tool-rounds` (default 5) and `agent.triage.max-initial-tree-files` (default 100) — in Docker deployments via the `AGENT_TRIAGE_MAX_TOOL_ROUNDS` and `AGENT_TRIAGE_MAX_INITIAL_TREE_FILES` environment variables (see the [configuration reference](AGENT.md#configuration-reference)).
 
 ## What you see on the issue
 
@@ -54,6 +58,8 @@ Two safety rules are enforced regardless of the prompt:
 
 - The workflow never assigns the issue **to the triage bot itself** (that would retrigger triage in a loop); such output is treated as invalid.
 - The model output is treated as untrusted and is always validated before any assignment happens.
+
+<img src="screenshots/issue-workflows/issue_triage.png" alt="Gitea issue with successful triage" width="800"/>
 
 ## Provider support
 

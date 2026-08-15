@@ -83,6 +83,8 @@ Common issue-agent settings can be set as environment variables or Spring proper
 | `AGENT_BUDGET_MAX_VALIDATION_RETRIES` | `agent.budget.max-validation-retries` | `10` | Coding | AI correction attempts after validation failure |
 | `AGENT_BUDGET_MAX_HISTORY_CHARS` | `agent.budget.max-history-chars` | `180000` | Both | Maximum characters for agent conversation history |
 | `AGENT_BUDGET_MAX_TOOL_RESULT_CHARS` | `agent.budget.max-tool-result-chars` | `8000` | Both | Maximum characters for tool execution results |
+| `AGENT_TRIAGE_MAX_TOOL_ROUNDS` | `agent.triage.max-tool-rounds` | `5` | Triage | Context-gathering rounds before a routing decision is required |
+| `AGENT_TRIAGE_MAX_INITIAL_TREE_FILES` | `agent.triage.max-initial-tree-files` | `100` | Triage | Repository tree entries in the initial triage prompt |
 
 Additional advanced properties include `agent.validation.max-tool-executions`, `agent.validation.tool-timeout-seconds`, `agent.validation.available-tools`, `agent.schema.enforce`, and the opt-in `agent.critic.*` settings. Keep defaults unless you are tuning cost, reliability, or the installed toolchain.
 

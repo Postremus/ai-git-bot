@@ -10,20 +10,33 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.remus.giteabot.admin.AiClientFactory;
 import org.remus.giteabot.admin.Bot;
 import org.remus.giteabot.admin.GiteaClientFactory;
+import org.remus.giteabot.agent.session.AgentSessionService;
+import org.remus.giteabot.agent.tools.ToolCatalog;
+import org.remus.giteabot.agent.validation.ToolExecutionService;
+import org.remus.giteabot.agent.validation.ToolResult;
+import org.remus.giteabot.agent.validation.WorkspaceResult;
+import org.remus.giteabot.agent.validation.WorkspaceService;
 import org.remus.giteabot.ai.AiClient;
+import org.remus.giteabot.ai.AiMessage;
 import org.remus.giteabot.ai.ChatTurn;
 import org.remus.giteabot.ai.StopReason;
 import org.remus.giteabot.ai.ToolCall;
 import org.remus.giteabot.ai.ToolDescriptor;
+import org.remus.giteabot.config.AgentConfigProperties;
 import org.remus.giteabot.gitea.model.WebhookPayload;
+import org.remus.giteabot.mcp.McpOrchestrationService;
+import org.remus.giteabot.mcp.McpToolCatalog;
 import org.remus.giteabot.repository.RepositoryApiClient;
+import org.remus.giteabot.systemsettings.BotToolSelectionService;
+import org.remus.giteabot.systemsettings.McpToolSelectionService;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
+import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -37,13 +50,15 @@ import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 /**
- * Unit tests for {@link IssueTriageService}: prompt assembly per mode,
- * untrusted-output validation, and the comment/assign execution paths.
+ * Unit tests for {@link IssueTriageService}: the agent loop wiring (read-only
+ * context gathering before the routing decision), untrusted-output
+ * validation, and the comment/assign execution paths.
  */
 @ExtendWith(MockitoExtension.class)
 class IssueTriageServiceTest {
@@ -58,6 +73,18 @@ class IssueTriageServiceTest {
     @Mock
     private GiteaClientFactory giteaClientFactory;
     @Mock
+    private AgentSessionService sessionService;
+    @Mock
+    private ToolExecutionService toolExecutionService;
+    @Mock
+    private WorkspaceService workspaceService;
+    @Mock
+    private McpOrchestrationService mcpOrchestrationService;
+    @Mock
+    private McpToolSelectionService mcpToolSelectionService;
+    @Mock
+    private BotToolSelectionService botToolSelectionService;
+    @Mock
     private AiClient aiClient;
     @Mock
     private RepositoryApiClient repoClient;
@@ -68,9 +95,26 @@ class IssueTriageServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new IssueTriageService(aiClientFactory, giteaClientFactory);
+        service = new IssueTriageService(aiClientFactory, giteaClientFactory, sessionService,
+                toolExecutionService, new ToolCatalog(new AgentConfigProperties()), workspaceService,
+                mcpOrchestrationService, mcpToolSelectionService, botToolSelectionService,
+                new AgentConfigProperties());
         lenient().when(aiClientFactory.getClient(any())).thenReturn(aiClient);
         lenient().when(giteaClientFactory.getApiClient(any())).thenReturn(repoClient);
+        lenient().when(workspaceService.prepareWorkspace(anyString(), anyString(), anyString(),
+                any(), any(), any()))
+                .thenReturn(WorkspaceResult.success(Path.of("/tmp/triage-ws")));
+        lenient().when(repoClient.getDefaultBranch("owner", "repo")).thenReturn("main");
+        lenient().when(repoClient.getRepositoryTree("owner", "repo", "main"))
+                .thenReturn(List.of(Map.of("type", "blob", "path", "src/App.java")));
+        lenient().when(sessionService.toAiMessages(any())).thenReturn(List.of());
+        lenient().when(mcpOrchestrationService.discoverTools(any())).thenReturn(McpToolCatalog.empty());
+        lenient().when(mcpToolSelectionService.filterCatalogForPrompt(any(), any()))
+                .thenReturn(McpToolCatalog.empty());
+        // A null whitelist means "no built-in tool filtering" (same as the test
+        // paths of the coding/writer agents); Mockito would otherwise default
+        // to an empty set, which blocks every tool.
+        lenient().when(botToolSelectionService.allowedBuiltinTools(any())).thenReturn(null);
 
         bot = new Bot();
         bot.setName("Triage Bot");
@@ -107,61 +151,111 @@ class IssueTriageServiceTest {
     }
 
     @Test
-    void nativeMode_appendsToolCallSuffixAndAdvertisesAssignIssueTool() {
+    void nativeMode_advertisesReadOnlyToolsPlusAssignIssue() {
         when(aiClient.supportsNativeTools()).thenReturn(true);
         when(aiClient.chatWithTools(anyList(), anyString(), anyList(), anyString(), isNull(), anyInt()))
                 .thenReturn(toolTurn("assign_issue", "{\"name\":\"none\",\"reason\":\"Unclear\"}"));
 
         service.triage(bot, payload, PARAMS);
 
-        ArgumentCaptor<String> prompt = ArgumentCaptor.forClass(String.class);
         ArgumentCaptor<List<ToolDescriptor>> tools = ArgumentCaptor.forClass(List.class);
+        ArgumentCaptor<String> prompt = ArgumentCaptor.forClass(String.class);
         verify(aiClient).chatWithTools(anyList(), anyString(), tools.capture(), prompt.capture(),
                 isNull(), anyInt());
-        assertTrue(prompt.getValue().startsWith("ROUTING PROMPT"));
-        assertTrue(prompt.getValue().contains("you MUST call the assign_issue tool"));
-        assertEquals(1, tools.getValue().size());
-        assertEquals("assign_issue", tools.getValue().getFirst().name());
-        String schema = tools.getValue().getFirst().jsonSchema().toString();
+        List<String> names = tools.getValue().stream().map(ToolDescriptor::name).toList();
+        assertTrue(names.contains("assign_issue"));
+        assertTrue(names.contains("cat"));
+        assertTrue(names.contains("rg"));
+        assertFalse(names.contains("write-file"));
+        String schema = tools.getValue().stream()
+                .filter(d -> "assign_issue".equals(d.name())).findFirst().orElseThrow()
+                .jsonSchema().toString();
         assertTrue(schema.contains("Alice"));
         assertTrue(schema.contains("none"));
+        assertTrue(prompt.getValue().startsWith("ROUTING PROMPT"));
     }
 
     @Test
-    void nativeMode_noToolCall_isRejectedWithErrorComment() {
+    void nativeMode_gathersContextBeforeDeciding() {
         when(aiClient.supportsNativeTools()).thenReturn(true);
         when(aiClient.chatWithTools(anyList(), anyString(), anyList(), anyString(), isNull(), anyInt()))
-                .thenReturn(ChatTurn.text("I would assign this to Alice."));
+                .thenReturn(toolTurn("rg", "{\"args\":[\"submit button\"]}"))
+                .thenReturn(toolTurn("assign_issue", "{\"name\":\"Alice\",\"reason\":\"Frontend fix\"}"));
+        when(toolExecutionService.executeContextTool(any(), eq("rg"), anyList()))
+                .thenReturn(new ToolResult(true, 0, "src/ui/SubmitButton.java", ""));
+
+        service.triage(bot, payload, PARAMS);
+
+        verify(toolExecutionService).executeContextTool(any(), eq("rg"), anyList());
+        ArgumentCaptor<List<AiMessage>> history = ArgumentCaptor.forClass(List.class);
+        verify(aiClient, times(2)).chatWithTools(history.capture(), anyString(), anyList(),
+                anyString(), isNull(), anyInt());
+        List<AiMessage> secondRoundHistory = history.getAllValues().get(1);
+        assertTrue(secondRoundHistory.stream().anyMatch(m -> "tool".equals(m.getRole())
+                && m.getToolResult() != null && m.getToolResult().contains("SubmitButton")));
+        verify(repoClient).assignIssue("owner", "repo", 42L, "Alice");
+    }
+
+    @Test
+    void nativeMode_invalidDecisionIsCorrectedWithinTheLoop() {
+        when(aiClient.supportsNativeTools()).thenReturn(true);
+        when(aiClient.chatWithTools(anyList(), anyString(), anyList(), anyString(), isNull(), anyInt()))
+                .thenReturn(toolTurn("assign_issue", "{\"name\":\"Mallory\",\"reason\":\"Taking over\"}"))
+                .thenReturn(toolTurn("assign_issue", "{\"name\":\"Bob\",\"reason\":\"Backend work\"}"));
+
+        service.triage(bot, payload, PARAMS);
+
+        verify(aiClient, times(2)).chatWithTools(anyList(), anyString(), anyList(), anyString(),
+                isNull(), anyInt());
+        verify(repoClient).assignIssue("owner", "repo", 42L, "Bob");
+    }
+
+    @Test
+    void nativeMode_repeatedlyInvalidDecision_failsWithErrorComment() {
+        when(aiClient.supportsNativeTools()).thenReturn(true);
+        when(aiClient.chatWithTools(anyList(), anyString(), anyList(), anyString(), isNull(), anyInt()))
+                .thenReturn(toolTurn("assign_issue", "{\"name\":\"Mallory\",\"reason\":\"Taking over\"}"));
 
         assertThrows(TriageRoutingException.class, () -> service.triage(bot, payload, PARAMS));
 
         verify(repoClient).postIssueComment(eq("owner"), eq("repo"), eq(42L),
-                contains("invalid routing decision"));
+                contains("No assignment was made"));
         verify(repoClient, never()).assignIssue(anyString(), anyString(), any(), anyString());
     }
 
     @Test
-    void nativeMode_multipleToolCalls_areRejected() {
+    void nativeMode_budgetExhausted_failsWithErrorComment() {
         when(aiClient.supportsNativeTools()).thenReturn(true);
-        ToolCall call = toolCall("assign_issue", "{\"name\":\"Alice\",\"reason\":\"x\"}");
+        // The model keeps gathering context and never commits to a decision.
         when(aiClient.chatWithTools(anyList(), anyString(), anyList(), anyString(), isNull(), anyInt()))
-                .thenReturn(new ChatTurn("", List.of(call, call), StopReason.END_TURN, 0, 0));
+                .thenReturn(toolTurn("rg", "{\"args\":[\"button\"]}"));
+        when(toolExecutionService.executeContextTool(any(), eq("rg"), anyList()))
+                .thenReturn(new ToolResult(true, 0, "hit", ""));
 
         assertThrows(TriageRoutingException.class, () -> service.triage(bot, payload, PARAMS));
+
+        verify(repoClient).postIssueComment(eq("owner"), eq("repo"), eq(42L),
+                contains("No assignment was made"));
         verify(repoClient, never()).assignIssue(anyString(), anyString(), any(), anyString());
     }
+
+    // ---- JSON-only (legacy) mode ----
 
     @Test
-    void nativeMode_unknownTool_isRejected() {
-        when(aiClient.supportsNativeTools()).thenReturn(true);
-        when(aiClient.chatWithTools(anyList(), anyString(), anyList(), anyString(), isNull(), anyInt()))
-                .thenReturn(toolTurn("delete_repo", "{}"));
+    void jsonMode_contextRoundThenTerminalJson_assigns() {
+        when(aiClient.supportsNativeTools()).thenReturn(false);
+        when(aiClient.chat(anyList(), anyString(), anyString(), isNull(), anyInt()))
+                .thenReturn("{\"requestTools\":[{\"id\":\"1\",\"tool\":\"rg\",\"args\":[\"submit\"]}]}")
+                .thenReturn("{\"assignment\":\"Bob\",\"reason\":\"Backend API change\"}");
+        when(toolExecutionService.executeContextTool(any(), eq("rg"), anyList()))
+                .thenReturn(new ToolResult(true, 0, "src/api/SubmitEndpoint.java", ""));
 
-        assertThrows(TriageRoutingException.class, () -> service.triage(bot, payload, PARAMS));
-        verify(repoClient, never()).assignIssue(anyString(), anyString(), any(), anyString());
+        service.triage(bot, payload, PARAMS);
+
+        verify(aiClient, times(2)).chat(anyList(), anyString(), anyString(), isNull(), anyInt());
+        verify(toolExecutionService).executeContextTool(any(), eq("rg"), anyList());
+        verify(repoClient).assignIssue("owner", "repo", 42L, "Bob");
     }
-
-    // ---- JSON-only mode ----
 
     @Test
     void jsonMode_none_postsReasonWithoutAssigning() {
@@ -177,22 +271,6 @@ class IssueTriageServiceTest {
     }
 
     @Test
-    void jsonMode_appendsJsonSuffixAndParsesProseWrappedJson() {
-        when(aiClient.supportsNativeTools()).thenReturn(false);
-        when(aiClient.chat(anyList(), anyString(), anyString(), isNull(), anyInt()))
-                .thenReturn("Sure! Here you go:\n{\"assignment\":\"Bob\",\"reason\":\"Backend API change\"}");
-
-        service.triage(bot, payload, PARAMS);
-
-        ArgumentCaptor<String> prompt = ArgumentCaptor.forClass(String.class);
-        verify(aiClient).chat(anyList(), anyString(), prompt.capture(), isNull(), anyInt());
-        assertTrue(prompt.getValue().startsWith("ROUTING PROMPT"));
-        assertTrue(prompt.getValue().contains("Output format"));
-        assertTrue(prompt.getValue().contains("\"assignment\""));
-        verify(repoClient).assignIssue("owner", "repo", 42L, "Bob");
-    }
-
-    @Test
     void jsonMode_unparseableResponse_isRejectedWithErrorComment() {
         when(aiClient.supportsNativeTools()).thenReturn(false);
         when(aiClient.chat(anyList(), anyString(), anyString(), isNull(), anyInt()))
@@ -201,41 +279,11 @@ class IssueTriageServiceTest {
         assertThrows(TriageRoutingException.class, () -> service.triage(bot, payload, PARAMS));
 
         verify(repoClient).postIssueComment(eq("owner"), eq("repo"), eq(42L),
-                contains("invalid routing decision"));
+                contains("No assignment was made"));
         verify(repoClient, never()).assignIssue(anyString(), anyString(), any(), anyString());
     }
 
     // ---- validation (shared between modes) ----
-
-    @Test
-    void unsupportedAssignment_isRejected() {
-        when(aiClient.supportsNativeTools()).thenReturn(false);
-        when(aiClient.chat(anyList(), anyString(), anyString(), isNull(), anyInt()))
-                .thenReturn("{\"assignment\":\"Mallory\",\"reason\":\"Taking over\"}");
-
-        assertThrows(TriageRoutingException.class, () -> service.triage(bot, payload, PARAMS));
-        verify(repoClient, never()).assignIssue(anyString(), anyString(), any(), anyString());
-    }
-
-    @Test
-    void blankReason_isRejected() {
-        when(aiClient.supportsNativeTools()).thenReturn(false);
-        when(aiClient.chat(anyList(), anyString(), anyString(), isNull(), anyInt()))
-                .thenReturn("{\"assignment\":\"Alice\",\"reason\":\"  \"}");
-
-        assertThrows(TriageRoutingException.class, () -> service.triage(bot, payload, PARAMS));
-        verify(repoClient, never()).assignIssue(anyString(), anyString(), any(), anyString());
-    }
-
-    @Test
-    void multiLineReason_isRejected() {
-        when(aiClient.supportsNativeTools()).thenReturn(false);
-        when(aiClient.chat(anyList(), anyString(), anyString(), isNull(), anyInt()))
-                .thenReturn("{\"assignment\":\"Alice\",\"reason\":\"line one\\nline two\"}");
-
-        assertThrows(TriageRoutingException.class, () -> service.triage(bot, payload, PARAMS));
-        verify(repoClient, never()).assignIssue(anyString(), anyString(), any(), anyString());
-    }
 
     @Test
     void selfAssignment_isRejectedToPreventLoops() {
@@ -246,6 +294,16 @@ class IssueTriageServiceTest {
                 "systemPrompt", "ROUTING PROMPT", "assignees", "Alice,triage-bot");
 
         assertThrows(TriageRoutingException.class, () -> service.triage(bot, payload, params));
+        verify(repoClient, never()).assignIssue(anyString(), anyString(), any(), anyString());
+    }
+
+    @Test
+    void multiLineReason_isRejected() {
+        when(aiClient.supportsNativeTools()).thenReturn(false);
+        when(aiClient.chat(anyList(), anyString(), anyString(), isNull(), anyInt()))
+                .thenReturn("{\"assignment\":\"Alice\",\"reason\":\"line one\\nline two\"}");
+
+        assertThrows(TriageRoutingException.class, () -> service.triage(bot, payload, PARAMS));
         verify(repoClient, never()).assignIssue(anyString(), anyString(), any(), anyString());
     }
 
@@ -268,16 +326,17 @@ class IssueTriageServiceTest {
     }
 
     @Test
-    void unsupportedProvider_postsErrorCommentAndFails() {
-        when(aiClient.supportsNativeTools()).thenReturn(true);
-        when(aiClient.chatWithTools(anyList(), anyString(), anyList(), anyString(), isNull(), anyInt()))
-                .thenReturn(toolTurn("assign_issue", "{\"name\":\"Alice\",\"reason\":\"Frontend work\"}"));
-        doThrow(new UnsupportedOperationException("not supported"))
-                .when(repoClient).assignIssue("owner", "repo", 42L, "Alice");
+    void workspacePreparationFails_postsErrorCommentAndFails() {
+        when(workspaceService.prepareWorkspace(anyString(), anyString(), anyString(),
+                any(), any(), any()))
+                .thenReturn(WorkspaceResult.failure("disk full"));
 
         assertThrows(TriageRoutingException.class, () -> service.triage(bot, payload, PARAMS));
+
         verify(repoClient).postIssueComment(eq("owner"), eq("repo"), eq(42L),
-                contains("could not assign to `Alice`"));
+                contains("could not prepare the read-only repository context"));
+        verifyNoInteractions(aiClient);
+        verify(repoClient, never()).assignIssue(anyString(), anyString(), any(), anyString());
     }
 
     @Test
