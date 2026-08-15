@@ -142,20 +142,6 @@ class BotServiceTest {
     }
 
     @Test
-    void save_preservesAgentEnabledFlag() {
-        // The deprecated botType no longer forces agentEnabled off; the flag
-        // is an independent toggle consumed only by the issue-coding workflow.
-        Bot bot = newBotWithDefaultToolConfig();
-        bot.setWebhookSecret("existing-secret");
-        bot.setAgentEnabled(true);
-        when(botRepository.save(any(Bot.class))).thenAnswer(invocation -> invocation.getArgument(0));
-
-        Bot result = botService.save(bot);
-
-        assertTrue(result.isAgentEnabled());
-    }
-
-    @Test
     void save_assignsDefaultToolConfiguration_whenMissing() {
         Bot bot = new Bot();
         bot.setWebhookSecret("existing-secret");

@@ -31,8 +31,7 @@
                                  <th>Git Integration</th>
                                  <th>Issue Workflow</th>
                                  <th>Enabled</th>
-                                <th>Agent</th>
-                                <th>Webhook URL</th>
+                                 <th>Webhook URL</th>
                                 <th>Actions</th>
                             </tr>
                         </thead>
@@ -48,15 +47,11 @@
                                      <span th:if="${bot.issueWorkflowConfiguration == null}" class="badge bg-secondary">None</span>
                                  </td>
                                  <td>
-                                    <span th:if="${bot.enabled}" class="badge bg-success">Enabled</span>
-                                    <span th:if="${!bot.enabled}" class="badge bg-secondary">Disabled</span>
-                                </td>
-                                 <td>
-                                     <span th:if="${bot.agentEnabled}" class="badge bg-info">Enabled</span>
-                                     <span th:if="${!bot.agentEnabled}" class="badge bg-secondary">Disabled</span>
+                                     <span th:if="${bot.enabled}" class="badge bg-success">Enabled</span>
+                                     <span th:if="${!bot.enabled}" class="badge bg-secondary">Disabled</span>
                                  </td>
-                                <td>
-                                    <span th:if="${bot.webhookPath != null}" class="font-monospace small">
+                                 <td>
+                                     <span th:if="${bot.webhookPath != null}" class="font-monospace small">
                                         <code th:text="${bot.webhookPath}"></code>
                                         <button type="button" class="btn btn-sm btn-link p-0 ms-1 copy-btn"
                                                 th:data-copy="${bot.webhookPath}" title="Copy to clipboard">

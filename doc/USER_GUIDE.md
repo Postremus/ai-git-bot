@@ -273,7 +273,6 @@ Bots are the core entities that connect an AI provider with a Git provider. Navi
    - **Git Integration**: Select a Git integration from the dropdown
    - **User Whitelist** *(optional)*: Restrict AI-spending interactions to a set of Git usernames. This is recommended for public repositories.
    - **Enabled**: Whether the bot is active
-   - **Agent Enabled**: Whether the AI agent feature (issue implementation) is active for a coding bot. This option is hidden for writer bots.
 3. Click **Save**
 
 ## Workflow Configurations
@@ -475,7 +474,7 @@ Coding bots use an explicit-request review workflow:
 - Review pull requests only when the PR/MR is created with the bot as reviewer, the bot is added/re-requested as reviewer, or (Bitbucket) the PR author comments a request such as `@ai_bot - Review the Pull-Request again`.
 - Do not automatically re-review when new commits are pushed.
 - Respond to bot mentions in PR comments and inline review comments from the PR/MR author.
-- If **Agent Enabled** is selected, start the issue implementation workflow when the bot is assigned to an issue.
+- Start the issue implementation workflow when the bot is assigned to an issue.
 
 #### Writer bot
 
