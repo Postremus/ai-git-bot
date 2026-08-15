@@ -398,6 +398,39 @@ public class GitLabApiClient implements RepositoryApiClient {
         return null;
     }
 
+    @Override
+    public void assignIssue(String owner, String repo, Long issueNumber, String assignee) {
+        log.info("Assigning issue #{} in {}/{} to '{}'", issueNumber, owner, repo, assignee);
+        // GitLab assigns by numeric user id, so resolve the username first.
+        List<Map<String, Object>> users = gitlabRestClient.get()
+                .uri(uriBuilder -> uriBuilder
+                        .path("/api/v4/users")
+                        .queryParam("username", assignee)
+                        .build())
+                .retrieve()
+                .body(new ParameterizedTypeReference<>() {});
+        Long userId = users != null
+                ? users.stream()
+                        .filter(u -> assignee.equalsIgnoreCase(String.valueOf(u.get("username"))))
+                        .map(u -> u.get("id"))
+                        .filter(Number.class::isInstance)
+                        .map(Number.class::cast)
+                        .map(Number::longValue)
+                        .findFirst()
+                        .orElse(null)
+                : null;
+        if (userId == null) {
+            throw new IllegalArgumentException("Unknown GitLab user '" + assignee + "'");
+        }
+        String projectPath = encodeProjectPath(owner, repo);
+        gitlabRestClient.put()
+                .uri("/api/v4/projects/{projectPath}/issues/{issue_iid}", projectPath, issueNumber)
+                .body(Map.of("assignee_ids", List.of(userId)))
+                .retrieve()
+                .toBodilessEntity();
+        log.info("Issue #{} assigned to '{}'", issueNumber, assignee);
+    }
+
     // ---- Repository operations ----
 
     @Override

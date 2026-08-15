@@ -35,7 +35,8 @@ public class AiUsageService {
     private static final int MAX_ERROR_MESSAGE_LENGTH = 2000;
     private static final int MAX_STACK_TRACE_LENGTH = 100_000;
     private static final Set<String> USAGE_SORT_COLUMNS =
-            Set.of("timestamp", "aiIntegrationName", "sessionId", "inputTokens", "outputTokens");
+            Set.of("timestamp", "aiIntegrationName", "sessionId", "inputTokens", "outputTokens",
+                    "cacheCreationInputTokens", "cacheReadInputTokens");
     private static final Set<String> ERROR_SORT_COLUMNS =
             Set.of("timestamp", "aiIntegrationName", "sessionId", "errorMessage");
 
@@ -46,10 +47,15 @@ public class AiUsageService {
      * Records the token usage of a single AI interaction. Persistence problems
      * are logged but never propagated so that auditing can never break the
      * actual AI workflow.
+     *
+     * <p>{@code inputTokens} is the total processed input (for cache-capable
+     * providers: uncached + cache write + cache read); the two cache fields
+     * carry the breakdown so cache activity is visible on the Usage page.</p>
      */
     @Transactional
     public void recordUsage(String aiIntegrationName, String sessionId,
-                            long inputTokens, long outputTokens) {
+                            long inputTokens, long outputTokens,
+                            long cacheCreationInputTokens, long cacheReadInputTokens) {
         try {
             AiUsageLog entry = new AiUsageLog();
             entry.setTimestamp(Instant.now());
@@ -57,10 +63,21 @@ public class AiUsageService {
             entry.setSessionId(sessionId);
             entry.setInputTokens(inputTokens);
             entry.setOutputTokens(outputTokens);
+            entry.setCacheCreationInputTokens(cacheCreationInputTokens);
+            entry.setCacheReadInputTokens(cacheReadInputTokens);
             usageRepository.save(entry);
         } catch (Exception e) {
             log.warn("Failed to persist AI usage entry: {}", e.getMessage());
         }
+    }
+
+    /**
+     * Records usage of a provider without prompt caching (cache fields 0).
+     */
+    @Transactional
+    public void recordUsage(String aiIntegrationName, String sessionId,
+                            long inputTokens, long outputTokens) {
+        recordUsage(aiIntegrationName, sessionId, inputTokens, outputTokens, 0, 0);
     }
 
     /**

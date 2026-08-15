@@ -75,7 +75,8 @@ public class AnthropicProviderMetadata implements AiProviderMetadata {
                 restClient,
                 integration.getModel(),
                 integration.getMaxTokens(),
-                !integration.isUseLegacyToolCalling()
+                !integration.isUseLegacyToolCalling(),
+                integration.isPromptCachingEnabled()
         );
     }
 }

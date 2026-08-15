@@ -14,6 +14,7 @@
 - 🔍 Review pull requests
 - 🧪 Generate tests
 - ✏️ Improve issues
+- 🧭 Triage and route new issues
 - 🤖 Turn issues into pull requests
 - 🎬 Create and run E2E tests
 - 📝 Keep documentation in sync with the code
@@ -241,6 +242,7 @@ Assign an issue to a bot with the Coding Agent issue workflow and it can create 
 | **[Interactive Q&A](doc/PR_WORKFLOWS_REVIEW.md)** | `@bot` mention in PR comments | Context-aware conversation |
 | **[Issue → Code](doc/CODING_AGENT.md)** | Issue assigned to a bot with the Coding Agent issue workflow | Pull request |
 | **[Issue → Better Issue](doc/WRITER_AGENT.md)** | Issue assigned to a bot with the Writer Agent issue workflow | Structured issue with acceptance criteria |
+| **[Issue → Right Assignee](doc/ISSUE_TRIAGE.md)** | Issue opened or assigned to a bot with the Issue Triage issue workflow | Routing reason comment and issue assignment |
 | **[Issue Workflows](doc/ISSUE_WORKFLOWS.md)** | Configurable per bot | Pluggable issue-assigned behavior, independent from PR workflows |
 | **[Unit Test Generation](doc/PR_WORKFLOWS_UNIT_TEST.md)** | PR opened or command triggered | Generated tests committed to branch |
 | **[Full-Stack QA](doc/PR_WORKFLOWS_E2E.md)** | PR opened | Playwright suite executed against preview environment |
@@ -322,6 +324,19 @@ Automatically review pull requests and provide:
 - Inline comments
 - Suggested improvements
 - Follow-up discussions
+
+---
+
+### 🧭 Issue Triage & Routing
+
+Open an issue (or assign it to a bot with the Issue Triage issue workflow) and the bot decides who should own it.
+
+Using an editable routing prompt, the bot:
+
+1. Reads the issue
+2. Chooses exactly one assignee from your configured accounts — a person, a bot, or `none`
+3. Posts the routing reason as a comment
+4. Assigns the issue (or leaves it unassigned for `none`)
 
 ---
 

@@ -27,7 +27,7 @@ However, local LLMs may still:
 
 For reliable agent usage, use **Anthropic Claude or OpenAI GPT-4/5-class models**. Ollama works well for **code reviews** (PR comments), which only require natural language responses.
 
-If you use smaller Ollama models, prefer review-only coding bots by unchecking **Agent Enabled** in the bot settings. Avoid production writer workflows unless the selected model has proven reliable with structured JSON.
+If you use smaller Ollama models, prefer review-only bots (no Coding Agent issue workflow). Avoid production writer workflows unless the selected model has proven reliable with structured JSON.
 
 See [Agent Documentation](AGENT.md#ollama-limitations) for more details.
 
@@ -158,9 +158,9 @@ If you want to test the agent with a larger Ollama model:
 ollama pull qwen2.5-coder:32b
 ```
 
-Then update your AI Integration in the web UI to use the new model. For coding bots, keep **Agent Enabled** turned on. For writer bots, test carefully before relying on issue-drafting workflows in production.
+Then update your AI Integration in the web UI to use the new model. For writer bots, test carefully before relying on issue-drafting workflows in production.
 
-Monitor the logs for JSON parsing errors. If you see frequent failures, disable **Agent Enabled** on coding bots and avoid writer-bot issue workflows with that model.
+Monitor the logs for JSON parsing errors. If you see frequent failures, keep coding bots review-only (no Coding Agent issue workflow) and avoid writer-bot issue workflows with that model.
 
 Choose a model based on your available memory and quality requirements. Smaller models are faster but may produce lower-quality reviews.
 
@@ -220,7 +220,7 @@ This means the AI returned raw text or code instead of valid JSON. The bot autom
    ollama pull qwen2.5-coder:32b
    ```
    Then update the model in your AI Integration via the web UI.
-2. **Disable Agent Enabled** on coding bots in the web UI and keep the bot in review-only mode
+2. **Keep coding bots review-only** (no Coding Agent issue workflow) until the model proves reliable
 3. **Avoid writer-bot issue workflows** with that model until it consistently produces valid JSON
 4. **Use a cloud provider** (Anthropic Claude, OpenAI GPT-4/5-class models) for reliable agent functionality
 

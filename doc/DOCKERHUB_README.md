@@ -84,7 +84,7 @@ Two issue-driven agents let you assign bots to issues:
 
 | Bot type | Trigger | Result |
 |---|---|---|
-| **Coding bot** | Assign to an issue with Agent Enabled | Feature branch, commit, and pull request |
+| **Coding bot** | Assign to an issue | Feature branch, commit, and pull request |
 | **Writer bot** | Assign to an issue | Clarifying questions or a new improved issue |
 
 - **[Coding Agent docs](https://github.com/tmseidel/ai-git-bot/blob/main/doc/CODING_AGENT.md)** — configuration, settings, limitations

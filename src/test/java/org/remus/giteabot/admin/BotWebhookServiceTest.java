@@ -180,7 +180,7 @@ class BotWebhookServiceTest {
 
     @Test
     void isBotUser_senderMatchesBotUsername_returnsTrue() {
-        Bot bot = createBot("test-bot", "ai_bot", false);
+        Bot bot = createBot("test-bot", "ai_bot");
         WebhookPayload payload = new WebhookPayload();
         WebhookPayload.Owner sender = new WebhookPayload.Owner();
         sender.setLogin("ai_bot");
@@ -191,7 +191,7 @@ class BotWebhookServiceTest {
 
     @Test
     void isBotUser_senderDoesNotMatch_returnsFalse() {
-        Bot bot = createBot("test-bot", "ai_bot", false);
+        Bot bot = createBot("test-bot", "ai_bot");
         WebhookPayload payload = new WebhookPayload();
         WebhookPayload.Owner sender = new WebhookPayload.Owner();
         sender.setLogin("human_user");
@@ -202,7 +202,7 @@ class BotWebhookServiceTest {
 
     @Test
     void isBotUser_nullUsername_returnsFalse() {
-        Bot bot = createBot("test-bot", null, false);
+        Bot bot = createBot("test-bot", null);
         WebhookPayload payload = new WebhookPayload();
         WebhookPayload.Owner sender = new WebhookPayload.Owner();
         sender.setLogin("human_user");
@@ -213,7 +213,7 @@ class BotWebhookServiceTest {
 
     @Test
     void isBotUser_commentUserMatchesBotUsername_returnsTrue() {
-        Bot bot = createBot("test-bot", "ai_bot", false);
+        Bot bot = createBot("test-bot", "ai_bot");
         WebhookPayload payload = new WebhookPayload();
         WebhookPayload.Comment comment = new WebhookPayload.Comment();
         WebhookPayload.Owner user = new WebhookPayload.Owner();
@@ -228,13 +228,13 @@ class BotWebhookServiceTest {
 
     @Test
     void getBotAlias_returnsMentionFormat() {
-        Bot bot = createBot("test-bot", "ai_bot", false);
+        Bot bot = createBot("test-bot", "ai_bot");
         assertEquals("@ai_bot", botWebhookService.getBotAlias(bot));
     }
 
     @Test
     void getBotAlias_nullUsername_returnsEmpty() {
-        Bot bot = createBot("test-bot", null, false);
+        Bot bot = createBot("test-bot", null);
         assertEquals("", botWebhookService.getBotAlias(bot));
     }
 
@@ -283,7 +283,7 @@ class BotWebhookServiceTest {
 
     @Test
     void writerBot_ignoresPullRequestReviewEvent() {
-        Bot bot = createBot("writer", "writer_bot", false);
+        Bot bot = createBot("writer", "writer_bot");
         makeWriterBot(bot);
 
         botWebhookService.reviewPullRequest(bot, new WebhookPayload());
@@ -294,7 +294,7 @@ class BotWebhookServiceTest {
 
     @Test
     void writerBot_ignoresPullRequestClosedEvent() {
-        Bot bot = createBot("writer", "writer_bot", false);
+        Bot bot = createBot("writer", "writer_bot");
         makeWriterBot(bot);
 
         botWebhookService.handlePrClosed(bot, new WebhookPayload());
@@ -305,7 +305,7 @@ class BotWebhookServiceTest {
 
     @Test
     void writerBot_assignedToIssueCreatesImprovedIssueWhenReady() {
-        Bot bot = createBot("writer", "writer_bot", false);
+        Bot bot = createBot("writer", "writer_bot");
         makeWriterBot(bot);
         WebhookPayload payload = buildIssuePayload("Test", "my-repo", 12L, "Vague issue", "Do something");
         AgentSession session = new AgentSession("Test", "my-repo", 12L, "Vague issue");
@@ -337,7 +337,7 @@ class BotWebhookServiceTest {
 
     @Test
     void writerBot_assignedToIssueCreatesImprovedIssueWhenAiAddsIntroTextBeforeJson() {
-        Bot bot = createBot("writer", "writer_bot", false);
+        Bot bot = createBot("writer", "writer_bot");
         makeWriterBot(bot);
         WebhookPayload payload = buildIssuePayload("Test", "my-repo", 12L, "Vague issue", "Do something");
         AgentSession session = new AgentSession("Test", "my-repo", 12L, "Vague issue");
@@ -373,7 +373,7 @@ class BotWebhookServiceTest {
 
     @Test
     void writerBot_concurrentAssignmentDuplicateSessionDoesNotStartSecondAgent() {
-        Bot bot = createBot("writer", "writer_bot", false);
+        Bot bot = createBot("writer", "writer_bot");
         makeWriterBot(bot);
         WebhookPayload payload = buildIssuePayload("Test", "my-repo", 12L, "Vague issue", "Do something");
 
@@ -395,7 +395,7 @@ class BotWebhookServiceTest {
 
     @Test
     void writerBot_assignmentKickoffFailureResetsSessionFromUpdating() {
-        Bot bot = createBot("writer", "writer_bot", false);
+        Bot bot = createBot("writer", "writer_bot");
         makeWriterBot(bot);
         WebhookPayload payload = buildIssuePayload("Test", "my-repo", 12L, "Vague issue", "Do something");
         AgentSession session = new AgentSession("Test", "my-repo", 12L, "Vague issue");
@@ -421,7 +421,7 @@ class BotWebhookServiceTest {
 
     @Test
     void writerBot_commentWhenSessionCannotBeClaimedDoesNotStartSecondAgent() {
-        Bot bot = createBot("writer", "writer_bot", false);
+        Bot bot = createBot("writer", "writer_bot");
         makeWriterBot(bot);
         WebhookPayload payload = buildIssueCommentPayload("Test", "my-repo", 12L,
                 "Vague issue", "Do something", "tom", "More details");
@@ -443,7 +443,7 @@ class BotWebhookServiceTest {
 
     @Test
     void writerBot_branchSwitcherRequestSwitchesWorkspaceBeforeContextTools() {
-        Bot bot = createBot("writer", "writer_bot", false);
+        Bot bot = createBot("writer", "writer_bot");
         makeWriterBot(bot);
         WebhookPayload payload = buildIssuePayload("Test", "my-repo", 12L, "Vague issue", "Do something");
         AgentSession session = new AgentSession("Test", "my-repo", 12L, "Vague issue");
@@ -485,7 +485,7 @@ class BotWebhookServiceTest {
 
     @Test
     void writerBot_existingCodingSessionPostsCloneNotice() {
-        Bot bot = createBot("writer", "writer_bot", false);
+        Bot bot = createBot("writer", "writer_bot");
         makeWriterBot(bot);
         WebhookPayload payload = buildIssuePayload("Test", "my-repo", 12L, "Vague issue", "Do something");
         AgentSession codingSession = new AgentSession("Test", "my-repo", 12L, "Vague issue");
@@ -505,7 +505,7 @@ class BotWebhookServiceTest {
 
     @Test
     void writerBot_createIssueReturnsNullMarksSessionFailed() {
-        Bot bot = createBot("writer", "writer_bot", false);
+        Bot bot = createBot("writer", "writer_bot");
         makeWriterBot(bot);
         WebhookPayload payload = buildIssuePayload("Test", "my-repo", 12L, "Vague issue", "Do something");
         AgentSession session = new AgentSession("Test", "my-repo", 12L, "Vague issue");
@@ -538,7 +538,7 @@ class BotWebhookServiceTest {
 
     @Test
     void writerBot_assignmentFailurePostsVisibleErrorComment() {
-        Bot bot = createBot("writer", "writer_bot", false);
+        Bot bot = createBot("writer", "writer_bot");
         makeWriterBot(bot);
         WebhookPayload payload = buildIssuePayload("Test", "my-repo", 12L, "Vague issue", "Do something");
         AgentSession session = new AgentSession("Test", "my-repo", 12L, "Vague issue");
@@ -567,7 +567,7 @@ class BotWebhookServiceTest {
 
     @Test
     void writerBot_clarifyingQuestionsResetSessionToWaiting() {
-        Bot bot = createBot("writer", "writer_bot", false);
+        Bot bot = createBot("writer", "writer_bot");
         makeWriterBot(bot);
         WebhookPayload payload = buildIssuePayload("Test", "my-repo", 12L, "Vague issue", "Do something");
         AgentSession session = new AgentSession("Test", "my-repo", 12L, "Vague issue");
@@ -598,7 +598,7 @@ class BotWebhookServiceTest {
 
     @Test
     void writerBot_contextRoundLimitResetsSessionAndPostsNotice() {
-        Bot bot = createBot("writer", "writer_bot", false);
+        Bot bot = createBot("writer", "writer_bot");
         makeWriterBot(bot);
         WebhookPayload payload = buildIssuePayload("Test", "my-repo", 12L, "Vague issue", "Do something");
         AgentSession session = new AgentSession("Test", "my-repo", 12L, "Vague issue");
@@ -635,7 +635,7 @@ class BotWebhookServiceTest {
 
     @Test
     void writerBot_canContinueThroughFourContextRoundsBeforeCreatingIssue() {
-        Bot bot = createBot("writer", "writer_bot", false);
+        Bot bot = createBot("writer", "writer_bot");
         makeWriterBot(bot);
         WebhookPayload payload = buildIssuePayload("Test", "my-repo", 12L, "Vague issue", "Do something");
         AgentSession session = new AgentSession("Test", "my-repo", 12L, "Vague issue");
@@ -676,7 +676,7 @@ class BotWebhookServiceTest {
 
     @Test
     void writerBot_followUpFailurePostsVisibleErrorCommentAndResetsSession() {
-        Bot bot = createBot("writer", "writer_bot", false);
+        Bot bot = createBot("writer", "writer_bot");
         makeWriterBot(bot);
         WebhookPayload payload = buildIssueCommentPayload("Test", "my-repo", 12L,
                 "Vague issue", "Do something", "tom", "More details");
@@ -708,7 +708,7 @@ class BotWebhookServiceTest {
 
     @Test
     void codingBot_issueComment_appliesMcpToolWhitelistBeforeAgentHandling() {
-        Bot bot = createBot("coder", "coder_bot", true);
+        Bot bot = createBot("coder", "coder_bot");
         WebhookPayload payload = buildIssueCommentPayload("Test", "my-repo", 12L,
                 "Implement feature", "Body", "tom", "Please continue");
         McpConfiguration mcpConfiguration = new McpConfiguration();
@@ -758,13 +758,13 @@ class BotWebhookServiceTest {
         }
 
         @Test
-        void agentSessionFoundByIssueNumber_agentEnabled_routesToAgent() {
+        void agentSessionFoundByIssueNumber_routesToAgent() {
             AgentSession session = agentSession(OWNER, REPO, PR_NUMBER);
             when(agentSessionService.getSessionByIssue(OWNER, REPO, PR_NUMBER))
                     .thenReturn(Optional.of(session));
             stubAgentPath(session);
 
-            botWebhookService.handlePrComment(createBot("bot", "claude_bot", true), prCommentPayload);
+            botWebhookService.handlePrComment(createBot("bot", "claude_bot"), prCommentPayload);
 
             // Agent path: AgentSessionService.setStatus(UPDATING) must be called
             verify(agentSessionService).setStatus(any(AgentSession.class),
@@ -774,7 +774,7 @@ class BotWebhookServiceTest {
         }
 
         @Test
-        void agentSessionFoundByPrNumber_fallback_agentEnabled_routesToAgent() {
+        void agentSessionFoundByPrNumber_fallback_routesToAgent() {
             // First lookup (by issue/PR number) finds nothing – second lookup (by PR number) finds session
             when(agentSessionService.getSessionByIssue(OWNER, REPO, PR_NUMBER))
                     .thenReturn(Optional.empty());
@@ -783,7 +783,7 @@ class BotWebhookServiceTest {
                     .thenReturn(Optional.of(session));
             stubAgentPath(session);
 
-            botWebhookService.handlePrComment(createBot("bot", "claude_bot", true), prCommentPayload);
+            botWebhookService.handlePrComment(createBot("bot", "claude_bot"), prCommentPayload);
 
             // getSessionByPr is called in handlePrComment AND again inside handleIssueComment
             verify(agentSessionService, atLeastOnce()).getSessionByPr(OWNER, REPO, PR_NUMBER);
@@ -799,24 +799,11 @@ class BotWebhookServiceTest {
             when(agentSessionService.getSessionByPr(OWNER, REPO, PR_NUMBER))
                     .thenReturn(Optional.empty());
 
-            botWebhookService.handlePrComment(createBot("bot", "claude_bot", true), prCommentPayload);
+            botWebhookService.handlePrComment(createBot("bot", "claude_bot"), prCommentPayload);
 
             // Review path: SessionService.getOrCreateSession must be called
             verify(sessionService).getOrCreateSession(OWNER, REPO, PR_NUMBER, "system-prompt:1");
             // Agent path's setStatus must NOT be called
-            verify(agentSessionService, never()).setStatus(any(), any());
-        }
-
-        @Test
-        void agentSessionExists_butAgentDisabled_routesToCodeReviewHandler() {
-            AgentSession session = agentSession(OWNER, REPO, PR_NUMBER);
-            when(agentSessionService.getSessionByIssue(OWNER, REPO, PR_NUMBER))
-                    .thenReturn(Optional.of(session));
-
-            // bot.isAgentEnabled() = false
-            botWebhookService.handlePrComment(createBot("bot", "claude_bot", false), prCommentPayload);
-
-            verify(sessionService).getOrCreateSession(OWNER, REPO, PR_NUMBER, "system-prompt:1");
             verify(agentSessionService, never()).setStatus(any(), any());
         }
 
@@ -827,7 +814,7 @@ class BotWebhookServiceTest {
             when(agentSessionService.getSessionByPr(OWNER, REPO, PR_NUMBER))
                     .thenReturn(Optional.empty());
 
-            botWebhookService.handlePrComment(createBot("bot", "claude_bot", true), prCommentPayload);
+            botWebhookService.handlePrComment(createBot("bot", "claude_bot"), prCommentPayload);
 
             // Verify lookup order: issue first, PR second
             var inOrder = inOrder(agentSessionService);
@@ -842,7 +829,7 @@ class BotWebhookServiceTest {
                     .thenReturn(Optional.of(session));
             stubAgentPath(session);
 
-            botWebhookService.handlePrComment(createBot("bot", "claude_bot", true), prCommentPayload);
+            botWebhookService.handlePrComment(createBot("bot", "claude_bot"), prCommentPayload);
 
             // Short-circuit: PR-number lookup must not be called
             verify(agentSessionService, never()).getSessionByPr(any(), any(), any());
@@ -865,7 +852,7 @@ class BotWebhookServiceTest {
                     .thenReturn(Optional.of(session));
             stubAgentPath(session);
 
-            botWebhookService.handlePrComment(createBot("bot", "claude_bot", true), botAuthoredPrPayload);
+            botWebhookService.handlePrComment(createBot("bot", "claude_bot"), botAuthoredPrPayload);
 
             // Must route to the agent even though commenter != PR author
             verify(agentSessionService).setStatus(any(AgentSession.class),
@@ -887,7 +874,7 @@ class BotWebhookServiceTest {
             when(agentSessionService.getSessionByPr(OWNER, REPO, PR_NUMBER))
                     .thenReturn(Optional.empty());
 
-            botWebhookService.handlePrComment(createBot("bot", "claude_bot", true), nonAuthorPayload);
+            botWebhookService.handlePrComment(createBot("bot", "claude_bot"), nonAuthorPayload);
 
             // Non-author but no whitelist → code-review path is entered
             verify(sessionService).getOrCreateSession(OWNER, REPO, PR_NUMBER, "system-prompt:1");
@@ -902,7 +889,7 @@ class BotWebhookServiceTest {
             nonAuthorPayload.getComment().getUser().setLogin("stranger");
             nonAuthorPayload.getSender().setLogin("stranger");
 
-            Bot bot = createBot("bot", "claude_bot", true);
+            Bot bot = createBot("bot", "claude_bot");
             bot.setUserWhitelist("alice, bob");
             Set<String> allowedSet = Set.of("alice", "bob");
             when(botService.getAllowedUsernames(bot)).thenReturn(allowedSet);
@@ -927,7 +914,7 @@ class BotWebhookServiceTest {
             when(agentSessionService.getSessionByPr(OWNER, REPO, PR_NUMBER))
                     .thenReturn(Optional.empty());
 
-            Bot bot = createBot("bot", "claude_bot", true);
+            Bot bot = createBot("bot", "claude_bot");
             bot.setUserWhitelist("alice, bob");
             Set<String> allowedSet = Set.of("alice", "bob");
             when(botService.getAllowedUsernames(bot)).thenReturn(allowedSet);
@@ -952,7 +939,7 @@ class BotWebhookServiceTest {
             when(agentSessionService.getSessionByPr(OWNER, REPO, PR_NUMBER))
                     .thenReturn(Optional.empty());
 
-            Bot bot = createBot("bot", "claude_bot", true);
+            Bot bot = createBot("bot", "claude_bot");
             bot.setUserWhitelist("alice, bob");
             Set<String> allowedSet = Set.of("alice", "bob");
             when(botService.getAllowedUsernames(bot)).thenReturn(allowedSet);
@@ -974,7 +961,7 @@ class BotWebhookServiceTest {
             when(agentSessionService.getSessionByPr(OWNER, REPO, PR_NUMBER))
                     .thenReturn(Optional.empty());
 
-            Bot bot = createBotWithWorkflows("e2e-bot", "claude_bot", true,
+            Bot bot = createBotWithWorkflows("e2e-bot", "claude_bot",
                     java.util.List.of("e2e-test"));
 
             botWebhookService.handlePrComment(bot, prCommentPayload);
@@ -995,7 +982,7 @@ class BotWebhookServiceTest {
             when(agentSessionService.getSessionByPr(OWNER, REPO, PR_NUMBER))
                     .thenReturn(Optional.empty());
 
-            Bot bot = createBotWithWorkflows("review-bot", "claude_bot", true,
+            Bot bot = createBotWithWorkflows("review-bot", "claude_bot",
                     java.util.List.of("review", "e2e-test"));
 
             botWebhookService.handlePrComment(bot, prCommentPayload);
@@ -1012,7 +999,7 @@ class BotWebhookServiceTest {
 
     @Test
     void inlineComment_agenticReviewEnabled_dispatchesClarification() {
-        Bot bot = createBotWithWorkflows("agentic-bot", "claude_bot", true,
+        Bot bot = createBotWithWorkflows("agentic-bot", "claude_bot",
                 java.util.List.of("agentic-review"));
         WebhookPayload payload = buildInlineCommentPayload("Test", "my-repo", 140L,
                 1055L, "Why did you change this line?");
@@ -1030,7 +1017,7 @@ class BotWebhookServiceTest {
 
     @Test
     void inlineComment_agenticReviewEnabled_includesPathInClarification() {
-        Bot bot = createBotWithWorkflows("agentic-bot", "claude_bot", true,
+        Bot bot = createBotWithWorkflows("agentic-bot", "claude_bot",
                 java.util.List.of("agentic-review"));
         WebhookPayload payload = buildInlineCommentPayload("Test", "my-repo", 140L,
                 1055L, "Is this correct?");
@@ -1049,7 +1036,7 @@ class BotWebhookServiceTest {
 
     @Test
     void inlineComment_reviewEnabledOnly_dispatchesReviewWorkflow() {
-        Bot bot = createBotWithWorkflows("review-bot", "claude_bot", true,
+        Bot bot = createBotWithWorkflows("review-bot", "claude_bot",
                 java.util.List.of("review"));
         WebhookPayload payload = buildInlineCommentPayload("Test", "my-repo", 140L,
                 1055L, "Why is this here?");
@@ -1067,7 +1054,7 @@ class BotWebhookServiceTest {
 
     @Test
     void inlineComment_bothEnabled_prefersAgenticReview() {
-        Bot bot = createBotWithWorkflows("both-bot", "claude_bot", true,
+        Bot bot = createBotWithWorkflows("both-bot", "claude_bot",
                 java.util.List.of("review", "agentic-review"));
         WebhookPayload payload = buildInlineCommentPayload("Test", "my-repo", 140L,
                 1055L, "Please explain this change");
@@ -1082,7 +1069,7 @@ class BotWebhookServiceTest {
 
     @Test
     void inlineComment_neitherEnabled_ignored() {
-        Bot bot = createBotWithWorkflows("e2e-bot", "claude_bot", true,
+        Bot bot = createBotWithWorkflows("e2e-bot", "claude_bot",
                 java.util.List.of("e2e-test"));
         WebhookPayload payload = buildInlineCommentPayload("Test", "my-repo", 140L,
                 1055L, "Why?");
@@ -1094,7 +1081,7 @@ class BotWebhookServiceTest {
 
     @Test
     void inlineComment_noWorkflowConfiguration_fallsBackToLegacyReviewOnly() {
-        Bot bot = createBot("legacy-bot", "claude_bot", true);
+        Bot bot = createBot("legacy-bot", "claude_bot");
         WebhookPayload payload = buildInlineCommentPayload("Test", "my-repo", 140L,
                 1055L, "Why?");
 
@@ -1108,7 +1095,7 @@ class BotWebhookServiceTest {
 
     @Test
     void inlineComment_nonAuthorComment_ignored() {
-        Bot bot = createBotWithWorkflows("agentic-bot", "claude_bot", true,
+        Bot bot = createBotWithWorkflows("agentic-bot", "claude_bot",
                 java.util.List.of("agentic-review"));
         WebhookPayload payload = buildInlineCommentPayload("Test", "my-repo", 140L,
                 1055L, "Why?");
@@ -1126,7 +1113,7 @@ class BotWebhookServiceTest {
 
     @Test
     void reviewSubmitted_agenticReviewEnabled_dispatchesClarification() {
-        Bot bot = createBotWithWorkflows("agentic-bot", "claude_bot", true,
+        Bot bot = createBotWithWorkflows("agentic-bot", "claude_bot",
                 java.util.List.of("agentic-review"));
         WebhookPayload payload = buildReviewSubmittedPayload("Test", "my-repo", 140L,
                 "@claude_bot I reviewed your changes. Can you explain the error handling strategy?");
@@ -1145,7 +1132,7 @@ class BotWebhookServiceTest {
 
     @Test
     void reviewSubmitted_reviewEnabledOnly_dispatchesReviewWorkflow() {
-        Bot bot = createBotWithWorkflows("review-bot", "claude_bot", true,
+        Bot bot = createBotWithWorkflows("review-bot", "claude_bot",
                 java.util.List.of("review"));
         WebhookPayload payload = buildReviewSubmittedPayload("Test", "my-repo", 140L,
                 "Looks good overall.");
@@ -1163,7 +1150,7 @@ class BotWebhookServiceTest {
 
     @Test
     void reviewSubmitted_neitherEnabled_ignored() {
-        Bot bot = createBotWithWorkflows("e2e-bot", "claude_bot", true,
+        Bot bot = createBotWithWorkflows("e2e-bot", "claude_bot",
                 java.util.List.of("e2e-test"));
         WebhookPayload payload = buildReviewSubmittedPayload("Test", "my-repo", 140L,
                 "Feedback here.");
@@ -1175,7 +1162,7 @@ class BotWebhookServiceTest {
 
     @Test
     void reviewSubmitted_noReviewBody_agenticReviewIgnored() {
-        Bot bot = createBotWithWorkflows("agentic-bot", "claude_bot", true,
+        Bot bot = createBotWithWorkflows("agentic-bot", "claude_bot",
                 java.util.List.of("agentic-review"));
         WebhookPayload payload = buildReviewSubmittedPayload("Test", "my-repo", 140L, null);
 
@@ -1186,7 +1173,7 @@ class BotWebhookServiceTest {
 
     @Test
     void reviewSubmitted_bodyWithoutBotMention_agenticReviewIgnored() {
-        Bot bot = createBotWithWorkflows("agentic-bot", "claude_bot", true,
+        Bot bot = createBotWithWorkflows("agentic-bot", "claude_bot",
                 java.util.List.of("agentic-review"));
         WebhookPayload payload = buildReviewSubmittedPayload("Test", "my-repo", 140L,
                 "LGTM, approving this from another reviewer.");
@@ -1198,7 +1185,7 @@ class BotWebhookServiceTest {
 
     @Test
     void reviewSubmitted_noWorkflowConfiguration_fallsBackToLegacyReviewOnly() {
-        Bot bot = createBot("legacy-bot", "claude_bot", true);
+        Bot bot = createBot("legacy-bot", "claude_bot");
         WebhookPayload payload = buildReviewSubmittedPayload("Test", "my-repo", 140L,
                 "Feedback here.");
 
@@ -1216,7 +1203,7 @@ class BotWebhookServiceTest {
 
     @Test
     void issueAssignment_publishesStartedAndCompletedEventsOnSuccess() {
-        Bot bot = createBot("writer", "writer_bot", false);
+        Bot bot = createBot("writer", "writer_bot");
         makeWriterBot(bot);
         WebhookPayload payload = buildIssuePayload("Test", "my-repo", 12L, "Vague issue", "Do something");
         AgentSession session = new AgentSession("Test", "my-repo", 12L, "Vague issue");
@@ -1256,7 +1243,7 @@ class BotWebhookServiceTest {
 
     @Test
     void issueAssignment_publishesStartedAndFailedEventsOnException() {
-        Bot bot = createBot("writer", "writer_bot", false);
+        Bot bot = createBot("writer", "writer_bot");
         makeWriterBot(bot);
         WebhookPayload payload = buildIssuePayload("Test", "my-repo", 12L, "Vague issue", "Do something");
 
@@ -1279,7 +1266,7 @@ class BotWebhookServiceTest {
 
     @Test
     void issueAssignment_publishesNothingWhenCallerNotAllowed() {
-        Bot bot = createBot("writer", "writer_bot", false);
+        Bot bot = createBot("writer", "writer_bot");
         makeWriterBot(bot);
         WebhookPayload payload = buildIssuePayload("Test", "my-repo", 12L, "Vague issue", "Do something");
 
@@ -1291,11 +1278,114 @@ class BotWebhookServiceTest {
         verify(eventHookPublisher, never()).publish(any(), any(), any(), any(), any(), any(), anyMap());
     }
 
-    private Bot createBot(String name, String username, boolean agentEnabled) {
+    // ---- issue creation ----
+
+    @Test
+    void writerBot_runOnIssueCreation_issueCreatedStartsWorkflow() {
+        Bot bot = createBot("writer", "writer_bot");
+        makeWriterBot(bot);
+        bot.setRunOnIssueCreation(true);
+        WebhookPayload payload = buildIssueCreationPayload("Test", "my-repo", 12L, "Vague issue", "Do something");
+        AgentSession session = new AgentSession("Test", "my-repo", 12L, "Vague issue");
+
+        when(giteaClientFactory.getApiClient(any())).thenReturn(repositoryApiClient);
+        when(aiClientFactory.getClient(any())).thenReturn(aiClient);
+        when(agentSessionService.getSessionByIssue("Test", "my-repo", 12L)).thenReturn(Optional.empty());
+        when(repositoryApiClient.getIssueDetails("Test", "my-repo", 12L))
+                .thenReturn(java.util.Map.of("user", java.util.Map.of("login", "tom")));
+        when(agentSessionService.createSession("Test", "my-repo", 12L, "Vague issue",
+                AgentSession.AgentSessionType.WRITER, "tom")).thenReturn(session);
+        when(repositoryApiClient.getDefaultBranch("Test", "my-repo")).thenReturn("main");
+        when(workspaceService.prepareWorkspace(eq("Test"), eq("my-repo"), eq("main"), any(), any(), any()))
+                .thenReturn(WorkspaceResult.success(Path.of("/tmp/writer-test-workspace")));
+        when(repositoryApiClient.getRepositoryTree("Test", "my-repo", "main")).thenReturn(java.util.List.of());
+        when(agentSessionService.toAiMessages(session)).thenReturn(java.util.List.of());
+        when(aiClient.chat(any(), any(), startsWith("Writer prompt"), any(), eq(4096))).thenReturn("""
+                {"qualityAssessment":"ok","revisedIssueDraft":"## Goal\\nDo something testable","assumptions":[],"openQuestions":[],"readyToCreate":true}
+                """);
+        when(repositoryApiClient.createIssue(eq("Test"), eq("my-repo"), eq("AI Created Issue: Vague issue"), any()))
+                .thenReturn(99L);
+
+        botWebhookService.handleIssueCreated(bot, payload);
+
+        verify(repositoryApiClient).createIssue(eq("Test"), eq("my-repo"),
+                eq("AI Created Issue: Vague issue"), org.mockito.ArgumentMatchers.contains("Originates from #12"));
+        verify(agentSessionService).setGeneratedIssueNumber(session, 99L);
+    }
+
+    @Test
+    void writerBot_runOnIssueCreationDisabled_issueCreatedIgnored() {
+        Bot bot = createBot("writer", "writer_bot");
+        makeWriterBot(bot);
+        // runOnIssueCreation defaults to false
+        WebhookPayload payload = buildIssueCreationPayload("Test", "my-repo", 12L, "Vague issue", "Do something");
+
+        botWebhookService.handleIssueCreated(bot, payload);
+
+        verify(agentSessionService, never()).getSessionByIssue(any(), any(), any());
+        verify(repositoryApiClient, never()).createIssue(any(), any(), any(), any());
+    }
+
+    @Test
+    void issueCreation_publishesStartedAndCompletedEventsOnSuccess() {
+        Bot bot = createBot("writer", "writer_bot");
+        makeWriterBot(bot);
+        bot.setRunOnIssueCreation(true);
+        WebhookPayload payload = buildIssueCreationPayload("Test", "my-repo", 12L, "Vague issue", "Do something");
+        AgentSession session = new AgentSession("Test", "my-repo", 12L, "Vague issue");
+
+        when(giteaClientFactory.getApiClient(any())).thenReturn(repositoryApiClient);
+        when(aiClientFactory.getClient(any())).thenReturn(aiClient);
+        when(agentSessionService.getSessionByIssue("Test", "my-repo", 12L)).thenReturn(Optional.empty());
+        when(repositoryApiClient.getIssueDetails("Test", "my-repo", 12L))
+                .thenReturn(java.util.Map.of("user", java.util.Map.of("login", "tom")));
+        when(agentSessionService.createSession("Test", "my-repo", 12L, "Vague issue",
+                AgentSession.AgentSessionType.WRITER, "tom")).thenReturn(session);
+        when(repositoryApiClient.getDefaultBranch("Test", "my-repo")).thenReturn("main");
+        when(workspaceService.prepareWorkspace(eq("Test"), eq("my-repo"), eq("main"), any(), any(), any()))
+                .thenReturn(WorkspaceResult.success(Path.of("/tmp/writer-test-workspace")));
+        when(repositoryApiClient.getRepositoryTree("Test", "my-repo", "main")).thenReturn(java.util.List.of());
+        when(agentSessionService.toAiMessages(session)).thenReturn(java.util.List.of());
+        when(aiClient.chat(any(), any(), startsWith("Writer prompt"), any(), eq(4096))).thenReturn("""
+                {"qualityAssessment":"ok","revisedIssueDraft":"## Goal\\nDo something testable","assumptions":[],"openQuestions":[],"readyToCreate":true}
+                """);
+        when(repositoryApiClient.createIssue(eq("Test"), eq("my-repo"), eq("AI Created Issue: Vague issue"), any()))
+                .thenReturn(99L);
+
+        botWebhookService.handleIssueCreated(bot, payload);
+
+        var order = inOrder(eventHookPublisher);
+        order.verify(eventHookPublisher).publish(
+                eq(org.remus.giteabot.eventhook.EventHookEventType.ISSUE_ASSIGNMENT_STARTED),
+                eq(bot), eq("Test"), eq("my-repo"), isNull(), eq(12L),
+                argThat(data -> Long.valueOf(12L).equals(data.get("issueNumber"))
+                        && "Vague issue".equals(data.get("issueTitle"))));
+        order.verify(eventHookPublisher).publish(
+                eq(org.remus.giteabot.eventhook.EventHookEventType.ISSUE_ASSIGNMENT_COMPLETED),
+                eq(bot), eq("Test"), eq("my-repo"), isNull(), eq(12L),
+                argThat(data -> Long.valueOf(12L).equals(data.get("issueNumber"))
+                        && !data.containsKey("error")));
+    }
+
+    @Test
+    void issueCreation_publishesNothingWhenCallerNotAllowed() {
+        Bot bot = createBot("writer", "writer_bot");
+        makeWriterBot(bot);
+        bot.setRunOnIssueCreation(true);
+        WebhookPayload payload = buildIssueCreationPayload("Test", "my-repo", 12L, "Vague issue", "Do something");
+
+        when(botService.getAllowedUsernames(bot)).thenReturn(Set.of("someone-else"));
+        when(botService.isUsernameInSet(any(), any())).thenReturn(false);
+
+        botWebhookService.handleIssueCreated(bot, payload);
+
+        verify(eventHookPublisher, never()).publish(any(), any(), any(), any(), any(), any(), anyMap());
+    }
+
+    private Bot createBot(String name, String username) {
         Bot bot = new Bot();
         bot.setName(name);
         bot.setUsername(username);
-        bot.setAgentEnabled(agentEnabled);
         SystemPrompt systemPrompt = new SystemPrompt();
         systemPrompt.setId(1L);
         systemPrompt.setReviewSystemPrompt("Review prompt");
@@ -1332,9 +1422,9 @@ class BotWebhookServiceTest {
      * the workflow-guard logic in {@code BotWebhookService} which must refuse to fall
      * into the code-review path when the {@code review} workflow is not enabled.
      */
-    private Bot createBotWithWorkflows(String name, String username, boolean agentEnabled,
+    private Bot createBotWithWorkflows(String name, String username,
                                        java.util.List<String> enabledWorkflowKeys) {
-        Bot bot = createBot(name, username, agentEnabled);
+        Bot bot = createBot(name, username);
         org.remus.giteabot.prworkflow.config.WorkflowConfiguration cfg =
                 new org.remus.giteabot.prworkflow.config.WorkflowConfiguration();
         cfg.setId(42L);
@@ -1414,6 +1504,28 @@ class BotWebhookServiceTest {
         commentUser.setLogin("tom");
         comment.setUser(commentUser);
         payload.setComment(comment);
+
+        return payload;
+    }
+
+    private WebhookPayload buildIssueCreationPayload(String owner, String repo,
+                                                     long issueNumber, String title, String body) {
+        WebhookPayload payload = new WebhookPayload();
+        payload.setAction("opened");
+
+        WebhookPayload.Repository repository = new WebhookPayload.Repository();
+        repository.setName(repo);
+        repository.setFullName(owner + "/" + repo);
+        WebhookPayload.Owner repoOwner = new WebhookPayload.Owner();
+        repoOwner.setLogin(owner);
+        repository.setOwner(repoOwner);
+        payload.setRepository(repository);
+
+        WebhookPayload.Issue issue = new WebhookPayload.Issue();
+        issue.setNumber(issueNumber);
+        issue.setTitle(title);
+        issue.setBody(body);
+        payload.setIssue(issue);
 
         return payload;
     }

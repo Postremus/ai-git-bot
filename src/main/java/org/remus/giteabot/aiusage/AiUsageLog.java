@@ -32,9 +32,29 @@ public class AiUsageLog {
 
     private String sessionId;
 
+    /**
+     * Total input tokens processed by the provider — including any cached
+     * prefix. For cache-capable providers this is {@code uncached input +
+     * cache write + cache read}, matching the usage totals shown by the
+     * provider console. The uncached remainder is derivable as
+     * {@code inputTokens - cacheCreationInputTokens - cacheReadInputTokens}.
+     */
     @Column(nullable = false)
     private long inputTokens;
 
     @Column(nullable = false)
     private long outputTokens;
+
+    /** Tokens written to the provider's prompt cache (0 when unsupported). */
+    @Column(nullable = false)
+    private long cacheCreationInputTokens;
+
+    /**
+     * Tokens read back from the provider's prompt cache (0 when
+     * unsupported). Billed at a steep discount (~0.1x input price), so a
+     * large value here relative to {@link #inputTokens} is the signal that
+     * prompt caching is working.
+     */
+    @Column(nullable = false)
+    private long cacheReadInputTokens;
 }

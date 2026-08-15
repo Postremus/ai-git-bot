@@ -4,6 +4,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
+import org.mockito.ArgumentCaptor;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.remus.giteabot.admin.Bot;
 import org.remus.giteabot.admin.BotWebhookService;
@@ -193,6 +194,72 @@ class GitLabWebhookHandlerTest {
         verify(botWebhookService, never()).reviewPullRequest(any(), any());
     }
 
+    @Test
+    void issueOpenedWithRunOnIssueCreation_triggersAgent() {
+        bot.setRunOnIssueCreation(true);
+        ResponseEntity<String> response = handler.handleWebhook(bot, "Issue Hook",
+                issuePayload("open"));
+
+        assertEquals("agent triggered", response.getBody());
+        verify(botWebhookService).handleIssueCreated(eq(bot), any(WebhookPayload.class));
+        verify(botWebhookService, never()).handleIssueAssigned(any(), any());
+    }
+
+    @Test
+    void issueReopenedWithRunOnIssueCreation_triggersAgent() {
+        bot.setRunOnIssueCreation(true);
+        ResponseEntity<String> response = handler.handleWebhook(bot, "Issue Hook",
+                issuePayload("reopen"));
+
+        assertEquals("agent triggered", response.getBody());
+        verify(botWebhookService).handleIssueCreated(eq(bot), any(WebhookPayload.class));
+    }
+
+    @Test
+    void issueOpenedWithoutRunOnIssueCreation_isIgnored() {
+        ResponseEntity<String> response = handler.handleWebhook(bot, "Issue Hook",
+                issuePayload("open"));
+
+        assertEquals("ignored", response.getBody());
+        verify(botWebhookService, never()).handleIssueCreated(any(), any());
+    }
+
+    @Test
+    void issueUpdateWithAssigneeChange_stillRoutesToHandleIssueAssigned() {
+        Map<String, Object> changes = Map.of("assignees", Map.of(
+                "previous", List.of(),
+                "current", List.of(user("ai_bot"))));
+
+        ResponseEntity<String> response = handler.handleWebhook(bot, "Issue Hook",
+                issuePayload("update", changes));
+
+        assertEquals("agent triggered", response.getBody());
+        verify(botWebhookService).handleIssueAssigned(eq(bot), any(WebhookPayload.class));
+        verify(botWebhookService, never()).handleIssueCreated(any(), any());
+    }
+
+    @Test
+    void issueOpenedTranslatesActionToOpened() {
+        bot.setRunOnIssueCreation(true);
+
+        handler.handleWebhook(bot, "Issue Hook", issuePayload("open"));
+
+        ArgumentCaptor<WebhookPayload> captor = ArgumentCaptor.forClass(WebhookPayload.class);
+        verify(botWebhookService).handleIssueCreated(eq(bot), captor.capture());
+        assertEquals("opened", captor.getValue().getAction());
+    }
+
+    @Test
+    void issueReopenedTranslatesActionToReopened() {
+        bot.setRunOnIssueCreation(true);
+
+        handler.handleWebhook(bot, "Issue Hook", issuePayload("reopen"));
+
+        ArgumentCaptor<WebhookPayload> captor = ArgumentCaptor.forClass(WebhookPayload.class);
+        verify(botWebhookService).handleIssueCreated(eq(bot), captor.capture());
+        assertEquals("reopened", captor.getValue().getAction());
+    }
+
     private Map<String, Object> mergeRequestPayload(String action, List<Map<String, Object>> reviewers,
                                                     Map<String, Object> changes) {
         Map<String, Object> attrs = new HashMap<>();
@@ -227,6 +294,24 @@ class GitLabWebhookHandlerTest {
                 "title", "Test MR",
                 "description", "Some changes",
                 "author", user("developer")));
+        return payload;
+    }
+
+    private Map<String, Object> issuePayload(String action) {
+        return issuePayload(action, null);
+    }
+
+    private Map<String, Object> issuePayload(String action, Map<String, Object> changes) {
+        Map<String, Object> attrs = new HashMap<>();
+        attrs.put("action", action);
+        attrs.put("iid", 1);
+        attrs.put("title", "Test Issue");
+        attrs.put("description", "Some issue body");
+
+        Map<String, Object> payload = basePayload(attrs);
+        if (changes != null) {
+            payload.put("changes", changes);
+        }
         return payload;
     }
 

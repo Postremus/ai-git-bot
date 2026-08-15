@@ -182,6 +182,17 @@
                         </div>
 
                         <div class="col-12">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="runOnIssueCreation"
+                                       th:field="*{runOnIssueCreation}"/>
+                                <label class="form-check-label" for="runOnIssueCreation">Run workflow when issue is created</label>
+                            </div>
+                            <div class="form-text">
+                                When enabled, the bot executes its configured issue-assigned workflow when an issue is created, even if the bot is not assigned to the issue.
+                            </div>
+                        </div>
+
+                        <div class="col-12">
                             <label for="deploymentTargetId" class="form-label">Deployment Target <span class="text-secondary">(optional)</span></label>
                             <select class="form-select" id="deploymentTargetId" name="deploymentTargetId">
                                 <option value="">(none — preview-aware workflows will be skipped)</option>
@@ -239,13 +250,6 @@
                                 <input class="form-check-input" type="checkbox" id="enabled"
                                        th:field="*{enabled}"/>
                                 <label class="form-check-label" for="enabled">Enabled</label>
-                            </div>
-                        </div>
-                        <div class="col-md-6" id="agentEnabledContainer">
-                            <div class="form-check form-switch mt-3">
-                                <input class="form-check-input" type="checkbox" id="agentEnabled"
-                                       th:field="*{agentEnabled}"/>
-                                <label class="form-check-label" for="agentEnabled">Agent Enabled</label>
                             </div>
                         </div>
                     </div>

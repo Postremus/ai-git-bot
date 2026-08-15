@@ -190,7 +190,7 @@ public class BotWebhookService {
                 agentSessionService.getSessionByIssue(owner, repo, issueNumber).isPresent()
                 || agentSessionService.getSessionByPr(owner, repo, prNumber).isPresent();
 
-        if (hasAgentSession && bot.isAgentEnabled()) {
+        if (hasAgentSession) {
             // The PR was created by the bot's issue workflow (an agent session
             // exists): the comment continues that same flow, so it routes
             // through the configured issue-workflow resolution exactly like a
@@ -376,6 +376,40 @@ public class BotWebhookService {
         } catch (Exception e) {
             // Defense-in-depth: the orchestrator already records errors per workflow.
             log.error("[Bot '{}'] Failed to handle issue assignment: {}", bot.getName(), e.getMessage(), e);
+            botService.recordError(bot, e.getMessage());
+        }
+    }
+
+    /**
+     * Handles an issue created event by running the {@code IssueWorkflow}(s)
+     * enabled on the bot's issue-assigned {@code WorkflowConfiguration} when
+     * {@link Bot#isRunOnIssueCreation()} is enabled. Reuses the same lifecycle
+     * as assignment via {@link IssueWorkflowOrchestrator#runAssigned(Bot, WebhookPayload)}.
+     */
+    @Async
+    public void handleIssueCreated(Bot bot, WebhookPayload payload) {
+        AiAuditContext.setSessionId(auditSessionId(payload));
+        if (!bot.isRunOnIssueCreation()) {
+            log.debug("[Bot '{}'] Ignoring issue creation — runOnIssueCreation is disabled", bot.getName());
+            return;
+        }
+        if (!isCallerAllowed(bot, payload)) {
+            return;
+        }
+        // Issue creation is handled by reusing the issue-assigned workflow. The
+        // individual workflow implementations check that the issue is assigned to
+        // the bot, so treat this creation event as a virtual assignment to this bot.
+        WebhookPayload.Issue issue = payload.getIssue();
+        if (issue != null && bot.getUsername() != null && !bot.getUsername().isBlank()) {
+            WebhookPayload.Owner assignee = new WebhookPayload.Owner();
+            assignee.setLogin(bot.getUsername());
+            issue.setAssignee(assignee);
+        }
+        try {
+            issueWorkflowOrchestrator.runAssigned(bot, payload);
+        } catch (Exception e) {
+            // Defense-in-depth: the orchestrator already records errors per workflow.
+            log.error("[Bot '{}'] Failed to handle issue creation: {}", bot.getName(), e.getMessage(), e);
             botService.recordError(bot, e.getMessage());
         }
     }

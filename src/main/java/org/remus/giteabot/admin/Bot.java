@@ -93,13 +93,13 @@ public class Bot {
     private GitIntegration gitIntegration;
 
     @Column(nullable = false)
-    private boolean agentEnabled = false;
-
-    @Column(nullable = false)
     private boolean runOnPrCreation = false;
 
     @Column(nullable = false)
     private boolean runOnPrUpdate = false;
+
+    @Column(nullable = false)
+    private boolean runOnIssueCreation = false;
 
     /**
      * @deprecated Issue behaviour is no longer dispatched via the bot type.

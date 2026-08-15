@@ -57,6 +57,11 @@ public class AgentConfigProperties {
     private WriterConfig writer = new WriterConfig();
 
     /**
+     * Issue-triage agent specific settings.
+     */
+    private TriageConfig triage = new TriageConfig();
+
+    /**
      * JSON-Schema validation settings for agent plan responses (Step 5).
      */
     private SchemaConfig schema = new SchemaConfig();
@@ -123,6 +128,21 @@ public class AgentConfigProperties {
         /**
          * Maximum number of repository-tree file entries used in the writer's
          * initial prompt.
+         */
+        private int maxInitialTreeFiles = 100;
+    }
+
+    @Data
+    public static class TriageConfig {
+        /**
+         * Maximum number of context-gathering rounds the triage agent will run
+         * before it must commit to a routing decision.
+         */
+        private int maxToolRounds = 5;
+
+        /**
+         * Maximum number of repository-tree file entries used in the triage
+         * agent's initial prompt.
          */
         private int maxInitialTreeFiles = 100;
     }

@@ -132,14 +132,19 @@ public class GitHubWebhookHandler {
     }
 
     private ResponseEntity<String> handleIssuesEvent(Bot bot, WebhookPayload payload) {
-        if (!"assigned".equals(payload.getAction())) {
+        String action = payload.getAction();
+        if ("assigned".equals(action)) {
+            if (payload.getIssue() != null
+                    && payload.getIssue().getAssignee() != null
+                    && bot.getUsername() != null
+                    && bot.getUsername().equalsIgnoreCase(payload.getIssue().getAssignee().getLogin())) {
+                botWebhookService.handleIssueAssigned(bot, payload);
+                return ResponseEntity.ok("agent triggered");
+            }
             return ResponseEntity.ok("ignored");
         }
-        if (payload.getIssue() != null
-                && payload.getIssue().getAssignee() != null
-                && bot.getUsername() != null
-                && bot.getUsername().equalsIgnoreCase(payload.getIssue().getAssignee().getLogin())) {
-            botWebhookService.handleIssueAssigned(bot, payload);
+        if (("opened".equals(action) || "reopened".equals(action)) && bot.isRunOnIssueCreation()) {
+            botWebhookService.handleIssueCreated(bot, payload);
             return ResponseEntity.ok("agent triggered");
         }
         return ResponseEntity.ok("ignored");
