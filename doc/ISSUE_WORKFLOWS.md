@@ -21,7 +21,7 @@ behavior no longer means adding a new hardcoded bot category.
 
 | Key | Display name | What it does | Replaces |
 |---|---|---|---|
-| `issue-coding` | Coding Agent | Implements the assigned issue (workspace, branch, validation, pull request) and continues on follow-up comments. Gated by the bot's **Agent Enabled** toggle. | former **Coding bot** |
+| `issue-coding` | Coding Agent | Implements the assigned issue (workspace, branch, validation, pull request) and continues on follow-up comments. | former **Coding bot** |
 | `issue-writer` | Writer Agent | Refines the assigned issue into a structured, testable work item and answers follow-up questions in comments. | former **Writer bot** |
 
 Both workflows are seeded by Flyway migration `V39` as two ready-made
@@ -60,13 +60,6 @@ Upgrading keeps every existing bot's behavior:
 
 The legacy `botType` field is deprecated and no longer read at runtime. It is
 retained for one release as migration safety and will be removed afterwards.
-
-One intentional, minor behavior change: for a bot on the **Coding Agent**
-issue workflow with **Agent Enabled** off, the outgoing
-`issueassignment.started` / `issueassignment.completed` events are now
-published even though the workflow itself stays inactive. Previously no
-events were published in this case. All other error handling and outgoing
-event publication (`issueassignment.failed`, bot error records) is unchanged.
 
 ## Adding a new issue workflow
 

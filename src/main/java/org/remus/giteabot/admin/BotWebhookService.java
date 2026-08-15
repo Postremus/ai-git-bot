@@ -190,7 +190,7 @@ public class BotWebhookService {
                 agentSessionService.getSessionByIssue(owner, repo, issueNumber).isPresent()
                 || agentSessionService.getSessionByPr(owner, repo, prNumber).isPresent();
 
-        if (hasAgentSession && bot.isAgentEnabled()) {
+        if (hasAgentSession) {
             // The PR was created by the bot's issue workflow (an agent session
             // exists): the comment continues that same flow, so it routes
             // through the configured issue-workflow resolution exactly like a

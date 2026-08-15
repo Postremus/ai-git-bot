@@ -11,9 +11,6 @@ import org.springframework.stereotype.Component;
  * behavior: delegates issue assignments and follow-up issue comments to a
  * per-bot {@code WriterAgentService}, which refines vague issues into
  * well-specified ones.
- *
- * <p>The writer flow has no {@code agentEnabled} gate, matching the legacy
- * WRITER branch of {@code BotWebhookService}.</p>
  */
 @Component
 @RequiredArgsConstructor

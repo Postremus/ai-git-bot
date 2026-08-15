@@ -93,9 +93,6 @@ public class Bot {
     private GitIntegration gitIntegration;
 
     @Column(nullable = false)
-    private boolean agentEnabled = false;
-
-    @Column(nullable = false)
     private boolean runOnPrCreation = false;
 
     @Column(nullable = false)

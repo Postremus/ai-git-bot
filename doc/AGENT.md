@@ -4,7 +4,7 @@ AI-Git-Bot has two issue-driven agents for administrators to enable on bots:
 
 | Bot type | Best for | Trigger | Result |
 |---|---|---|---|
-| **Coding bot** | Issues that are ready to implement | Assign the bot to an issue and keep **Agent Enabled** on | Feature branch, commit, and pull request |
+| **Coding bot** | Issues that are ready to implement | Assign the bot to an issue | Feature branch, commit, and pull request |
 | **Writer bot** | Vague or incomplete issues | Assign the writer bot to an issue | Clarifying questions or a new improved issue |
 
 Issue agents require issue webhooks and assignment events. They are supported for **Gitea, GitHub, and GitLab**. Bitbucket Cloud is PR-review only.
@@ -40,8 +40,6 @@ In the admin UI, configure:
 2. **Git Integration** — the Git provider credentials used by the bot.
 3. **System Prompt** — the prompt set used for reviews and issue-agent workflows.
 4. **Bot** — choose **Bot Type**: **Coding bot** or **Writer bot**.
-
-For coding bots, keep **Agent Enabled** on when the bot should implement assigned issues. Writer bots use their bot type instead of the **Agent Enabled** switch.
 
 ### 2. Configure webhooks
 
@@ -152,7 +150,7 @@ Recommended starting points:
 | Local experimentation | Ollama with larger coder models, ideally 32B+ parameters |
 | Basic PR review comments | Smaller local models may be acceptable |
 
-Larger Ollama models such as `qwen2.5-coder:32b`, `deepseek-coder:33b`, or `codellama:70b` have the best chance, but cloud providers remain more reliable for production agent work. For smaller local models, turn off **Agent Enabled** on coding bots and avoid assigning writer bots until you have tested structured output quality.
+Larger Ollama models such as `qwen2.5-coder:32b`, `deepseek-coder:33b`, or `codellama:70b` have the best chance, but cloud providers remain more reliable for production agent work. For smaller local models, keep bots review-only (no Coding Agent issue workflow) and avoid assigning writer bots until you have tested structured output quality.
 
 ## Error handling
 
