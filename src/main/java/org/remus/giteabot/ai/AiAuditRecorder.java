@@ -13,10 +13,24 @@ public interface AiAuditRecorder {
     /**
      * Records the token usage of a single successful AI interaction.
      *
-     * @param inputTokens  number of prompt/input tokens (0 when unknown)
+     * @param inputTokens  total prompt/input tokens processed, including any
+     *                     cached prefix (0 when unknown)
      * @param outputTokens number of completion/output tokens (0 when unknown)
      */
     void recordUsage(long inputTokens, long outputTokens);
+
+    /**
+     * Records usage with the prompt-cache breakdown. The default delegates to
+     * {@link #recordUsage(long, long)} so recorders that don't track cache
+     * tokens keep working; the persisted breakdown goes to the Usage page.
+     *
+     * @param cacheCreationInputTokens tokens written to the provider's prompt cache
+     * @param cacheReadInputTokens     tokens served from the provider's prompt cache
+     */
+    default void recordUsage(long inputTokens, long outputTokens,
+                             long cacheCreationInputTokens, long cacheReadInputTokens) {
+        recordUsage(inputTokens, outputTokens);
+    }
 
     /**
      * Records a failed AI interaction (e.g. an HTTP 401 response).

@@ -1,0 +1,3 @@
+ALTER TABLE ai_integrations ADD COLUMN IF NOT EXISTS prompt_caching_enabled BOOLEAN NOT NULL DEFAULT TRUE;
+ALTER TABLE ai_usage_log ADD COLUMN IF NOT EXISTS cache_creation_input_tokens BIGINT NOT NULL DEFAULT 0;
+ALTER TABLE ai_usage_log ADD COLUMN IF NOT EXISTS cache_read_input_tokens BIGINT NOT NULL DEFAULT 0;

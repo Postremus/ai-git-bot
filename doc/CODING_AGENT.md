@@ -62,8 +62,7 @@ validation knobs.
 
 ## Running it
 
-- **Automatically** when a coding bot is assigned to an issue and
-  **Agent Enabled** is on.
+- **Automatically** when a coding bot is assigned to an issue.
 - The bot posts a confirmation comment, then begins work. You'll see progress
   updates as it explores, edits, validates, and finally opens the PR or reports
   failure.
@@ -90,8 +89,7 @@ For example: `ai-agent/issue-42`.
 ## Enabling it
 
 1. Create an **AI Integration** and a **Git Integration** in the admin UI.
-2. Create a bot with **Issue-Assigned Workflow Configuration: Issue: Coding Agent**
-   and keep **Agent Enabled** on.
+2. Create a bot with **Issue-Assigned Workflow Configuration: Issue: Coding Agent**.
 3. Configure your repository webhook to send **Issues** events to the bot URL.
 4. Grant the bot repository write access (create branches, push commits, open
    pull requests) and issue write access (progress/error comments).

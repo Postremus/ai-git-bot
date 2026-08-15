@@ -49,6 +49,29 @@ class AiUsageServiceTest {
     }
 
     @Test
+    void recordUsage_persistsCacheTokenBreakdown() {
+        service.recordUsage("my-anthropic", "owner/repo#42", 16_000, 50, 1_200, 14_500);
+
+        ArgumentCaptor<AiUsageLog> captor = ArgumentCaptor.forClass(AiUsageLog.class);
+        verify(usageRepository).save(captor.capture());
+        AiUsageLog entry = captor.getValue();
+        assertEquals(16_000, entry.getInputTokens());
+        assertEquals(1_200, entry.getCacheCreationInputTokens());
+        assertEquals(14_500, entry.getCacheReadInputTokens());
+    }
+
+    @Test
+    void recordUsage_withoutCacheBreakdown_defaultsCacheFieldsToZero() {
+        service.recordUsage("my-openai", null, 120, 35);
+
+        ArgumentCaptor<AiUsageLog> captor = ArgumentCaptor.forClass(AiUsageLog.class);
+        verify(usageRepository).save(captor.capture());
+        AiUsageLog entry = captor.getValue();
+        assertEquals(0, entry.getCacheCreationInputTokens());
+        assertEquals(0, entry.getCacheReadInputTokens());
+    }
+
+    @Test
     void recordUsage_neverPropagatesPersistenceFailures() {
         when(usageRepository.save(any())).thenThrow(new RuntimeException("db down"));
 
