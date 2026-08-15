@@ -52,12 +52,6 @@ public class AiClientFactory {
         return client;
     }
 
-    /**
-     * Removes all cached clients (useful after deletion).
-     */
-    public void evict(Long integrationId) {
-        cache.remove(integrationId);
-    }
 
     private AiClient buildClient(AiIntegration integration) {
         String providerType = integration.getProviderType();
@@ -87,8 +81,14 @@ public class AiClientFactory {
 
         @Override
         public void recordUsage(long inputTokens, long outputTokens) {
+            recordUsage(inputTokens, outputTokens, 0, 0);
+        }
+
+        @Override
+        public void recordUsage(long inputTokens, long outputTokens,
+                                long cacheCreationInputTokens, long cacheReadInputTokens) {
             aiUsageService.recordUsage(integrationName, AiAuditContext.getSessionId(),
-                    inputTokens, outputTokens);
+                    inputTokens, outputTokens, cacheCreationInputTokens, cacheReadInputTokens);
         }
 
         @Override

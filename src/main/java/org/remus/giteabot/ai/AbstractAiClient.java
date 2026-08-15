@@ -58,13 +58,24 @@ public abstract class AbstractAiClient implements AiClient {
      * audit recorder (no-op when no recorder is attached).
      */
     protected void reportUsage(Number inputTokens, Number outputTokens) {
+        reportUsage(inputTokens, outputTokens, 0L, 0L);
+    }
+
+    /**
+     * Reports token usage including the prompt-cache breakdown (0 for
+     * providers without caching).
+     */
+    protected void reportUsage(Number inputTokens, Number outputTokens,
+                               Number cacheCreationInputTokens, Number cacheReadInputTokens) {
         if (auditRecorder == null) {
             return;
         }
         try {
             auditRecorder.recordUsage(
                     inputTokens != null ? inputTokens.longValue() : 0L,
-                    outputTokens != null ? outputTokens.longValue() : 0L);
+                    outputTokens != null ? outputTokens.longValue() : 0L,
+                    cacheCreationInputTokens != null ? cacheCreationInputTokens.longValue() : 0L,
+                    cacheReadInputTokens != null ? cacheReadInputTokens.longValue() : 0L);
         } catch (Exception e) {
             log.warn("Failed to record AI usage: {}", e.getMessage());
         }

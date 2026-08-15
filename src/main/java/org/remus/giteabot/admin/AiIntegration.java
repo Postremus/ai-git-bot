@@ -55,6 +55,18 @@ public class AiIntegration {
     @Column(name = "use_legacy_tool_calling", nullable = false)
     private boolean useLegacyToolCalling = false;
 
+    /**
+     * Enables provider-side prompt caching (cache breakpoints on the system
+     * prompt and a rolling breakpoint on the conversation tail). In agentic
+     * loops every round re-sends the whole prefix, so cache reads (~0.1x
+     * input price) cut the input-token cost of a review run to a fraction.
+     *
+     * <p>On by default. Currently only consulted by the Anthropic client —
+     * providers without a caching API ignore the flag entirely.</p>
+     */
+    @Column(name = "prompt_caching_enabled", nullable = false)
+    private boolean promptCachingEnabled = true;
+
     @Column(nullable = false)
     private int contextWindowTokens = 200_000;
 

@@ -115,6 +115,35 @@
                                 </div>
                             </div>
                         </div>
+                        <div class="col-12">
+                            <hr/>
+                            <h5 class="mb-3">
+                                <i class="bi bi-lightning-charge"></i> Prompt caching
+                            </h5>
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" role="switch"
+                                       id="promptCachingEnabled" th:field="*{promptCachingEnabled}"/>
+                                <label class="form-check-label" for="promptCachingEnabled">
+                                    Enable prompt caching
+                                    <span class="badge bg-success ms-1">recommended</span>
+                                    <button type="button" class="btn btn-link btn-sm p-0 align-baseline ms-1"
+                                            tabindex="0"
+                                            data-bs-toggle="popover"
+                                            data-bs-trigger="focus"
+                                            data-bs-placement="right"
+                                            data-bs-html="true"
+                                            data-bs-title="Prompt caching"
+                                            data-bs-content="<p><strong>On (default, recommended)</strong>: the client marks cache breakpoints on the system prompt and on the rolling tail of the conversation. Agentic workflows re-send the whole prompt prefix (system prompt + diff + all previous tool results) on every round; with caching, repeated prefixes are billed as cache reads at roughly 1/10 of the input price instead of full price, cutting review cost to a fraction.</p><p><strong>Off</strong>: every request is billed at full input price. Only turn this off if your provider endpoint rejects the <code>cache_control</code> field.</p><p>Currently only the Anthropic provider supports prompt caching; other providers ignore this switch.</p>">
+                                        <i class="bi bi-question-circle"></i>
+                                    </button>
+                                </label>
+                                <div class="form-text">
+                                    Anthropic Claude only — cached prompt prefixes are billed at a
+                                    much lower rate, which substantially reduces the cost of agentic
+                                    reviews. Ignored by providers without a caching API.
+                                </div>
+                            </div>
+                        </div>
                     </div>
 
                     <div class="mt-4">
