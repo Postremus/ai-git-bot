@@ -18,6 +18,7 @@ import java.util.Map;
 
 import static org.hamcrest.Matchers.containsString;
 import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.Mockito.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
@@ -88,11 +89,34 @@ class AiIntegrationControllerTest {
                 .andExpect(redirectedUrl("/ai-integrations"));
 
         verify(aiIntegrationService).save(argThat(integration ->
-                "Google AI".equals(integration.getName())
-                        && "google".equals(integration.getProviderType())
-                        && "https://generativelanguage.googleapis.com".equals(integration.getApiUrl())
-                        && "gemini-key".equals(integration.getApiKey())
-                        && "gemini-2.5-flash".equals(integration.getModel())
-        ));
+                        "Google AI".equals(integration.getName())
+                                && "google".equals(integration.getProviderType())
+                                && "https://generativelanguage.googleapis.com".equals(integration.getApiUrl())
+                                && "gemini-key".equals(integration.getApiKey())
+                                && "gemini-2.5-flash".equals(integration.getModel())
+                ),
+                eq(false));
+    }
+
+    @Test
+    void save_blankApiKey_keepsKeyOutOfEntityAndForwardsClearFlag() throws Exception {
+        mockMvc.perform(post("/ai-integrations/save")
+                        .with(user("admin").roles("ADMIN"))
+                        .with(csrf())
+                        .param("id", "7")
+                        .param("name", "Google AI")
+                        .param("providerType", "google")
+                        .param("apiUrl", "https://generativelanguage.googleapis.com")
+                        .param("apiKey", "")
+                        .param("clearApiKey", "true")
+                        .param("model", "gemini-2.5-flash"))
+                .andExpect(status().is3xxRedirection())
+                .andExpect(redirectedUrl("/ai-integrations"));
+
+        // The kept ciphertext must never travel through the controller into
+        // save(), where it would be encrypted a second time and corrupt the key.
+        verify(aiIntegrationService).save(argThat(integration ->
+                        "".equals(integration.getApiKey()) || integration.getApiKey() == null),
+                eq(true));
     }
 }

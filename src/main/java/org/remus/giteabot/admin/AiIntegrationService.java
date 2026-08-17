@@ -28,9 +28,27 @@ public class AiIntegrationService {
     }
 
     public AiIntegration save(AiIntegration integration) {
+        return save(integration, false);
+    }
+
+    /**
+     * Saves an AI integration, resolving the API key from the form input.
+     *
+     * <p>The key field is a one-way write: the stored value is never echoed
+     * back into the form. A blank field therefore means "keep the stored
+     * value", while {@code clearApiKey} requests explicit removal (the Clear
+     * button in the UI). Re-encrypting the kept ciphertext would corrupt the
+     * key, so only freshly provided plaintext keys are encrypted.</p>
+     */
+    public AiIntegration save(AiIntegration integration, boolean clearApiKey) {
         String apiKey = integration.getApiKey();
         if (apiKey != null && !apiKey.isBlank()) {
             integration.setApiKey(encryptionService.encrypt(apiKey));
+        } else if (clearApiKey) {
+            integration.setApiKey(null);
+        } else if (integration.getId() != null) {
+            aiIntegrationRepository.findById(integration.getId())
+                    .ifPresent(existing -> integration.setApiKey(existing.getApiKey()));
         }
         return aiIntegrationRepository.save(integration);
     }

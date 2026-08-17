@@ -61,17 +61,17 @@ public class AiIntegrationController {
     @PostMapping("/save")
     public String save(@ModelAttribute AiIntegration integration,
                        @RequestParam(required = false) String apiKey,
+                       @RequestParam(required = false, defaultValue = "false") boolean clearApiKey,
                        RedirectAttributes redirectAttributes) {
         try {
-            // If editing an existing integration and no new API key provided,
-            // keep the existing encrypted API key
-            if (integration.getId() != null && (apiKey == null || apiKey.isBlank())) {
-                aiIntegrationService.findById(integration.getId())
-                        .ifPresent(existing -> integration.setApiKey(existing.getApiKey()));
-            } else {
+            // The key form field is a one-way write: only override when a new
+            // key is provided. Blank means "keep the stored key" and the
+            // explicit Clear button requests removal - both resolved in the
+            // service so the kept ciphertext is never re-encrypted.
+            if (apiKey != null && !apiKey.isBlank()) {
                 integration.setApiKey(apiKey);
             }
-            aiIntegrationService.save(integration);
+            aiIntegrationService.save(integration, clearApiKey);
             redirectAttributes.addFlashAttribute("success", "AI Integration saved successfully");
         } catch (Exception e) {
             log.error("Failed to save AI Integration", e);
