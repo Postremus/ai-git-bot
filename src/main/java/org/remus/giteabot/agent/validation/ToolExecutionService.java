@@ -1287,6 +1287,10 @@ public class ToolExecutionService {
             ProcessSupport.scrubEnvironment(pb);
 
             int timeoutSeconds = agentConfig.getValidation().getToolTimeoutSeconds();
+            // The byte cap is the hard memory bound while draining the pipe; the
+            // character cap below is the presentation limit. The +1_000 headroom
+            // makes the char cap the effective limit for ASCII-dominant output,
+            // while multi-byte-heavy output may hit the byte cap first.
             ProcessSupport.CommandResult result = ProcessSupport.run(pb, timeoutSeconds,
                     TimeUnit.SECONDS, MAX_TOOL_OUTPUT_CHARS + 1_000);
 

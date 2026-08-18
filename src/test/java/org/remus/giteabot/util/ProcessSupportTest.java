@@ -61,6 +61,26 @@ class ProcessSupportTest {
     }
 
     @Test
+    void runInNewProcessGroup_terminatesBackgroundChildOnTimeout(
+            @org.junit.jupiter.api.io.TempDir Path tempDir) throws Exception {
+        String executable = System.getProperty("os.name").startsWith("Windows") ? "java.exe" : "java";
+        Path heartbeat = tempDir.resolve("heartbeat");
+        ProcessBuilder processBuilder = new ProcessBuilder(
+                Path.of(System.getProperty("java.home"), "bin", executable).toString(),
+                "-cp", System.getProperty("java.class.path"),
+                BackgroundChildAndSleepProcess.class.getName(), heartbeat.toString())
+                .redirectErrorStream(true);
+
+        ProcessSupport.CommandResult result = ProcessSupport.runInNewProcessGroup(processBuilder,
+                5, TimeUnit.SECONDS, 1024);
+
+        assertThat(result.finished()).isFalse();
+        String heartbeatAtTimeout = Files.readString(heartbeat);
+        Thread.sleep(250);
+        assertThat(Files.readString(heartbeat)).isEqualTo(heartbeatAtTimeout);
+    }
+
+    @Test
     void waitFor_boundsOutputWithoutSplittingUtf8Characters() throws Exception {
         String executable = System.getProperty("os.name").startsWith("Windows") ? "java.exe" : "java";
         Process process = new ProcessBuilder(
@@ -111,6 +131,25 @@ class ProcessSupportTest {
             }
             System.out.print("started");
             System.out.flush();
+        }
+    }
+
+    public static final class BackgroundChildAndSleepProcess {
+        public static void main(String[] args) throws Exception {
+            String executable = System.getProperty("os.name").startsWith("Windows") ? "java.exe" : "java";
+            new ProcessBuilder(
+                    Path.of(System.getProperty("java.home"), "bin", executable).toString(),
+                    "-cp", System.getProperty("java.class.path"), BackgroundHeartbeatChild.class.getName(),
+                    args[0])
+                    .inheritIO()
+                    .start();
+            Path heartbeat = Path.of(args[0]);
+            for (int attempt = 0; attempt < 100 && !Files.exists(heartbeat); attempt++) {
+                Thread.sleep(10);
+            }
+            System.out.print("started");
+            System.out.flush();
+            Thread.sleep(30_000);
         }
     }
 

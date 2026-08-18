@@ -93,6 +93,21 @@ public final class ProcessSupport {
     /**
      * Starts an untrusted process in a dedicated Linux process group so normal
      * background children cannot survive after the command completes.
+     * <p>
+     * The process-group leader is the PID returned by
+     * {@link ProcessBuilder#start()}: util-linux {@code setsid} forks only when
+     * it is already a process-group leader ({@code getpgrp() == getpid()}). A
+     * {@code ProcessBuilder} child inherits the JVM's process group, and the
+     * kernel never allocates a PID that is still in use, so as long as the
+     * JVM's group leader lives, the child can never be a leader itself;
+     * {@code setsid} then calls {@code setsid(2)} and {@code execvp}s the
+     * target in the same process, preserving the PID as the new PGID.
+     * <p>
+     * Known limitation: a child that daemonizes itself (calls {@code setsid}
+     * again) leaves the process group and survives cleanup; on non-Linux
+     * platforms a reparented daemon escapes the best-effort descendant tracker
+     * the same way. Closing that gap requires uid/cgroup separation, which is
+     * the follow-up hard-isolation layer.
      */
     public static CommandResult runInNewProcessGroup(ProcessBuilder processBuilder, long timeout, TimeUnit unit,
                                                        int maxOutputBytes) throws IOException, InterruptedException {
@@ -169,6 +184,9 @@ public final class ProcessSupport {
     }
 
     private static void terminateProcessGroup(long leaderPid) {
+        // The leader PID is the process-group ID: setsid(2) made the process a
+        // session and group leader, and execvp preserved the PID (see
+        // runInNewProcessGroup). The group ID stays valid while any member lives.
         try {
             ProcessBuilder processBuilder = new ProcessBuilder("kill", "-KILL", "--", "-" + leaderPid);
             processBuilder.redirectErrorStream(true);
@@ -245,11 +263,16 @@ public final class ProcessSupport {
     }
 
     private static Thread startDescendantTracker(Process process, Set<ProcessHandle> trackedDescendants) {
+        // Polling interval is a trade-off, not a correctness parameter: a child
+        // that spawns and dies between two ticks needs no kill, and a child that
+        // is alive at any tick is captured. A shorter interval only catches
+        // short-lived intermediate links of a fork chain before their children
+        // get orphaned; 250ms keeps the per-command overhead negligible.
         Thread tracker = new Thread(() -> {
             while (process.isAlive() && !Thread.currentThread().isInterrupted()) {
                 captureDescendants(process, trackedDescendants);
                 try {
-                    Thread.sleep(10);
+                    Thread.sleep(250);
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
                 }
