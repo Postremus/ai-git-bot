@@ -6,6 +6,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.remus.giteabot.config.AiUsageProperties;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
@@ -17,6 +18,7 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
@@ -30,6 +32,9 @@ class AiUsageServiceTest {
 
     @Mock
     private AiErrorLogRepository errorRepository;
+
+    @Mock
+    private AiUsageProperties usageProperties;
 
     @InjectMocks
     private AiUsageService service;
@@ -50,6 +55,9 @@ class AiUsageServiceTest {
 
     @Test
     void recordUsage_persistsRawRequestAndResponse() {
+        when(usageProperties.isRawPayloadsEnabled()).thenReturn(true);
+        when(usageProperties.getEffectiveMaxRawPayloadLength()).thenReturn(65535);
+
         service.recordUsage("my-openai", "owner/repo#42", 120, 35, 0, 0,
                 "{\"prompt\":\"hello\"}", "{\"text\":\"hi\"}");
 
@@ -58,6 +66,35 @@ class AiUsageServiceTest {
         AiUsageLog entry = captor.getValue();
         assertEquals("{\"prompt\":\"hello\"}", entry.getRawRequest());
         assertEquals("{\"text\":\"hi\"}", entry.getRawResponse());
+    }
+
+    @Test
+    void recordUsage_dropsRawPayloadsWhenDisabled() {
+        when(usageProperties.isRawPayloadsEnabled()).thenReturn(false);
+
+        service.recordUsage("my-openai", "owner/repo#42", 120, 35, 0, 0,
+                "{\"prompt\":\"hello\"}", "{\"text\":\"hi\"}");
+
+        ArgumentCaptor<AiUsageLog> captor = ArgumentCaptor.forClass(AiUsageLog.class);
+        verify(usageRepository).save(captor.capture());
+        AiUsageLog entry = captor.getValue();
+        assertNull(entry.getRawRequest());
+        assertNull(entry.getRawResponse());
+    }
+
+    @Test
+    void recordUsage_truncatesRawPayloadsToMaxLength() {
+        when(usageProperties.isRawPayloadsEnabled()).thenReturn(true);
+        when(usageProperties.getEffectiveMaxRawPayloadLength()).thenReturn(10);
+
+        service.recordUsage("my-openai", "owner/repo#42", 120, 35, 0, 0,
+                "{\"prompt\":\"hello\"}", "{\"text\":\"hi\"}");
+
+        ArgumentCaptor<AiUsageLog> captor = ArgumentCaptor.forClass(AiUsageLog.class);
+        verify(usageRepository).save(captor.capture());
+        AiUsageLog entry = captor.getValue();
+        assertEquals("{\"prompt\":", entry.getRawRequest());
+        assertEquals("{\"text\":\"h", entry.getRawResponse());
     }
 
     @Test

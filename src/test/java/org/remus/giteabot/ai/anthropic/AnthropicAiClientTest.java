@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 import org.remus.giteabot.ai.AiAuditRecorder;
 import org.remus.giteabot.ai.ChatTurn;
 import org.remus.giteabot.ai.ToolDescriptor;
+import org.remus.giteabot.config.AiUsageProperties;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.web.client.HttpClientErrorException;
@@ -92,6 +93,9 @@ class AnthropicAiClientTest {
 
         AnthropicAiClient client = new AnthropicAiClient(restClient,
                 "claude-sonnet-4-20250514", 1024, true, true);
+        AiUsageProperties usageProperties = new AiUsageProperties();
+        usageProperties.setRawPayloadsEnabled(true);
+        client.setUsageProperties(usageProperties);
         long[] recorded = new long[4];
         String[] recordedRaw = new String[2];
         client.setAuditRecorder(new AiAuditRecorder() {

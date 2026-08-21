@@ -4,6 +4,7 @@ import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.remus.giteabot.agent.shared.AgentJackson;
+import org.remus.giteabot.config.AiUsageProperties;
 import org.springframework.web.client.HttpClientErrorException;
 
 import java.util.ArrayList;
@@ -45,6 +46,9 @@ public abstract class AbstractAiClient implements AiClient {
     @Setter
     private AiAuditRecorder auditRecorder;
 
+    @Setter
+    private AiUsageProperties usageProperties;
+
     protected AbstractAiClient(String model, int maxTokens) {
         this.model = model;
         this.maxTokens = maxTokens;
@@ -56,8 +60,10 @@ public abstract class AbstractAiClient implements AiClient {
 
     /**
      * Reports token usage together with the raw request/response payloads
-     * sent to and received from the provider. Serialization failures are
-     * swallowed so that audit logging can never break the actual AI workflow.
+     * sent to and received from the provider. Raw payloads are only captured
+     * when {@link AiUsageProperties#isRawPayloadsEnabled()} is {@code true};
+     * serialization failures are swallowed so that audit logging can never
+     * break the actual AI workflow.
      */
     protected void reportUsage(Number inputTokens, Number outputTokens,
                                Number cacheCreationInputTokens, Number cacheReadInputTokens,
@@ -66,13 +72,14 @@ public abstract class AbstractAiClient implements AiClient {
             return;
         }
         try {
+            boolean captureRaw = usageProperties != null && usageProperties.isRawPayloadsEnabled();
             auditRecorder.recordUsage(
                     inputTokens != null ? inputTokens.longValue() : 0L,
                     outputTokens != null ? outputTokens.longValue() : 0L,
                     cacheCreationInputTokens != null ? cacheCreationInputTokens.longValue() : 0L,
                     cacheReadInputTokens != null ? cacheReadInputTokens.longValue() : 0L,
-                    serializeForAudit(rawRequest),
-                    serializeForAudit(rawResponse));
+                    captureRaw ? serializeForAudit(rawRequest) : null,
+                    captureRaw ? serializeForAudit(rawResponse) : null);
         } catch (Exception e) {
             log.warn("Failed to record AI usage: {}", e.getMessage());
         }
