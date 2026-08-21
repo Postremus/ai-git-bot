@@ -42,8 +42,17 @@
                         </div>
                         <div class="col-md-6">
                             <label for="apiKey" class="form-label">API Key</label>
-                            <input type="password" class="form-control" id="apiKey" name="apiKey"
-                                    placeholder="Enter API key"/>
+                            <div class="input-group">
+                                <input type="password" class="form-control" id="apiKey" name="apiKey"
+                                        autocomplete="new-password"
+                                        placeholder="Enter API key"/>
+                                <button class="btn btn-outline-secondary" type="button" id="clearApiKeyBtn"
+                                        th:if="${integration.id != null}"
+                                        title="Remove the stored API key">
+                                    <i class="bi bi-trash"></i> Clear
+                                </button>
+                            </div>
+                            <input type="hidden" id="clearApiKey" name="clearApiKey" value="false"/>
                             <div class="form-text" id="apiKeyHint"></div>
                             <div th:if="${integration.id != null}" class="form-text">
                                 Leave blank to keep current API key.
@@ -244,6 +253,18 @@
                 if (providerSelect.value) {
                     providerSelect.dataset.previousValue = providerSelect.value;
                     updateProviderDefaults();
+                }
+
+                // ---- API key: remember that the operator wants it removed on
+                // save (an empty field alone means "keep the stored value", so
+                // we need an explicit marker). ----
+                const clearApiKeyBtn = document.getElementById('clearApiKeyBtn');
+                if (clearApiKeyBtn) {
+                    clearApiKeyBtn.addEventListener('click', function() {
+                        apiKeyInput.value = '';
+                        apiKeyInput.placeholder = 'API key will be removed on save';
+                        document.getElementById('clearApiKey').value = 'true';
+                    });
                 }
 
                 // Step 6: enable Bootstrap popover for the tool-calling explanation
