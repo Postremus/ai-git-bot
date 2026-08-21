@@ -2,6 +2,7 @@ package org.remus.giteabot.prworkflow.e2e.workspace;
 
 import lombok.extern.slf4j.Slf4j;
 import org.remus.giteabot.prworkflow.e2e.E2eTestFramework;
+import org.remus.giteabot.util.ProcessSupport;
 import org.remus.giteabot.util.WorkspacePaths;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
@@ -40,6 +41,13 @@ public class PrTestWorkspaceManager {
     private final Path root;
     private final boolean npmInstallEnabled;
 
+    /**
+     * Creates the manager with the configured workspace root.
+     *
+     * @param configuredRoot absolute host-visible root for generated workspaces;
+     *                       a relative value is rejected to avoid silently resolving
+     *                       it against the process working directory
+     */
     public PrTestWorkspaceManager(
             @Value("${ai-git-bot.e2e.workspace-root:#{null}}") String configuredRoot,
             @Value("${ai-git-bot.e2e.npm-install-enabled:true}") boolean npmInstallEnabled) {
@@ -47,7 +55,13 @@ public class PrTestWorkspaceManager {
             this.root = Path.of(System.getProperty("java.io.tmpdir"), "ai-bot-pr-tests")
                     .toAbsolutePath().normalize();
         } else {
-            this.root = Path.of(configuredRoot).toAbsolutePath().normalize();
+            Path configured = Path.of(configuredRoot);
+            if (!configured.isAbsolute()) {
+                throw new IllegalArgumentException(
+                        "ai-git-bot.e2e.workspace-root must be an absolute path, but was: "
+                                + configuredRoot);
+            }
+            this.root = configured.normalize();
         }
         this.npmInstallEnabled = npmInstallEnabled;
         log.debug("PrTestWorkspaceManager root={} npmInstallEnabled={}", root, npmInstallEnabled);
@@ -269,22 +283,17 @@ public class PrTestWorkspaceManager {
             ProcessBuilder pb = new ProcessBuilder(cmd)
                     .directory(workspace.toFile())
                     .redirectErrorStream(true);
-            pb.environment().putIfAbsent("CI", "1");
-            Process p = pb.start();
-            try (var in = p.getInputStream()) {
-                // Drain so the child does not block on a full pipe — but we
-                // do not need to keep the output beyond the log line below.
-                in.readAllBytes();
-            }
-            boolean finished = p.waitFor(120, TimeUnit.SECONDS);
-            if (!finished) {
-                p.destroyForcibly();
+            ProcessSupport.scrubEnvironment(pb);
+            pb.environment().put("CI", "1");
+            ProcessSupport.CommandResult result = ProcessSupport.run(pb, 120,
+                    TimeUnit.SECONDS, 64 * 1024);
+            if (!result.finished()) {
                 log.warn("npm install of {} in {} timed out after 120s", packageSpec, workspace);
                 return;
             }
-            if (p.exitValue() != 0) {
+            if (result.exitCode() != 0) {
                 log.warn("npm install of {} in {} exited with code {}",
-                        packageSpec, workspace, p.exitValue());
+                        packageSpec, workspace, result.exitCode());
             } else {
                 log.debug("npm install of {} in {} succeeded", packageSpec, workspace);
             }
