@@ -107,7 +107,7 @@ public class OllamaClient extends AbstractAiClient {
                 effectiveModel, toolPayloads.size(), messages.size());
 
         OllamaResponse response = executeRequest(request);
-        return interpret(response);
+        return interpret(request, response);
     }
 
     @Override
@@ -179,7 +179,7 @@ public class OllamaClient extends AbstractAiClient {
                 .build();
     }
 
-    private ChatTurn interpret(OllamaResponse response) {
+    private ChatTurn interpret(OllamaRequest request, OllamaResponse response) {
         if (response == null || response.getMessage() == null) {
             log.warn("Empty response from Ollama tool-call request");
             return ChatTurn.text("Unable to generate response - empty reply from AI.");
@@ -211,7 +211,7 @@ public class OllamaClient extends AbstractAiClient {
             outputTokens = response.getEvalCount();
             log.info("Ollama chat-with-tools: {} prompt tokens, {} eval tokens, {} tool_call(s)",
                     inputTokens, outputTokens, calls.size());
-            reportUsage(inputTokens, outputTokens);
+            reportUsage(inputTokens, outputTokens, 0L, 0L, request, response);
         }
         return new ChatTurn(text, calls, reason, inputTokens, outputTokens);
     }
@@ -263,7 +263,7 @@ public class OllamaClient extends AbstractAiClient {
         OllamaRequest request = requestBuilder.build();
 
         OllamaResponse response = executeRequest(request);
-        return extractText(response, context);
+        return extractText(request, response, context);
     }
 
     private OllamaResponse executeRequest(OllamaRequest request) {
@@ -274,7 +274,7 @@ public class OllamaClient extends AbstractAiClient {
                 .body(OllamaResponse.class);
     }
 
-    private String extractText(OllamaResponse response, String context) {
+    private String extractText(OllamaRequest request, OllamaResponse response, String context) {
         if (response == null || response.getMessage() == null
                 || response.getMessage().getContent() == null) {
             log.warn("Empty response from Ollama API");
@@ -288,7 +288,7 @@ public class OllamaClient extends AbstractAiClient {
                     context,
                     response.getPromptEvalCount(),
                     response.getEvalCount());
-            reportUsage(response.getPromptEvalCount(), response.getEvalCount());
+            reportUsage(response.getPromptEvalCount(), response.getEvalCount(), 0L, 0L, request, response);
         }
 
         return result;

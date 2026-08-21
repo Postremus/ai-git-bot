@@ -3,6 +3,7 @@ package org.remus.giteabot.ai;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
+import org.remus.giteabot.agent.shared.AgentJackson;
 import org.springframework.web.client.HttpClientErrorException;
 
 import java.util.ArrayList;
@@ -54,19 +55,13 @@ public abstract class AbstractAiClient implements AiClient {
     }
 
     /**
-     * Reports the token usage of a single provider interaction to the attached
-     * audit recorder (no-op when no recorder is attached).
-     */
-    protected void reportUsage(Number inputTokens, Number outputTokens) {
-        reportUsage(inputTokens, outputTokens, 0L, 0L);
-    }
-
-    /**
-     * Reports token usage including the prompt-cache breakdown (0 for
-     * providers without caching).
+     * Reports token usage together with the raw request/response payloads
+     * sent to and received from the provider. Serialization failures are
+     * swallowed so that audit logging can never break the actual AI workflow.
      */
     protected void reportUsage(Number inputTokens, Number outputTokens,
-                               Number cacheCreationInputTokens, Number cacheReadInputTokens) {
+                               Number cacheCreationInputTokens, Number cacheReadInputTokens,
+                               Object rawRequest, Object rawResponse) {
         if (auditRecorder == null) {
             return;
         }
@@ -75,9 +70,28 @@ public abstract class AbstractAiClient implements AiClient {
                     inputTokens != null ? inputTokens.longValue() : 0L,
                     outputTokens != null ? outputTokens.longValue() : 0L,
                     cacheCreationInputTokens != null ? cacheCreationInputTokens.longValue() : 0L,
-                    cacheReadInputTokens != null ? cacheReadInputTokens.longValue() : 0L);
+                    cacheReadInputTokens != null ? cacheReadInputTokens.longValue() : 0L,
+                    serializeForAudit(rawRequest),
+                    serializeForAudit(rawResponse));
         } catch (Exception e) {
             log.warn("Failed to record AI usage: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * Serializes a provider-specific request/response object to a JSON string
+     * suitable for audit storage. Returns {@code null} when the value is null
+     * or serialization fails.
+     */
+    protected String serializeForAudit(Object value) {
+        if (value == null) {
+            return null;
+        }
+        try {
+            return AgentJackson.mapper().writeValueAsString(value);
+        } catch (Exception e) {
+            log.debug("Failed to serialize audit payload: {}", e.getMessage());
+            return null;
         }
     }
 

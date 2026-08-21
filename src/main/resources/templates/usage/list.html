@@ -80,8 +80,8 @@
                                 <table class="table table-hover align-middle mb-0">
                                     <thead class="table-group-divider">
                                     <tr>
-                                        <th th:each="col : ${ {'timestamp', 'aiIntegrationName', 'sessionId', 'inputTokens', 'outputTokens', 'cacheCreationInputTokens', 'cacheReadInputTokens'} }">
-                                            <a class="sort-link"
+                                        <th th:each="col : ${ {'timestamp', 'aiIntegrationName', 'sessionId', 'inputTokens', 'outputTokens', 'cacheCreationInputTokens', 'cacheReadInputTokens', 'details'} }">
+                                            <a th:if="${col != 'details'}" class="sort-link"
                                                th:href="@{/usage(from=${from}, to=${to}, usagePage=0,
                                                           usageSort=${col},
                                                           usageDir=${usageSort == col && usageDir == 'desc'} ? 'asc' : 'desc',
@@ -96,6 +96,7 @@
                                                 <i th:if="${usageSort == col}"
                                                    th:class="${usageDir == 'asc'} ? 'bi bi-caret-up-fill' : 'bi bi-caret-down-fill'"></i>
                                             </a>
+                                            <span th:if="${col == 'details'}">Details</span>
                                         </th>
                                     </tr>
                                     </thead>
@@ -108,6 +109,38 @@
                                         <td th:text="${entry.outputTokens}">0</td>
                                         <td th:text="${entry.cacheCreationInputTokens}">0</td>
                                         <td th:text="${entry.cacheReadInputTokens}">0</td>
+                                        <td>
+                                            <button type="button" class="btn btn-outline-primary btn-sm"
+                                                    data-bs-toggle="modal"
+                                                    th:data-bs-target="'#rawPayloadModal-' + ${entry.id}">
+                                                <i class="bi bi-eye"></i> Raw
+                                            </button>
+                                            <div class="modal fade" th:id="'rawPayloadModal-' + ${entry.id}" tabindex="-1"
+                                                 aria-hidden="true">
+                                                <div class="modal-dialog modal-lg modal-dialog-scrollable">
+                                                    <div class="modal-content">
+                                                        <div class="modal-header">
+                                                            <h5 class="modal-title">Raw LLM payloads</h5>
+                                                            <button type="button" class="btn-close" data-bs-dismiss="modal"
+                                                                    aria-label="Close"></button>
+                                                        </div>
+                                                        <div class="modal-body">
+                                                            <h6>Request</h6>
+                                                            <pre class="error-log-pre border rounded p-2 small mb-3"
+                                                                 th:text="${entry.rawRequest != null ? entry.rawRequest : '—'}"></pre>
+                                                            <h6>Response</h6>
+                                                            <pre class="error-log-pre border rounded p-2 small mb-0"
+                                                                 th:text="${entry.rawResponse != null ? entry.rawResponse : '—'}"></pre>
+                                                        </div>
+                                                        <div class="modal-footer">
+                                                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                                                                Close
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </td>
                                     </tr>
                                     </tbody>
                                 </table>

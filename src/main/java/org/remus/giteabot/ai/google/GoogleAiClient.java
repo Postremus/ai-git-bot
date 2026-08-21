@@ -153,7 +153,7 @@ public class GoogleAiClient extends AbstractAiClient {
                     .body(request)
                     .retrieve()
                     .body(GoogleAiResponse.class);
-            return interpret(response);
+            return interpret(request, response);
         } catch (HttpClientErrorException e) {
             if (isPromptTooLongError(e)) {
                 throw e;
@@ -241,7 +241,7 @@ public class GoogleAiClient extends AbstractAiClient {
                 .build();
     }
 
-    private ChatTurn interpret(GoogleAiResponse response) {
+    private ChatTurn interpret(GoogleAiRequest request, GoogleAiResponse response) {
         if (response == null || response.getCandidates() == null || response.getCandidates().isEmpty()) {
             log.warn("Empty response from Google AI tool-call request");
             return ChatTurn.text("Unable to generate response - empty reply from AI.");
@@ -293,7 +293,7 @@ public class GoogleAiClient extends AbstractAiClient {
             outputTokens = response.getUsageMetadata().getCandidatesTokenCount();
             log.info("Google AI chat-with-tools: {} prompt tokens, {} candidate tokens, {} functionCall(s)",
                     inputTokens, outputTokens, calls.size());
-            reportUsage(inputTokens, outputTokens);
+            reportUsage(inputTokens, outputTokens, 0L, 0L, request, response);
         }
         return new ChatTurn(text.toString(), calls, reason, inputTokens, outputTokens);
     }
@@ -331,7 +331,7 @@ public class GoogleAiClient extends AbstractAiClient {
                     .retrieve()
                     .body(GoogleAiResponse.class);
 
-            return extractText(response, context);
+            return extractText(request, response, context);
         } catch (HttpClientErrorException e) {
             if (isPromptTooLongError(e)) {
                 throw e;
@@ -340,7 +340,7 @@ public class GoogleAiClient extends AbstractAiClient {
         }
     }
 
-    private String extractText(GoogleAiResponse response, String context) {
+    private String extractText(GoogleAiRequest request, GoogleAiResponse response, String context) {
         if (response == null || response.getCandidates() == null || response.getCandidates().isEmpty()) {
             log.warn("Empty response from Google AI API");
             return "Unable to generate " + context + " - empty response from AI.";
@@ -371,7 +371,7 @@ public class GoogleAiClient extends AbstractAiClient {
                     response.getUsageMetadata().getPromptTokenCount(),
                     response.getUsageMetadata().getCandidatesTokenCount());
             reportUsage(response.getUsageMetadata().getPromptTokenCount(),
-                    response.getUsageMetadata().getCandidatesTokenCount());
+                    response.getUsageMetadata().getCandidatesTokenCount(), 0L, 0L, request, response);
         }
 
         return result;

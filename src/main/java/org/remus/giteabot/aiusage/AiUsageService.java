@@ -44,9 +44,9 @@ public class AiUsageService {
     private final AiErrorLogRepository errorRepository;
 
     /**
-     * Records the token usage of a single AI interaction. Persistence problems
-     * are logged but never propagated so that auditing can never break the
-     * actual AI workflow.
+     * Records the token usage of a single AI interaction together with the
+     * raw request/response payloads. Persistence problems are logged but never
+     * propagated so that auditing can never break the actual AI workflow.
      *
      * <p>{@code inputTokens} is the total processed input (for cache-capable
      * providers: uncached + cache write + cache read); the two cache fields
@@ -55,7 +55,8 @@ public class AiUsageService {
     @Transactional
     public void recordUsage(String aiIntegrationName, String sessionId,
                             long inputTokens, long outputTokens,
-                            long cacheCreationInputTokens, long cacheReadInputTokens) {
+                            long cacheCreationInputTokens, long cacheReadInputTokens,
+                            String rawRequest, String rawResponse) {
         try {
             AiUsageLog entry = new AiUsageLog();
             entry.setTimestamp(Instant.now());
@@ -65,19 +66,12 @@ public class AiUsageService {
             entry.setOutputTokens(outputTokens);
             entry.setCacheCreationInputTokens(cacheCreationInputTokens);
             entry.setCacheReadInputTokens(cacheReadInputTokens);
+            entry.setRawRequest(rawRequest);
+            entry.setRawResponse(rawResponse);
             usageRepository.save(entry);
         } catch (Exception e) {
             log.warn("Failed to persist AI usage entry: {}", e.getMessage());
         }
-    }
-
-    /**
-     * Records usage of a provider without prompt caching (cache fields 0).
-     */
-    @Transactional
-    public void recordUsage(String aiIntegrationName, String sessionId,
-                            long inputTokens, long outputTokens) {
-        recordUsage(aiIntegrationName, sessionId, inputTokens, outputTokens, 0, 0);
     }
 
     /**

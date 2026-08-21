@@ -93,19 +93,18 @@ class AnthropicAiClientTest {
         AnthropicAiClient client = new AnthropicAiClient(restClient,
                 "claude-sonnet-4-20250514", 1024, true, true);
         long[] recorded = new long[4];
+        String[] recordedRaw = new String[2];
         client.setAuditRecorder(new AiAuditRecorder() {
             @Override
-            public void recordUsage(long inputTokens, long outputTokens) {
-                // 4-arg overload is the one under test
-            }
-
-            @Override
             public void recordUsage(long inputTokens, long outputTokens,
-                                    long cacheCreationInputTokens, long cacheReadInputTokens) {
+                                    long cacheCreationInputTokens, long cacheReadInputTokens,
+                                    String rawRequest, String rawResponse) {
                 recorded[0] = inputTokens;
                 recorded[1] = outputTokens;
                 recorded[2] = cacheCreationInputTokens;
                 recorded[3] = cacheReadInputTokens;
+                recordedRaw[0] = rawRequest;
+                recordedRaw[1] = rawResponse;
             }
 
             @Override
@@ -126,6 +125,10 @@ class AnthropicAiClientTest {
         assertEquals(16_000, turn.inputTokens(), "300 uncached + 1200 cache write + 14500 cache read");
         assertEquals(50, turn.outputTokens());
         assertArrayEquals(new long[]{16_000, 50, 1_200, 14_500}, recorded);
+        assertNotNull(recordedRaw[0], "raw request should be serialized");
+        assertTrue(recordedRaw[0].contains("test_tool"), "raw request should contain the tool");
+        assertNotNull(recordedRaw[1], "raw response should be serialized");
+        assertTrue(recordedRaw[1].contains("done"), "raw response should contain the assistant text");
     }
 
 }

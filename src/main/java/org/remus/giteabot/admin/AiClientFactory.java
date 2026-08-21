@@ -80,15 +80,12 @@ public class AiClientFactory {
                                             AiUsageService aiUsageService) implements AiAuditRecorder {
 
         @Override
-        public void recordUsage(long inputTokens, long outputTokens) {
-            recordUsage(inputTokens, outputTokens, 0, 0);
-        }
-
-        @Override
         public void recordUsage(long inputTokens, long outputTokens,
-                                long cacheCreationInputTokens, long cacheReadInputTokens) {
+                                long cacheCreationInputTokens, long cacheReadInputTokens,
+                                String rawRequest, String rawResponse) {
             aiUsageService.recordUsage(integrationName, AiAuditContext.getSessionId(),
-                    inputTokens, outputTokens, cacheCreationInputTokens, cacheReadInputTokens);
+                    inputTokens, outputTokens, cacheCreationInputTokens, cacheReadInputTokens,
+                    rawRequest, rawResponse);
         }
 
         @Override

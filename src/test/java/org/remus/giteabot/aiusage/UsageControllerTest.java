@@ -60,6 +60,31 @@ class UsageControllerTest {
     private AdminUserRepository adminUserRepository;
 
     @Test
+    void usage_rendersRawPayloadModalForEntriesWithPayloads() throws Exception {
+        AiUsageLog usage = new AiUsageLog();
+        usage.setId(7L);
+        usage.setTimestamp(Instant.parse("2026-06-01T10:15:30Z"));
+        usage.setAiIntegrationName("my-openai");
+        usage.setSessionId("owner/repo#42");
+        usage.setInputTokens(120);
+        usage.setOutputTokens(35);
+        usage.setRawRequest("{\"model\":\"gpt-4o\"}");
+        usage.setRawResponse("{\"choices\":[]}");
+
+        when(aiUsageService.findUsage(any(), any(), anyInt(), anyString(), anyBoolean()))
+                .thenReturn(new PageImpl<>(List.of(usage), PageRequest.of(0, 20), 1));
+        when(aiUsageService.findErrors(any(), any(), anyInt(), anyString(), anyBoolean()))
+                .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 20), 0));
+
+        mockMvc.perform(get("/usage").with(user("admin").roles("ADMIN")))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("data-bs-target=\"#rawPayloadModal-7\"")))
+                .andExpect(content().string(containsString("id=\"rawPayloadModal-7\"")))
+                .andExpect(content().string(containsString("{\"model\":\"gpt-4o\"}")))
+                .andExpect(content().string(containsString("{\"choices\":[]}")));
+    }
+
+    @Test
     void usage_rendersUsageAndErrorSections() throws Exception {
         AiUsageLog usage = new AiUsageLog();
         usage.setId(1L);

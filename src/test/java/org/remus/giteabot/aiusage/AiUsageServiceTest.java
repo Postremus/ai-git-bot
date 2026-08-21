@@ -36,7 +36,7 @@ class AiUsageServiceTest {
 
     @Test
     void recordUsage_persistsEntryWithIntegrationAndSession() {
-        service.recordUsage("my-openai", "owner/repo#42", 120, 35);
+        service.recordUsage("my-openai", "owner/repo#42", 120, 35, 0, 0, null, null);
 
         ArgumentCaptor<AiUsageLog> captor = ArgumentCaptor.forClass(AiUsageLog.class);
         verify(usageRepository).save(captor.capture());
@@ -49,8 +49,20 @@ class AiUsageServiceTest {
     }
 
     @Test
+    void recordUsage_persistsRawRequestAndResponse() {
+        service.recordUsage("my-openai", "owner/repo#42", 120, 35, 0, 0,
+                "{\"prompt\":\"hello\"}", "{\"text\":\"hi\"}");
+
+        ArgumentCaptor<AiUsageLog> captor = ArgumentCaptor.forClass(AiUsageLog.class);
+        verify(usageRepository).save(captor.capture());
+        AiUsageLog entry = captor.getValue();
+        assertEquals("{\"prompt\":\"hello\"}", entry.getRawRequest());
+        assertEquals("{\"text\":\"hi\"}", entry.getRawResponse());
+    }
+
+    @Test
     void recordUsage_persistsCacheTokenBreakdown() {
-        service.recordUsage("my-anthropic", "owner/repo#42", 16_000, 50, 1_200, 14_500);
+        service.recordUsage("my-anthropic", "owner/repo#42", 16_000, 50, 1_200, 14_500, null, null);
 
         ArgumentCaptor<AiUsageLog> captor = ArgumentCaptor.forClass(AiUsageLog.class);
         verify(usageRepository).save(captor.capture());
@@ -62,7 +74,7 @@ class AiUsageServiceTest {
 
     @Test
     void recordUsage_withoutCacheBreakdown_defaultsCacheFieldsToZero() {
-        service.recordUsage("my-openai", null, 120, 35);
+        service.recordUsage("my-openai", null, 120, 35, 0, 0, null, null);
 
         ArgumentCaptor<AiUsageLog> captor = ArgumentCaptor.forClass(AiUsageLog.class);
         verify(usageRepository).save(captor.capture());
@@ -75,7 +87,7 @@ class AiUsageServiceTest {
     void recordUsage_neverPropagatesPersistenceFailures() {
         when(usageRepository.save(any())).thenThrow(new RuntimeException("db down"));
 
-        assertDoesNotThrow(() -> service.recordUsage("my-openai", null, 1, 2));
+        assertDoesNotThrow(() -> service.recordUsage("my-openai", null, 1, 2, 0, 0, null, null));
     }
 
     @Test
