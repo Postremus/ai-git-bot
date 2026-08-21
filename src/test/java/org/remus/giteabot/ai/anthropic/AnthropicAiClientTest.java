@@ -23,7 +23,7 @@ class AnthropicAiClientTest {
 
     private AnthropicAiClient createClient() {
         RestClient restClient = mock(RestClient.class);
-        return new AnthropicAiClient(restClient, "claude-sonnet-4-20250514", 1024, true, true);
+        return new AnthropicAiClient(restClient, "claude-sonnet-4-20250514", 1024, true, true, false, "high");
     }
 
     @Test
@@ -63,7 +63,7 @@ class AnthropicAiClientTest {
     @Test
     void supportsNativeTools_canBeDisabled() {
         AnthropicAiClient client = new AnthropicAiClient(mock(RestClient.class),
-                "claude-sonnet-4-20250514", 1024, false, true);
+                "claude-sonnet-4-20250514", 1024, false, true, false, "high");
         assertFalse(client.supportsNativeTools());
     }
 
@@ -92,7 +92,7 @@ class AnthropicAiClientTest {
         when(responseSpec.body(AnthropicResponse.class)).thenReturn(response);
 
         AnthropicAiClient client = new AnthropicAiClient(restClient,
-                "claude-sonnet-4-20250514", 1024, true, true);
+                "claude-sonnet-4-20250514", 1024, true, true, false, "high");
         AiUsageProperties usageProperties = new AiUsageProperties();
         usageProperties.setRawPayloadsEnabled(true);
         client.setUsageProperties(usageProperties);

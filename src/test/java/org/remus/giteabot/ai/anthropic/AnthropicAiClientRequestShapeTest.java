@@ -50,7 +50,7 @@ class AnthropicAiClientRequestShapeTest {
         stubResponse.setContent(List.of());
         when(responseSpec.body(AnthropicResponse.class)).thenReturn(stubResponse);
 
-        client = new AnthropicAiClient(restClient, "claude-sonnet-4-20250514", 1024, true, true);
+        client = new AnthropicAiClient(restClient, "claude-sonnet-4-20250514", 1024, true, true, false, "high");
     }
 
     /** Captures the AnthropicRequest actually passed to RestClient's .body(...). */
@@ -176,7 +176,7 @@ class AnthropicAiClientRequestShapeTest {
     @Test
     void chatWithTools_cachingDisabled_sendsNoCacheControlAndKeepsStringContent() {
         AnthropicAiClient uncached = new AnthropicAiClient(restClient,
-                "claude-sonnet-4-20250514", 1024, true, false);
+                "claude-sonnet-4-20250514", 1024, true, false, false, "high");
 
         uncached.chatWithTools(rounds(3), "Do the thing.", List.of(tool("test_tool")),
                 "You are an agent.", null, null);
@@ -187,6 +187,48 @@ class AnthropicAiClientRequestShapeTest {
                 "no block may carry a breakpoint when caching is off");
         assertInstanceOf(String.class, request.getMessages().getLast().getContent(),
                 "message contents must stay plain strings when caching is off");
+    }
+
+    // ------------------------------------------------------ extended thinking
+
+    @Test
+    void thinkingEnabled_setsAdaptiveThinkingAndOutputConfigOnReviewRequest() {
+        AnthropicAiClient thinkingClient = new AnthropicAiClient(restClient,
+                "claude-sonnet-4-20250514", 8192, true, true, true, "high");
+
+        thinkingClient.sendReviewRequest("You are a reviewer.", "claude-sonnet-4-20250514",
+                8192, "Please review this diff.");
+
+        AnthropicRequest request = capturedRequest();
+        assertNotNull(request.getThinking(), "thinking block must be set when enabled");
+        assertEquals("adaptive", request.getThinking().getType());
+        assertNotNull(request.getOutputConfig(), "output_config must be set when enabled");
+        assertEquals("high", request.getOutputConfig().getEffort());
+    }
+
+    @Test
+    void thinkingEnabled_setsAdaptiveThinkingOnToolCallingRequest() {
+        AnthropicAiClient thinkingClient = new AnthropicAiClient(restClient,
+                "claude-sonnet-4-20250514", 8192, true, true, true, "high");
+
+        thinkingClient.chatWithTools(List.of(), "Do the thing.", List.of(tool("test_tool")),
+                "You are an agent.", null, null);
+
+        AnthropicRequest request = capturedRequest();
+        assertNotNull(request.getThinking(), "thinking block must be set when enabled");
+        assertEquals("adaptive", request.getThinking().getType());
+        assertNotNull(request.getOutputConfig(), "output_config must be set when enabled");
+        assertEquals("high", request.getOutputConfig().getEffort());
+    }
+
+    @Test
+    void thinkingDisabled_omitsThinkingAndOutputConfig() {
+        client.sendReviewRequest("You are a reviewer.", "claude-sonnet-4-20250514",
+                1024, "Please review this diff.");
+
+        AnthropicRequest request = capturedRequest();
+        assertNull(request.getThinking(), "thinking block must be null when disabled");
+        assertNull(request.getOutputConfig(), "output_config must be null when disabled");
     }
 
     // ---------------------------------------------------------- helpers

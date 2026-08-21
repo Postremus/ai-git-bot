@@ -109,6 +109,21 @@ These variables control the optional raw request/response payload capture on the
 | `AI_USAGE_RAW_PAYLOADS_ENABLED` | `false` | Set to `true` to store raw AI request/response JSON in the audit log and show the **Details** column on the Usage page. |
 | `AI_USAGE_MAX_RAW_PAYLOAD_LENGTH` | `65535` | Maximum characters stored per raw payload. Longer payloads are truncated to this length (capped at the database column size). |
 
+### Anthropic Extended Thinking (Optional)
+
+With the Anthropic provider, the model can interleave its own reasoning with the
+visible review text. Because that narration is part of the assistant message, it
+ends up verbatim in the posted review comment. Enabling adaptive extended
+thinking moves the reasoning into dedicated `thinking` content blocks that the
+client discards, so only the review itself is published. Opt-in and disabled by
+default; requires a Claude 5.x model (`claude-fable-5`, `claude-opus-5`,
+`claude-sonnet-5`).
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `ANTHROPIC_EXTENDED_THINKING_ENABLED` | `false` | Set to `true` to enable adaptive extended thinking for the Anthropic provider. |
+| `ANTHROPIC_EXTENDED_THINKING_EFFORT` | `high` | How often and how deeply the model thinks: `low`, `medium`, `high`, `xhigh`, or `max`. Higher efforts need larger max tokens. |
+
 ## Configuration via Web UI
 
 All AI provider and Git configuration is managed through the web interface:

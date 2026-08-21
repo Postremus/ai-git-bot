@@ -30,6 +30,10 @@ services:
       # Disabled by default because payloads can be large and may contain sensitive prompts.
       AI_USAGE_RAW_PAYLOADS_ENABLED: ${AI_USAGE_RAW_PAYLOADS_ENABLED:-false}
       AI_USAGE_MAX_RAW_PAYLOAD_LENGTH: ${AI_USAGE_MAX_RAW_PAYLOAD_LENGTH:-65535}
+      # Opt-in Anthropic adaptive extended thinking: returns the model's
+      # reasoning in dedicated blocks that are discarded. effort: low|medium|high|xhigh|max.
+      ANTHROPIC_EXTENDED_THINKING_ENABLED: ${ANTHROPIC_EXTENDED_THINKING_ENABLED:-false}
+      ANTHROPIC_EXTENDED_THINKING_EFFORT: ${ANTHROPIC_EXTENDED_THINKING_EFFORT:-high}
       PROMETHEUS_ENABLED: false
     depends_on:
       db:
