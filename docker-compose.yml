@@ -26,6 +26,10 @@ services:
       AGENT_BUDGET_MAX_CONTENT_ROUNDS: 20
       AGENT_BUDGET_MAX_ROUNDS: 20
       AGENT_BUDGET_MAX_CONTEXT_TOOL_REQUESTS_PER_ROUND: 20
+      # Optional: capture raw AI request/response payloads in the usage audit log.
+      # Disabled by default because payloads can be large and may contain sensitive prompts.
+      AI_USAGE_RAW_PAYLOADS_ENABLED: ${AI_USAGE_RAW_PAYLOADS_ENABLED:-false}
+      AI_USAGE_MAX_RAW_PAYLOAD_LENGTH: ${AI_USAGE_MAX_RAW_PAYLOAD_LENGTH:-65535}
       PROMETHEUS_ENABLED: false
     depends_on:
       db:

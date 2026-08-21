@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.JsonGenerator;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.remus.giteabot.config.AiUsageProperties;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
@@ -42,11 +43,12 @@ public class AiUsageService {
 
     private final AiUsageLogRepository usageRepository;
     private final AiErrorLogRepository errorRepository;
+    private final AiUsageProperties usageProperties;
 
     /**
-     * Records the token usage of a single AI interaction. Persistence problems
-     * are logged but never propagated so that auditing can never break the
-     * actual AI workflow.
+     * Records the token usage of a single AI interaction together with the
+     * raw request/response payloads. Persistence problems are logged but never
+     * propagated so that auditing can never break the actual AI workflow.
      *
      * <p>{@code inputTokens} is the total processed input (for cache-capable
      * providers: uncached + cache write + cache read); the two cache fields
@@ -55,7 +57,8 @@ public class AiUsageService {
     @Transactional
     public void recordUsage(String aiIntegrationName, String sessionId,
                             long inputTokens, long outputTokens,
-                            long cacheCreationInputTokens, long cacheReadInputTokens) {
+                            long cacheCreationInputTokens, long cacheReadInputTokens,
+                            String rawRequest, String rawResponse) {
         try {
             AiUsageLog entry = new AiUsageLog();
             entry.setTimestamp(Instant.now());
@@ -65,19 +68,12 @@ public class AiUsageService {
             entry.setOutputTokens(outputTokens);
             entry.setCacheCreationInputTokens(cacheCreationInputTokens);
             entry.setCacheReadInputTokens(cacheReadInputTokens);
+            entry.setRawRequest(truncateRawPayload(rawRequest));
+            entry.setRawResponse(truncateRawPayload(rawResponse));
             usageRepository.save(entry);
         } catch (Exception e) {
             log.warn("Failed to persist AI usage entry: {}", e.getMessage());
         }
-    }
-
-    /**
-     * Records usage of a provider without prompt caching (cache fields 0).
-     */
-    @Transactional
-    public void recordUsage(String aiIntegrationName, String sessionId,
-                            long inputTokens, long outputTokens) {
-        recordUsage(aiIntegrationName, sessionId, inputTokens, outputTokens, 0, 0);
     }
 
     /**
@@ -211,6 +207,20 @@ public class AiUsageService {
 
     private static String truncate(String value, int maxLength) {
         if (value == null || value.length() <= maxLength) {
+            return value;
+        }
+        return value.substring(0, maxLength);
+    }
+
+    private String truncateRawPayload(String value) {
+        if (value == null) {
+            return null;
+        }
+        if (usageProperties == null || !usageProperties.isRawPayloadsEnabled()) {
+            return null;
+        }
+        int maxLength = usageProperties.getEffectiveMaxRawPayloadLength();
+        if (value.length() <= maxLength) {
             return value;
         }
         return value.substring(0, maxLength);

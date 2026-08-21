@@ -11,26 +11,21 @@ package org.remus.giteabot.ai;
 public interface AiAuditRecorder {
 
     /**
-     * Records the token usage of a single successful AI interaction.
+     * Records the token usage of a single successful AI interaction together
+     * with the raw request/response payloads sent to and received from the
+     * provider.
      *
-     * @param inputTokens  total prompt/input tokens processed, including any
-     *                     cached prefix (0 when unknown)
-     * @param outputTokens number of completion/output tokens (0 when unknown)
-     */
-    void recordUsage(long inputTokens, long outputTokens);
-
-    /**
-     * Records usage with the prompt-cache breakdown. The default delegates to
-     * {@link #recordUsage(long, long)} so recorders that don't track cache
-     * tokens keep working; the persisted breakdown goes to the Usage page.
-     *
+     * @param inputTokens              total prompt/input tokens processed, including any
+     *                                 cached prefix (0 when unknown)
+     * @param outputTokens             number of completion/output tokens (0 when unknown)
      * @param cacheCreationInputTokens tokens written to the provider's prompt cache
      * @param cacheReadInputTokens     tokens served from the provider's prompt cache
+     * @param rawRequest               raw request body as sent to the provider, or {@code null}
+     * @param rawResponse              raw response body as received from the provider, or {@code null}
      */
-    default void recordUsage(long inputTokens, long outputTokens,
-                             long cacheCreationInputTokens, long cacheReadInputTokens) {
-        recordUsage(inputTokens, outputTokens);
-    }
+    void recordUsage(long inputTokens, long outputTokens,
+                     long cacheCreationInputTokens, long cacheReadInputTokens,
+                     String rawRequest, String rawResponse);
 
     /**
      * Records a failed AI interaction (e.g. an HTTP 401 response).

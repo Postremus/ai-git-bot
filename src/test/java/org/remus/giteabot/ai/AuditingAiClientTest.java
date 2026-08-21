@@ -6,7 +6,6 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -16,7 +15,9 @@ class AuditingAiClientTest {
         final AtomicReference<Throwable> lastError = new AtomicReference<>();
 
         @Override
-        public void recordUsage(long inputTokens, long outputTokens) {
+        public void recordUsage(long inputTokens, long outputTokens,
+                                long cacheCreationInputTokens, long cacheReadInputTokens,
+                                String rawRequest, String rawResponse) {
         }
 
         @Override

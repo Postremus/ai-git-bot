@@ -3,6 +3,7 @@ package org.remus.giteabot.aiusage;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.remus.giteabot.config.AiUsageProperties;
 import org.springframework.data.domain.Page;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -29,6 +30,7 @@ import java.time.ZoneId;
 public class UsageController {
 
     private final AiUsageService aiUsageService;
+    private final AiUsageProperties usageProperties;
 
     @GetMapping("/usage")
     public String usage(@RequestParam(required = false) String from,
@@ -57,6 +59,8 @@ public class UsageController {
         model.addAttribute("errorSort", errorSort);
         model.addAttribute("errorDir", errorDir);
         model.addAttribute("activeNav", "usage");
+        model.addAttribute("rawPayloadsEnabled",
+                usageProperties != null && usageProperties.isRawPayloadsEnabled());
         return "usage/list";
     }
 

@@ -57,4 +57,12 @@ public class AiUsageLog {
      */
     @Column(nullable = false)
     private long cacheReadInputTokens;
+
+    /** Raw request body sent to the AI provider (JSON), for audit/debug. */
+    @Column(name = "raw_request", length = 65535)
+    private String rawRequest;
+
+    /** Raw response body received from the AI provider (JSON), for audit/debug. */
+    @Column(name = "raw_response", length = 65535)
+    private String rawResponse;
 }

@@ -100,6 +100,15 @@ The **coding agent** is enabled per coding bot via the web UI. Writer workflows 
 
 See [Agent Documentation](AGENT.md) for full details.
 
+### AI Usage Audit (Optional)
+
+These variables control the optional raw request/response payload capture on the Usage page:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `AI_USAGE_RAW_PAYLOADS_ENABLED` | `false` | Set to `true` to store raw AI request/response JSON in the audit log and show the **Details** column on the Usage page. |
+| `AI_USAGE_MAX_RAW_PAYLOAD_LENGTH` | `65535` | Maximum characters stored per raw payload. Longer payloads are truncated to this length (capped at the database column size). |
+
 ## Configuration via Web UI
 
 All AI provider and Git configuration is managed through the web interface:

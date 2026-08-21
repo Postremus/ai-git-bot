@@ -93,7 +93,7 @@ public class AnthropicAiClient extends AbstractAiClient {
                 .build();
 
         AnthropicResponse response = executeRequest(request);
-        return extractText(response, "review");
+        return extractText(request, response, "review");
     }
 
     @Override
@@ -111,7 +111,7 @@ public class AnthropicAiClient extends AbstractAiClient {
                 .build();
 
         AnthropicResponse response = executeRequest(request);
-        return extractText(response, "chat");
+        return extractText(request, response, "chat");
     }
 
     private AnthropicRequest.Message toLegacyMessage(AiMessage m) {
@@ -181,7 +181,7 @@ public class AnthropicAiClient extends AbstractAiClient {
                 effectiveModel, toolPayloads.size(), messages.size());
 
         AnthropicResponse response = executeRequest(request);
-        return interpret(response);
+        return interpret(request, response);
     }
 
     /**
@@ -432,7 +432,7 @@ public class AnthropicAiClient extends AbstractAiClient {
                 .build();
     }
 
-    private ChatTurn interpret(AnthropicResponse response) {
+    private ChatTurn interpret(AnthropicRequest request, AnthropicResponse response) {
         if (response == null || response.getContent() == null || response.getContent().isEmpty()) {
             log.warn("Empty response from Anthropic tool-call request");
             return ChatTurn.text("Unable to generate response - empty reply from AI.");
@@ -471,7 +471,8 @@ public class AnthropicAiClient extends AbstractAiClient {
                     inputTokens, usage.getInputTokens(), usage.getCacheCreationInputTokens(),
                     usage.getCacheReadInputTokens(), outputTokens, calls.size());
             reportUsage(inputTokens, outputTokens,
-                    usage.getCacheCreationInputTokens(), usage.getCacheReadInputTokens());
+                    usage.getCacheCreationInputTokens(), usage.getCacheReadInputTokens(),
+                    request, response);
         }
         return new ChatTurn(text.toString(), calls, reason, inputTokens, outputTokens);
     }
@@ -498,7 +499,7 @@ public class AnthropicAiClient extends AbstractAiClient {
         return normalized.contains("prompt is too long") || normalized.contains("maximum");
     }
 
-    private String extractText(AnthropicResponse response, String context) {
+    private String extractText(AnthropicRequest request, AnthropicResponse response, String context) {
         if (response == null || response.getContent() == null || response.getContent().isEmpty()) {
             log.warn("Empty response from Anthropic API");
             return "Unable to generate " + context + " - empty response from AI.";
@@ -522,7 +523,8 @@ public class AnthropicAiClient extends AbstractAiClient {
                     usage.getCacheReadInputTokens(),
                     usage.getOutputTokens());
             reportUsage(totalInput, usage.getOutputTokens(),
-                    usage.getCacheCreationInputTokens(), usage.getCacheReadInputTokens());
+                    usage.getCacheCreationInputTokens(), usage.getCacheReadInputTokens(),
+                    request, response);
         }
         return result;
     }
