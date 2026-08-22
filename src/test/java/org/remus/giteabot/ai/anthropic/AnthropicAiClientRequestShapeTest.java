@@ -182,7 +182,7 @@ class AnthropicAiClientRequestShapeTest {
                 "You are an agent.", null, null);
 
         AnthropicRequest request = capturedRequest();
-        assertNull(request.getSystem().get(0).getCacheControl());
+        assertNull(request.getSystem().getFirst().getCacheControl());
         assertTrue(flattenBlocks(request).stream().allMatch(b -> b.getCacheControl() == null),
                 "no block may carry a breakpoint when caching is off");
         assertInstanceOf(String.class, request.getMessages().getLast().getContent(),
