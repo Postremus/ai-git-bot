@@ -49,7 +49,13 @@ ENV DEBIAN_FRONTEND=noninteractive \
 # installed below from upstream channels to get current versions and avoid
 # the patchy Ubuntu repos.)
 # ---------------------------------------------------------------------------
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN set -eux; \
+    apt-get clean; \
+    rm -rf /var/lib/apt/lists/* /var/cache/apt/*; \
+    mkdir -p /etc/apt/apt.conf.d; \
+    printf 'Acquire::Retries "3";\nAcquire::http::Timeout "120";\nAcquire::https::Timeout "120";\n' > /etc/apt/apt.conf.d/99-docker; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends \
         ca-certificates curl wget git bash gnupg lsb-release apt-transport-https \
         unzip xz-utils tini \
         universal-ctags \
@@ -58,16 +64,22 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         golang-go \
         gcc g++ make cmake \
         ruby ruby-bundler \
+        ubuntu-keyring \
     && rm -rf /var/lib/apt/lists/*
 
 # ---------------------------------------------------------------------------
 # Node.js 22 LTS (NodeSource) — required by Playwright, Cypress and the
 # scaffolded `npx` commands the PR-workflow tools issue.
 # ---------------------------------------------------------------------------
-RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
-    apt-get install -y --no-install-recommends nodejs && \
-    rm -rf /var/lib/apt/lists/* && \
-    node --version && npm --version
+RUN set -eux; \
+    apt-get clean; \
+    rm -rf /var/lib/apt/lists/* /var/cache/apt/*; \
+    apt-get update; \
+    curl -fsSL https://deb.nodesource.com/setup_22.x | bash -; \
+    apt-get install -y --no-install-recommends nodejs; \
+    rm -rf /var/lib/apt/lists/*; \
+    node --version; \
+    npm --version
 
 # ---------------------------------------------------------------------------
 # .NET 10 SDK (Microsoft package feed)

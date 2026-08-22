@@ -21,6 +21,7 @@ import org.remus.giteabot.ai.openai.OpenAiClient;
 import org.remus.giteabot.ai.openai.OpenAiProviderMetadata;
 import org.remus.giteabot.aiusage.AiUsageService;
 import org.remus.giteabot.config.AiUsageProperties;
+import org.remus.giteabot.config.AnthropicExtendedThinkingProperties;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.web.client.RestClient;
 
@@ -45,7 +46,7 @@ class AiClientFactoryTest {
     void setUp() {
         // Create real provider registry with all providers
         AiProviderRegistry providerRegistry = new AiProviderRegistry(List.of(
-                new AnthropicProviderMetadata(builderProvider()),
+                new AnthropicProviderMetadata(builderProvider(), new AnthropicExtendedThinkingProperties()),
                 new OpenAiProviderMetadata(builderProvider()),
                 new GoogleAiProviderMetadata(builderProvider()),
                 new OllamaProviderMetadata(builderProvider()),

@@ -57,20 +57,53 @@ public class AnthropicAiClient extends AbstractAiClient {
     private final RestClient restClient;
     private final boolean nativeToolsEnabled;
     private final boolean promptCachingEnabled;
+    private final boolean extendedThinkingEnabled;
+    private final String extendedThinkingEffort;
     private final ObjectMapper jackson = AgentJackson.mapper();
 
 
     public AnthropicAiClient(RestClient restClient, String model, int maxTokens,
-                             boolean nativeToolsEnabled, boolean promptCachingEnabled) {
+                             boolean nativeToolsEnabled, boolean promptCachingEnabled,
+                             boolean extendedThinkingEnabled, String extendedThinkingEffort) {
         super(model, maxTokens);
         this.restClient = restClient;
         this.nativeToolsEnabled = nativeToolsEnabled;
         this.promptCachingEnabled = promptCachingEnabled;
+        this.extendedThinkingEnabled = extendedThinkingEnabled;
+        this.extendedThinkingEffort = extendedThinkingEffort;
     }
 
     @Override
     public boolean supportsNativeTools() {
         return nativeToolsEnabled;
+    }
+
+    /**
+     * Builds the optional {@code thinking} request object. Returns {@code null}
+     * when extended thinking is disabled, so the field is omitted from the
+     * serialized payload entirely (no-op for every provider behaviour).
+     */
+    private AnthropicRequest.Thinking thinking() {
+        if (!extendedThinkingEnabled) {
+            return null;
+        }
+        return AnthropicRequest.Thinking.builder()
+                .type("adaptive")
+                .build();
+    }
+
+    /**
+     * Builds the optional {@code output_config} request object that steers
+     * adaptive thinking effort. Returns {@code null} when extended thinking is
+     * disabled, mirroring {@link #thinking()}.
+     */
+    private AnthropicRequest.OutputConfig outputConfig() {
+        if (!extendedThinkingEnabled) {
+            return null;
+        }
+        return AnthropicRequest.OutputConfig.builder()
+                .effort(extendedThinkingEffort)
+                .build();
     }
 
     // ---------------------------------------------------------------------
@@ -84,6 +117,8 @@ public class AnthropicAiClient extends AbstractAiClient {
                 .model(effectiveModel)
                 .maxTokens(maxTokens)
                 .system(toSystemBlocks(systemPrompt))
+                .thinking(thinking())
+                .outputConfig(outputConfig())
                 .messages(List.of(
                         AnthropicRequest.Message.builder()
                                 .role("user")
@@ -107,6 +142,8 @@ public class AnthropicAiClient extends AbstractAiClient {
                 .model(effectiveModel)
                 .maxTokens(maxTokens)
                 .system(toSystemBlocks(systemPrompt))
+                .thinking(thinking())
+                .outputConfig(outputConfig())
                 .messages(anthropicMessages)
                 .build();
 
@@ -173,6 +210,8 @@ public class AnthropicAiClient extends AbstractAiClient {
                 .model(effectiveModel)
                 .maxTokens(effectiveMaxTokens)
                 .system(toSystemBlocks(systemPrompt))
+                .thinking(thinking())
+                .outputConfig(outputConfig())
                 .messages(messages)
                 .tools(toolPayloads)
                 .build();
