@@ -88,6 +88,46 @@ class AnthropicRequestTest {
     }
 
     @Test
+    void thinkingSerializesAdaptiveTypeAndOutputConfigEffort() {
+        AnthropicRequest request = AnthropicRequest.builder()
+                .model("claude-sonnet-4-20250514")
+                .maxTokens(8192)
+                .system(List.of())
+                .messages(List.of())
+                .thinking(AnthropicRequest.Thinking.builder()
+                        .type("adaptive")
+                        .build())
+                .outputConfig(AnthropicRequest.OutputConfig.builder()
+                        .effort("high")
+                        .build())
+                .build();
+
+        JsonNode json = mapper.valueToTree(request);
+
+        assertEquals("adaptive", json.get("thinking").get("type").asString(),
+                "thinking.type must serialize verbatim");
+        assertEquals("high", json.get("output_config").get("effort").asString(),
+                "output_config.effort must serialize under the snake_case wire name");
+    }
+
+    @Test
+    void thinkingAndOutputConfigOmittedWhenNull() {
+        AnthropicRequest request = AnthropicRequest.builder()
+                .model("claude-sonnet-4-20250514")
+                .maxTokens(8192)
+                .system(List.of())
+                .messages(List.of())
+                .build();
+
+        JsonNode json = mapper.valueToTree(request);
+
+        assertFalse(json.has("thinking"),
+                "a null thinking field must not serialize, per @JsonInclude(NON_NULL)");
+        assertFalse(json.has("output_config"),
+                "a null output_config field must not serialize, per @JsonInclude(NON_NULL)");
+    }
+
+    @Test
     void responseUsageDeserializesCacheTokenFields() {
         String responseJson = """
                 {

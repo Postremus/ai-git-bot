@@ -99,7 +99,7 @@ public class OpenAiClient extends AbstractAiClient {
                 effectiveModel, toolPayloads.size(), messages.size());
 
         OpenAiResponse response = executeRequest(request);
-        return interpret(response);
+        return interpret(request, response);
     }
 
     @Override
@@ -166,7 +166,7 @@ public class OpenAiClient extends AbstractAiClient {
                 .build();
     }
 
-    private ChatTurn interpret(OpenAiResponse response) {
+    private ChatTurn interpret(OpenAiRequest request, OpenAiResponse response) {
         if (response == null || response.getChoices() == null || response.getChoices().isEmpty()) {
             log.warn("Empty response from OpenAI tool-call request");
             return ChatTurn.text("Unable to generate response - empty reply from AI.");
@@ -207,7 +207,7 @@ public class OpenAiClient extends AbstractAiClient {
             outputTokens = response.getUsage().getCompletionTokens();
             log.info("OpenAI chat-with-tools: {} prompt tokens, {} completion tokens, {} tool_call(s)",
                     inputTokens, outputTokens, calls.size());
-            reportUsage(inputTokens, outputTokens);
+            reportUsage(inputTokens, outputTokens, 0L, 0L, request, response);
         }
         return new ChatTurn(text, calls, reason, inputTokens, outputTokens);
     }
@@ -236,7 +236,7 @@ public class OpenAiClient extends AbstractAiClient {
 
         OpenAiResponse response = executeRequest(request);
 
-        return extractText(response, context);
+        return extractText(request, response, context);
     }
 
     private OpenAiResponse executeRequest(OpenAiRequest request) {
@@ -247,7 +247,7 @@ public class OpenAiClient extends AbstractAiClient {
                 .body(OpenAiResponse.class);
     }
 
-    private String extractText(OpenAiResponse response, String context) {
+    private String extractText(OpenAiRequest request, OpenAiResponse response, String context) {
         if (response == null || response.getChoices() == null || response.getChoices().isEmpty()) {
             log.warn("Empty response from OpenAI API");
             return "Unable to generate " + context + " - empty response from AI.";
@@ -268,7 +268,7 @@ public class OpenAiClient extends AbstractAiClient {
                     response.getUsage().getPromptTokens(),
                     response.getUsage().getCompletionTokens());
             reportUsage(response.getUsage().getPromptTokens(),
-                    response.getUsage().getCompletionTokens());
+                    response.getUsage().getCompletionTokens(), 0L, 0L, request, response);
         }
 
         return result;

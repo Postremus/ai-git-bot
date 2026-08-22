@@ -10,6 +10,7 @@ import org.remus.giteabot.ai.AiProviderMetadata;
 import org.remus.giteabot.ai.AiProviderRegistry;
 import org.remus.giteabot.ai.AuditingAiClient;
 import org.remus.giteabot.aiusage.AiUsageService;
+import org.remus.giteabot.config.AiUsageProperties;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 
@@ -30,6 +31,7 @@ public class AiClientFactory {
     private final AiIntegrationService aiIntegrationService;
     private final AiProviderRegistry providerRegistry;
     private final AiUsageService aiUsageService;
+    private final AiUsageProperties usageProperties;
 
     /** Cache key = integrationId, value = (updatedAt-millis, client). */
     private final ConcurrentMap<Long, CachedClient> cache = new ConcurrentHashMap<>();
@@ -67,6 +69,7 @@ public class AiClientFactory {
         AiAuditRecorder recorder = new IntegrationAuditRecorder(integration.getName(), aiUsageService);
         if (client instanceof AbstractAiClient abstractClient) {
             abstractClient.setAuditRecorder(recorder);
+            abstractClient.setUsageProperties(usageProperties);
         }
         return new AuditingAiClient(client, recorder);
     }
@@ -80,15 +83,12 @@ public class AiClientFactory {
                                             AiUsageService aiUsageService) implements AiAuditRecorder {
 
         @Override
-        public void recordUsage(long inputTokens, long outputTokens) {
-            recordUsage(inputTokens, outputTokens, 0, 0);
-        }
-
-        @Override
         public void recordUsage(long inputTokens, long outputTokens,
-                                long cacheCreationInputTokens, long cacheReadInputTokens) {
+                                long cacheCreationInputTokens, long cacheReadInputTokens,
+                                String rawRequest, String rawResponse) {
             aiUsageService.recordUsage(integrationName, AiAuditContext.getSessionId(),
-                    inputTokens, outputTokens, cacheCreationInputTokens, cacheReadInputTokens);
+                    inputTokens, outputTokens, cacheCreationInputTokens, cacheReadInputTokens,
+                    rawRequest, rawResponse);
         }
 
         @Override

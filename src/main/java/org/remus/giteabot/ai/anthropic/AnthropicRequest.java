@@ -24,6 +24,19 @@ public class AnthropicRequest {
     private List<Message> messages;
     /** Tools advertised to the model (Step 6). */
     private List<Tool> tools;
+    /**
+     * Optional extended-thinking configuration. When {@code null} (the
+     * default) the model has no separate reasoning channel and its narration
+     * ends up inline in the {@code text} blocks; when set, reasoning is
+     * returned in dedicated {@code thinking} blocks that the client discards.
+     */
+    private Thinking thinking;
+    /**
+     * Effort steering sent alongside {@link #thinking} when adaptive extended
+     * thinking is enabled. Omitted (null) otherwise.
+     */
+    @JsonProperty("output_config")
+    private OutputConfig outputConfig;
     @Data
     @Builder
     @JsonInclude(JsonInclude.Include.NON_NULL)
@@ -71,6 +84,29 @@ public class AnthropicRequest {
         private String description;
         @JsonProperty("input_schema")
         private Object inputSchema;
+    }
+
+    /**
+     * Adaptive extended-thinking block. {@code type} is {@code "adaptive"}:
+     * the model decides per request whether and how much to think, steered by
+     * {@link OutputConfig#getEffort()}.
+     */
+    @Data
+    @Builder
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    public static class Thinking {
+        private String type;
+    }
+
+    /**
+     * Effort steering for adaptive thinking. {@code effort} is one of
+     * {@code low}, {@code medium}, {@code high}, {@code xhigh} or {@code max}.
+     */
+    @Data
+    @Builder
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    public static class OutputConfig {
+        private String effort;
     }
 
     @Data

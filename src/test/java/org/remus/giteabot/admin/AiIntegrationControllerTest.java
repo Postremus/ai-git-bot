@@ -15,9 +15,11 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import static org.hamcrest.Matchers.containsString;
 import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.Mockito.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
@@ -88,11 +90,56 @@ class AiIntegrationControllerTest {
                 .andExpect(redirectedUrl("/ai-integrations"));
 
         verify(aiIntegrationService).save(argThat(integration ->
-                "Google AI".equals(integration.getName())
-                        && "google".equals(integration.getProviderType())
-                        && "https://generativelanguage.googleapis.com".equals(integration.getApiUrl())
-                        && "gemini-key".equals(integration.getApiKey())
-                        && "gemini-2.5-flash".equals(integration.getModel())
-        ));
+                        "Google AI".equals(integration.getName())
+                                && "google".equals(integration.getProviderType())
+                                && "https://generativelanguage.googleapis.com".equals(integration.getApiUrl())
+                                && "gemini-key".equals(integration.getApiKey())
+                                && "gemini-2.5-flash".equals(integration.getModel())
+                ),
+                eq(false));
+    }
+
+    @Test
+    void save_blankApiKey_keepsKeyOutOfEntityAndForwardsClearFlag() throws Exception {
+        mockMvc.perform(post("/ai-integrations/save")
+                        .with(user("admin").roles("ADMIN"))
+                        .with(csrf())
+                        .param("id", "7")
+                        .param("name", "Google AI")
+                        .param("providerType", "google")
+                        .param("apiUrl", "https://generativelanguage.googleapis.com")
+                        .param("apiKey", "")
+                        .param("clearApiKey", "true")
+                        .param("model", "gemini-2.5-flash"))
+                .andExpect(status().is3xxRedirection())
+                .andExpect(redirectedUrl("/ai-integrations"));
+
+        // The kept ciphertext must never travel through the controller into
+        // save(), where it would be encrypted a second time and corrupt the key.
+        verify(aiIntegrationService).save(argThat(integration ->
+                        "".equals(integration.getApiKey()) || integration.getApiKey() == null),
+                eq(true));
+    }
+
+    @Test
+    void editForm_showsClearPendingHint() throws Exception {
+        AiIntegration existing = new AiIntegration();
+        existing.setId(7L);
+        existing.setName("Existing");
+        existing.setProviderType("anthropic");
+        existing.setApiUrl("https://api.anthropic.com");
+        existing.setModel("claude-sonnet-4");
+        when(aiIntegrationService.findById(7L)).thenReturn(Optional.of(existing));
+        when(providerRegistry.getProviderTypes()).thenReturn(List.of("anthropic"));
+        when(providerRegistry.getDisplayNames()).thenReturn(Map.of("anthropic", "Anthropic"));
+        when(providerRegistry.getDefaultApiUrls()).thenReturn(Map.of("anthropic", "https://api.anthropic.com"));
+        when(providerRegistry.getSuggestedModels()).thenReturn(Map.of("anthropic", List.of("claude-sonnet-4")));
+        when(providerRegistry.getApiKeyRequirements()).thenReturn(Map.of("anthropic", true));
+
+        mockMvc.perform(get("/ai-integrations/7/edit").with(user("admin").roles("ADMIN")))
+                .andExpect(status().isOk())
+                .andExpect(view().name("ai-integrations/form"))
+                .andExpect(content().string(containsString("id=\"clearApiKeyBtn\"")))
+                .andExpect(content().string(containsString("id=\"apiKeyClearPendingHint\"")));
     }
 }

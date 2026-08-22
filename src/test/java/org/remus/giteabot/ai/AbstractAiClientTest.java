@@ -1,6 +1,7 @@
 package org.remus.giteabot.ai;
 
 import org.junit.jupiter.api.Test;
+import org.remus.giteabot.config.AiUsageProperties;
 import org.springframework.web.client.HttpClientErrorException;
 
 import java.util.List;
@@ -58,6 +59,35 @@ class AbstractAiClientTest {
         assertEquals("Review", result);
     }
 
+    @Test
+    void reportUsage_doesNotSerializeRawPayloadsWhenDisabled() {
+        RecordingRecorder recorder = new RecordingRecorder();
+        TestAiClient client = new TestAiClient("test-model", 1024);
+        client.setAuditRecorder(recorder);
+
+        client.reportUsageForTest(100L, 50L, 0L, 0L, "request", "response");
+
+        assertNull(recorder.rawRequest);
+        assertNull(recorder.rawResponse);
+    }
+
+    @Test
+    void reportUsage_serializesRawPayloadsWhenEnabled() {
+        RecordingRecorder recorder = new RecordingRecorder();
+        TestAiClient client = new TestAiClient("test-model", 1024);
+        AiUsageProperties properties = new AiUsageProperties();
+        properties.setRawPayloadsEnabled(true);
+        client.setUsageProperties(properties);
+        client.setAuditRecorder(recorder);
+
+        client.reportUsageForTest(100L, 50L, 0L, 0L, "request", "response");
+
+        assertNotNull(recorder.rawRequest);
+        assertTrue(recorder.rawRequest.contains("request"));
+        assertNotNull(recorder.rawResponse);
+        assertTrue(recorder.rawResponse.contains("response"));
+    }
+
     /**
      * Concrete test implementation of AbstractAiClient.
      */
@@ -65,6 +95,13 @@ class AbstractAiClientTest {
 
         TestAiClient(String model, int maxTokens) {
             super(model, maxTokens);
+        }
+
+        void reportUsageForTest(Number inputTokens, Number outputTokens,
+                                Number cacheCreationInputTokens, Number cacheReadInputTokens,
+                                Object rawRequest, Object rawResponse) {
+            reportUsage(inputTokens, outputTokens, cacheCreationInputTokens, cacheReadInputTokens,
+                    rawRequest, rawResponse);
         }
 
         @Override
@@ -82,6 +119,27 @@ class AbstractAiClientTest {
         @Override
         public boolean isPromptTooLongError(HttpClientErrorException e) {
             return false;
+        }
+    }
+
+    private static class RecordingRecorder implements AiAuditRecorder {
+        long inputTokens;
+        long outputTokens;
+        String rawRequest;
+        String rawResponse;
+
+        @Override
+        public void recordUsage(long inputTokens, long outputTokens,
+                                long cacheCreationInputTokens, long cacheReadInputTokens,
+                                String rawRequest, String rawResponse) {
+            this.inputTokens = inputTokens;
+            this.outputTokens = outputTokens;
+            this.rawRequest = rawRequest;
+            this.rawResponse = rawResponse;
+        }
+
+        @Override
+        public void recordError(Throwable error) {
         }
     }
 }

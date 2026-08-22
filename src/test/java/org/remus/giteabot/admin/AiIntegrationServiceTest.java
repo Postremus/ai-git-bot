@@ -6,6 +6,8 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.util.Optional;
+
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
@@ -45,6 +47,36 @@ class AiIntegrationServiceTest {
 
         assertEquals("encrypted-value", result.getApiKey());
         verify(encryptionService).encrypt("any-api-key");
+    }
+
+    @Test
+    void save_blankApiKeyOnUpdate_keepsStoredKeyWithoutReEncrypting() {
+        AiIntegration integration = new AiIntegration();
+        integration.setId(7L);
+        integration.setApiKey("");
+        AiIntegration existing = new AiIntegration();
+        existing.setApiKey("stored-encrypted-key");
+        when(aiIntegrationRepository.findById(7L)).thenReturn(Optional.of(existing));
+        when(aiIntegrationRepository.save(any(AiIntegration.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        AiIntegration result = aiIntegrationService.save(integration);
+
+        assertEquals("stored-encrypted-key", result.getApiKey());
+        verify(encryptionService, never()).encrypt(anyString());
+    }
+
+    @Test
+    void save_clearApiKey_removesStoredKey() {
+        AiIntegration integration = new AiIntegration();
+        integration.setId(7L);
+        integration.setApiKey("");
+        when(aiIntegrationRepository.save(any(AiIntegration.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        AiIntegration result = aiIntegrationService.save(integration, true);
+
+        assertNull(result.getApiKey());
+        verify(aiIntegrationRepository, never()).findById(anyLong());
+        verify(encryptionService, never()).encrypt(anyString());
     }
 
     @Test

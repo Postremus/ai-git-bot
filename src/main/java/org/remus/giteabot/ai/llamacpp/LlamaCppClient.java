@@ -156,7 +156,7 @@ public class LlamaCppClient extends AbstractAiClient {
 
         LlamaCppResponse response = executeRequest(request);
 
-        return extractText(response, context);
+        return extractText(request, response, context);
     }
 
     private LlamaCppResponse executeRequest(LlamaCppRequest request) {
@@ -167,7 +167,7 @@ public class LlamaCppClient extends AbstractAiClient {
                 .body(LlamaCppResponse.class);
     }
 
-    private String extractText(LlamaCppResponse response, String context) {
+    private String extractText(LlamaCppRequest request, LlamaCppResponse response, String context) {
         if (response == null || response.getContent() == null) {
             log.warn("Empty response from llama.cpp server");
             return "Unable to generate " + context + " - empty response from AI.";
@@ -181,7 +181,7 @@ public class LlamaCppClient extends AbstractAiClient {
                     context,
                     response.getTokensEvaluated(),
                     response.getTokensPredicted());
-            reportUsage(response.getTokensEvaluated(), response.getTokensPredicted());
+            reportUsage(response.getTokensEvaluated(), response.getTokensPredicted(), 0L, 0L, request, response);
         }
 
         // Log if stopped due to limits

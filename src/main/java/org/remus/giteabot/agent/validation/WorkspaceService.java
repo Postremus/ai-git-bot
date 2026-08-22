@@ -1,6 +1,7 @@
 package org.remus.giteabot.agent.validation;
 
 import lombok.extern.slf4j.Slf4j;
+import org.remus.giteabot.util.ProcessSupport;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -17,7 +18,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -49,11 +49,6 @@ public class WorkspaceService {
     private static final Set<PosixFilePermission> OWNER_FILE_PERMISSIONS = Set.of(
             PosixFilePermission.OWNER_READ,
             PosixFilePermission.OWNER_WRITE);
-    private static final List<String> GIT_ENVIRONMENT_ALLOWLIST = List.of(
-            "PATH", "LANG", "LC_ALL", "LC_CTYPE", "TZ", "TMPDIR", "TMP", "TEMP",
-            "SystemRoot", "windir", "COMSPEC", "PATHEXT",
-            "HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY", "http_proxy", "https_proxy", "no_proxy",
-            "GIT_SSL_CAINFO", "GIT_SSL_CAPATH", "SSL_CERT_FILE", "SSL_CERT_DIR");
     private final Path workspaceBaseDir;
     private final ConcurrentMap<Path, Path> credentialsByWorkspace = new ConcurrentHashMap<>();
 
@@ -534,7 +529,7 @@ public class WorkspaceService {
             ProcessBuilder pb = new ProcessBuilder(gitCommand);
             pb.directory(workDir);
             pb.redirectErrorStream(true);
-            scrubEnvironmentForGit(pb);
+            ProcessSupport.scrubEnvironmentForGit(pb);
             pb.environment().put("GIT_CONFIG_NOSYSTEM", "1");
             pb.environment().put("GIT_CONFIG_GLOBAL", emptyGlobalGitConfig.toString());
 
@@ -579,18 +574,6 @@ public class WorkspaceService {
                     log.warn("Failed to remove empty Git hooks directory {}: {}",
                             disabledHooksDirectory, e.getMessage());
                 }
-            }
-        }
-    }
-
-    /** Keeps credentials and application secrets out of Git subprocesses. */
-    private void scrubEnvironmentForGit(ProcessBuilder processBuilder) {
-        Map<String, String> environment = processBuilder.environment();
-        environment.clear();
-        for (String name : GIT_ENVIRONMENT_ALLOWLIST) {
-            String value = System.getenv(name);
-            if (value != null) {
-                environment.put(name, value);
             }
         }
     }

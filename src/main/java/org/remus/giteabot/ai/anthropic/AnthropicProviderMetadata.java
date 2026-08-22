@@ -4,6 +4,7 @@ import lombok.RequiredArgsConstructor;
 import org.remus.giteabot.admin.AiIntegration;
 import org.remus.giteabot.ai.AiClient;
 import org.remus.giteabot.ai.AiProviderMetadata;
+import org.remus.giteabot.config.AnthropicExtendedThinkingProperties;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
@@ -28,6 +29,7 @@ public class AnthropicProviderMetadata implements AiProviderMetadata {
     );
 
     private final ObjectProvider<RestClient.Builder> restClientBuilder;
+    private final AnthropicExtendedThinkingProperties extendedThinkingProperties;
 
     @Override
     public String getProviderType() {
@@ -76,7 +78,9 @@ public class AnthropicProviderMetadata implements AiProviderMetadata {
                 integration.getModel(),
                 integration.getMaxTokens(),
                 !integration.isUseLegacyToolCalling(),
-                integration.isPromptCachingEnabled()
+                integration.isPromptCachingEnabled(),
+                extendedThinkingProperties.isEnabled(),
+                extendedThinkingProperties.getEffort()
         );
     }
 }
