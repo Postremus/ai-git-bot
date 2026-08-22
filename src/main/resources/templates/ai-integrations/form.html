@@ -54,8 +54,11 @@
                             </div>
                             <input type="hidden" id="clearApiKey" name="clearApiKey" value="false"/>
                             <div class="form-text" id="apiKeyHint"></div>
-                            <div th:if="${integration.id != null}" class="form-text">
+                            <div th:if="${integration.id != null}" class="form-text" id="apiKeyKeepHint">
                                 Leave blank to keep current API key.
+                            </div>
+                            <div class="form-text text-warning" id="apiKeyClearPendingHint" style="display: none;">
+                                <i class="bi bi-exclamation-triangle"></i> The stored API key will be removed on save.
                             </div>
                         </div>
 
@@ -259,13 +262,38 @@
                 // save (an empty field alone means "keep the stored value", so
                 // we need an explicit marker). ----
                 const clearApiKeyBtn = document.getElementById('clearApiKeyBtn');
+                const clearApiKeyInput = document.getElementById('clearApiKey');
+                const apiKeyKeepHint = document.getElementById('apiKeyKeepHint');
+                const apiKeyClearPendingHint = document.getElementById('apiKeyClearPendingHint');
+                const defaultApiKeyPlaceholder = 'Enter API key';
+
+                function setApiKeyClearPending(pending) {
+                    clearApiKeyInput.value = pending ? 'true' : 'false';
+                    if (pending) {
+                        apiKeyInput.placeholder = 'API key will be removed on save';
+                        if (apiKeyKeepHint) apiKeyKeepHint.style.display = 'none';
+                        apiKeyClearPendingHint.style.display = 'block';
+                    } else {
+                        apiKeyInput.placeholder = defaultApiKeyPlaceholder;
+                        if (apiKeyKeepHint) apiKeyKeepHint.style.display = 'block';
+                        apiKeyClearPendingHint.style.display = 'none';
+                    }
+                }
+
                 if (clearApiKeyBtn) {
                     clearApiKeyBtn.addEventListener('click', function() {
                         apiKeyInput.value = '';
-                        apiKeyInput.placeholder = 'API key will be removed on save';
-                        document.getElementById('clearApiKey').value = 'true';
+                        setApiKeyClearPending(true);
                     });
                 }
+
+                // If the operator types a new API key after clicking Clear,
+                // cancel the pending removal so the new value is saved.
+                apiKeyInput.addEventListener('input', function() {
+                    if (apiKeyInput.value.trim() !== '') {
+                        setApiKeyClearPending(false);
+                    }
+                });
 
                 // Step 6: enable Bootstrap popover for the tool-calling explanation
                 document.querySelectorAll('[data-bs-toggle="popover"]').forEach(function(el) {

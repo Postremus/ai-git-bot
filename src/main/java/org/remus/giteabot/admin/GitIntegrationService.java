@@ -28,7 +28,16 @@ public class GitIntegrationService {
         return gitIntegrationRepository.findById(id);
     }
 
-    public GitIntegration save(GitIntegration integration) {
+    /**
+     * Saves a Git integration, resolving the token from the form input.
+     *
+     * <p>The token field is a one-way write: the stored value is never echoed
+     * back into the form. A blank field therefore means "keep the stored
+     * value", while {@code clearToken} requests explicit removal (the Clear
+     * button in the UI). Re-encrypting the kept ciphertext would corrupt the
+     * token, so only freshly provided plaintext tokens are encrypted.</p>
+     */
+    public GitIntegration save(GitIntegration integration, boolean clearToken) {
         // Set default URLs for providers that don't require user input
         if (integration.getProviderType() == RepositoryType.GITHUB) {
             integration.setUrl("https://github.com");
@@ -36,10 +45,11 @@ public class GitIntegrationService {
             integration.setUrl("https://bitbucket.org");
         }
 
-        // Encrypt token if provided
         String token = integration.getToken();
         if (token != null && !token.isBlank()) {
             integration.setToken(encryptionService.encrypt(token));
+        } else if (clearToken) {
+            integration.setToken(null);
         } else if (integration.getId() != null) {
             // Keep existing token if not provided on update
             gitIntegrationRepository.findById(integration.getId())

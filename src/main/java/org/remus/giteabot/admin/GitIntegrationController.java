@@ -55,9 +55,19 @@ public class GitIntegrationController {
     }
 
     @PostMapping("/save")
-    public String save(@ModelAttribute GitIntegration integration, RedirectAttributes redirectAttributes) {
+    public String save(@ModelAttribute GitIntegration integration,
+                       @RequestParam(required = false) String token,
+                       @RequestParam(required = false, defaultValue = "false") boolean clearToken,
+                       RedirectAttributes redirectAttributes) {
         try {
-            gitIntegrationService.save(integration);
+            // The token form field is a one-way write: only override when a new
+            // token is provided. Blank means "keep the stored token" and the
+            // explicit Clear button requests removal - both resolved in the
+            // service so the kept ciphertext is never re-encrypted.
+            if (token != null && !token.isBlank()) {
+                integration.setToken(token);
+            }
+            gitIntegrationService.save(integration, clearToken);
             redirectAttributes.addFlashAttribute("success", "Git Integration saved successfully");
         } catch (Exception e) {
             log.error("Failed to save Git Integration", e);
