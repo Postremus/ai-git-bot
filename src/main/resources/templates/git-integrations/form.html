@@ -70,8 +70,11 @@
                                 </button>
                             </div>
                             <input type="hidden" id="clearToken" name="clearToken" value="false"/>
-                            <div th:if="${integration.id != null}" class="form-text">
+                            <div th:if="${integration.id != null}" class="form-text" id="tokenKeepHint">
                                 Leave blank to keep current token.
+                            </div>
+                            <div class="form-text text-warning" id="tokenClearPendingHint" style="display: none;">
+                                <i class="bi bi-exclamation-triangle"></i> The stored token will be removed on save.
                             </div>
                             <div class="form-text" id="tokenDescription">
                                 The access token for API authentication.
@@ -197,18 +200,43 @@
             document.addEventListener('DOMContentLoaded', function() {
                 updateFormFields();
 
+                const tokenInput = document.getElementById('token');
+                const clearTokenInput = document.getElementById('clearToken');
+                const keepHint = document.getElementById('tokenKeepHint');
+                const clearPendingHint = document.getElementById('tokenClearPendingHint');
+                const defaultPlaceholder = 'Enter access token';
+
+                function setClearPending(pending) {
+                    clearTokenInput.value = pending ? 'true' : 'false';
+                    if (pending) {
+                        tokenInput.placeholder = 'Token will be removed on save';
+                        if (keepHint) keepHint.style.display = 'none';
+                        clearPendingHint.style.display = 'block';
+                    } else {
+                        tokenInput.placeholder = defaultPlaceholder;
+                        if (keepHint) keepHint.style.display = 'block';
+                        clearPendingHint.style.display = 'none';
+                    }
+                }
+
                 // ---- Token: remember that the operator wants it removed on
                 // save (an empty field alone means "keep the stored value", so
                 // we need an explicit marker). ----
                 const clearTokenBtn = document.getElementById('clearTokenBtn');
                 if (clearTokenBtn) {
                     clearTokenBtn.addEventListener('click', function() {
-                        const tokenInput = document.getElementById('token');
                         tokenInput.value = '';
-                        tokenInput.placeholder = 'Token will be removed on save';
-                        document.getElementById('clearToken').value = 'true';
+                        setClearPending(true);
                     });
                 }
+
+                // If the operator types a new token after clicking Clear,
+                // cancel the pending removal so the new value is saved.
+                tokenInput.addEventListener('input', function() {
+                    if (tokenInput.value.trim() !== '') {
+                        setClearPending(false);
+                    }
+                });
             });
         </script>
 

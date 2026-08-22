@@ -73,7 +73,8 @@ class GitIntegrationControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(view().name("git-integrations/form"))
                 .andExpect(content().string(containsString("id=\"clearTokenBtn\"")))
-                .andExpect(content().string(containsString("id=\"clearToken\"")));
+                .andExpect(content().string(containsString("id=\"clearToken\"")))
+                .andExpect(content().string(containsString("id=\"tokenClearPendingHint\"")));
     }
 
     @Test
