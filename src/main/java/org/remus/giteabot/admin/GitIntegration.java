@@ -35,7 +35,7 @@ public class GitIntegration {
     @Column
     private String username;
 
-    @Column(nullable = false)
+    @Column
     private String token;
 
     @Column(nullable = false)

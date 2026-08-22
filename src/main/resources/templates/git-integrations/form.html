@@ -59,10 +59,19 @@
                         <!-- Token field - always shown -->
                         <div class="col-md-6" id="tokenField">
                             <label for="token" class="form-label" id="tokenLabel">Token</label>
-                            <input type="password" class="form-control" id="token" name="token"
-                                   placeholder="Enter access token"/>
-                            <div th:if="${integration.id != null}" class="form-text text-warning">
-                                <i class="bi bi-info-circle"></i> Leave blank to keep current token.
+                            <div class="input-group">
+                                <input type="password" class="form-control" id="token" name="token"
+                                       autocomplete="new-password"
+                                       placeholder="Enter access token"/>
+                                <button class="btn btn-outline-secondary" type="button" id="clearTokenBtn"
+                                        th:if="${integration.id != null}"
+                                        title="Remove the stored token">
+                                    <i class="bi bi-trash"></i> Clear
+                                </button>
+                            </div>
+                            <input type="hidden" id="clearToken" name="clearToken" value="false"/>
+                            <div th:if="${integration.id != null}" class="form-text">
+                                Leave blank to keep current token.
                             </div>
                             <div class="form-text" id="tokenDescription">
                                 The access token for API authentication.
@@ -103,6 +112,9 @@
         </div>
 
         <script th:inline="javascript">
+            /*<![CDATA[*/
+            const isEditMode = /*[[${integration.id != null}]]*/ false;
+
             function updateFormFields() {
                 const providerType = document.getElementById('providerType').value;
                 const urlField = document.getElementById('urlField');
@@ -110,6 +122,7 @@
                 const urlDescription = document.getElementById('urlDescription');
                 const usernameField = document.getElementById('usernameField');
                 const usernameInput = document.getElementById('username');
+                const tokenInput = document.getElementById('token');
                 const tokenLabel = document.getElementById('tokenLabel');
                 const tokenDescription = document.getElementById('tokenDescription');
                 const reviewTriggerNotice = document.getElementById('reviewTriggerNotice');
@@ -174,10 +187,29 @@
                     tokenLabel.textContent = 'Token';
                     tokenDescription.textContent = 'The access token for API authentication.';
                 }
+
+                // Token is required when creating a new integration; on edit it
+                // can be left blank to keep the stored value or cleared explicitly.
+                tokenInput.required = !isEditMode;
             }
 
             // Initialize on page load
-            document.addEventListener('DOMContentLoaded', updateFormFields);
+            document.addEventListener('DOMContentLoaded', function() {
+                updateFormFields();
+
+                // ---- Token: remember that the operator wants it removed on
+                // save (an empty field alone means "keep the stored value", so
+                // we need an explicit marker). ----
+                const clearTokenBtn = document.getElementById('clearTokenBtn');
+                if (clearTokenBtn) {
+                    clearTokenBtn.addEventListener('click', function() {
+                        const tokenInput = document.getElementById('token');
+                        tokenInput.value = '';
+                        tokenInput.placeholder = 'Token will be removed on save';
+                        document.getElementById('clearToken').value = 'true';
+                    });
+                }
+            });
         </script>
 
     </div>
