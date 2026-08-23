@@ -14,6 +14,7 @@ import org.remus.giteabot.prworkflow.PrWorkflowRegistry;
 import org.remus.giteabot.prworkflow.WorkflowParamField;
 import org.remus.giteabot.prworkflow.WorkflowParamsSchema;
 import org.remus.giteabot.prworkflow.WorkflowResult;
+import org.springframework.context.support.StaticMessageSource;
 
 import java.util.List;
 import java.util.Map;
@@ -43,7 +44,8 @@ class WorkflowSelectionServiceTest {
                 List.of(new ReviewLike(), new TestsLike(), new BooleanLike()));
         IssueWorkflowRegistry issueRegistry = new IssueWorkflowRegistry(List.of());
         service = new WorkflowSelectionService(configurationRepository, selectionRepository,
-                registry, issueRegistry, paramsValidator);
+                registry, issueRegistry, paramsValidator,
+                new WorkflowTextResolver(new StaticMessageSource()));
     }
 
     @Test

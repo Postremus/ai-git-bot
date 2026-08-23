@@ -2,19 +2,19 @@
 <html lang="en" xmlns:th="http://www.thymeleaf.org"
 >
 <body>
-<div th:replace="~{layout :: layout(${mcpConfiguration.id != null ? 'Edit MCP Configuration' : 'New MCP Configuration'}, ~{::pageContent})}">
+<div th:replace="~{layout :: layout(${mcpConfiguration.id != null ? #messages.msg('page.mcpConfiguration.editTitle') : #messages.msg('page.mcpConfiguration.newTitle')}, ~{::pageContent})}">
     <div th:fragment="pageContent">
 
         <div class="d-flex justify-content-between align-items-center mb-4">
             <h2>
                 <i class="bi bi-diagram-3"></i>
-                <span th:if="${mcpConfiguration.id != null}">Edit MCP Configuration</span>
-                <span th:if="${mcpConfiguration.id == null}">New MCP Configuration</span>
+                <span th:if="${mcpConfiguration.id != null}" th:text="#{page.mcpConfiguration.editTitle}">Edit MCP Configuration</span>
+                <span th:if="${mcpConfiguration.id == null}" th:text="#{page.mcpConfiguration.newTitle}">New MCP Configuration</span>
             </h2>
             <a th:if="${mcpConfiguration.id != null}"
                th:href="@{/system-settings/mcp-configurations/{id}/tools(id=${mcpConfiguration.id})}"
                class="btn btn-outline-secondary btn-sm">
-                <i class="bi bi-tools"></i> Select tools
+                <i class="bi bi-tools"></i> <span th:text="#{button.selectTools}">Select tools</span>
             </a>
         </div>
 
@@ -25,17 +25,17 @@
 
                     <div class="row g-3">
                         <div class="col-md-6">
-                            <label for="name" class="form-label">Name</label>
+                            <label for="name" class="form-label" th:text="#{label.name}">Name</label>
                             <input type="text" class="form-control" id="name" th:field="*{name}"
                                    placeholder="e.g. GitHub MCP" required/>
                         </div>
 
                         <div class="col-12">
-                            <label for="jsonContent" class="form-label">MCP JSON</label>
+                            <label for="jsonContent" class="form-label" th:text="#{label.mcpJson}">MCP JSON</label>
                             <textarea class="form-control font-monospace" id="jsonContent" th:field="*{jsonContent}"
                                       rows="14" required
                                       placeholder='{"name":"github","type":"url","url":"https://example.com/mcp"}'></textarea>
-                            <div class="form-text">
+                            <div class="form-text" th:utext="#{help.mcp.description}">
                                 Enter a remote/network MCP configuration. Local <code>stdio</code> transports are rejected.
                             </div>
                         </div>
@@ -43,10 +43,10 @@
 
                     <div class="mt-4">
                         <button type="submit" class="btn btn-primary">
-                            <i class="bi bi-check-lg"></i> Save and select tools
+                            <i class="bi bi-check-lg"></i> <span th:text="#{button.saveAndSelectTools}">Save and select tools</span>
                         </button>
                         <a th:href="@{/system-settings}" class="btn btn-secondary ms-2">
-                            <i class="bi bi-x-lg"></i> Cancel
+                            <i class="bi bi-x-lg"></i> <span th:text="#{button.cancel}">Cancel</span>
                         </a>
                     </div>
                 </form>

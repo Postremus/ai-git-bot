@@ -2,10 +2,13 @@ package org.remus.giteabot.systemsettings;
 
 import org.remus.giteabot.agent.tools.ToolCatalog;
 import org.remus.giteabot.agent.tools.ToolKind;
+import org.springframework.context.MessageSource;
+import org.springframework.context.i18n.LocaleContextHolder;
 import org.springframework.stereotype.Component;
 
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 /**
@@ -17,14 +20,21 @@ import java.util.Map;
  * {@link BotToolConfiguration} whitelist we need a single flat view with a
  * stable lower-case identifier. The order of {@link #builtinTools()} is the
  * one used in the editor: file → context → validation → repository.</p>
+ *
+ * <p>The operator-facing description is resolved from the message bundle
+ * ({@code tool.<name>.description}) and falls back to the English native-API
+ * description from {@link ToolCatalog} when no translation exists. The
+ * descriptions sent to the LLM are untouched.</p>
  */
 @Component
 public class BuiltinToolRegistry {
 
     private final ToolCatalog toolCatalog;
+    private final MessageSource messageSource;
 
-    public BuiltinToolRegistry(ToolCatalog toolCatalog) {
+    public BuiltinToolRegistry(ToolCatalog toolCatalog, MessageSource messageSource) {
         this.toolCatalog = toolCatalog;
+        this.messageSource = messageSource;
     }
 
     public List<BuiltinTool> builtinTools() {
@@ -45,7 +55,14 @@ public class BuiltinToolRegistry {
             if (normalized.isEmpty() || sink.containsKey(normalized)) {
                 continue;
             }
-            String description = toolCatalog.describeFor(role, normalized).orElse("");
+            String english = toolCatalog.describeFor(role, normalized).orElse("");
+            String description;
+            try {
+                description = messageSource.getMessage(
+                        "tool." + normalized + ".description", null, LocaleContextHolder.getLocale());
+            } catch (org.springframework.context.NoSuchMessageException e) {
+                description = english;
+            }
             sink.put(normalized, new BuiltinTool(normalized, kind, description));
         }
     }

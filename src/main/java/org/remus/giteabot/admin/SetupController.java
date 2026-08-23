@@ -8,6 +8,8 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
+import org.springframework.context.MessageSource;
+import org.springframework.context.i18n.LocaleContextHolder;
 
 @Slf4j
 @Controller
@@ -15,9 +17,11 @@ import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 public class SetupController {
 
     private final AdminService adminService;
+    private final MessageSource messageSource;
 
-    public SetupController(AdminService adminService) {
+    public SetupController(AdminService adminService, MessageSource messageSource) {
         this.adminService = adminService;
+        this.messageSource = messageSource;
     }
 
     @GetMapping("/setup")
@@ -38,23 +42,23 @@ public class SetupController {
         }
 
         if (username == null || username.isBlank()) {
-            redirectAttributes.addFlashAttribute("error", "Username is required");
+            redirectAttributes.addFlashAttribute("error", messageSource.getMessage("flash.usernameRequired", null, LocaleContextHolder.getLocale()));
             return "redirect:/setup";
         }
 
         if (password == null || password.length() < 8) {
-            redirectAttributes.addFlashAttribute("error", "Password must be at least 8 characters");
+            redirectAttributes.addFlashAttribute("error", messageSource.getMessage("flash.passwordTooShort", null, LocaleContextHolder.getLocale()));
             return "redirect:/setup";
         }
 
         if (!password.equals(confirmPassword)) {
-            redirectAttributes.addFlashAttribute("error", "Passwords do not match");
+            redirectAttributes.addFlashAttribute("error", messageSource.getMessage("flash.passwordsDoNotMatch", null, LocaleContextHolder.getLocale()));
             return "redirect:/setup";
         }
 
         adminService.createAdmin(username, password);
         log.info("Admin user '{}' created during initial setup", username);
-        redirectAttributes.addFlashAttribute("success", "Admin account created successfully. Please login.");
+        redirectAttributes.addFlashAttribute("success", messageSource.getMessage("flash.adminCreated", null, LocaleContextHolder.getLocale()));
         return "redirect:/login";
     }
 

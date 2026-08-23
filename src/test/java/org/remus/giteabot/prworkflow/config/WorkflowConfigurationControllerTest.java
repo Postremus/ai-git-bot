@@ -26,7 +26,15 @@ class WorkflowConfigurationControllerTest {
     private static WorkflowConfigurationController newController(
             WorkflowConfigurationService configurationService,
             WorkflowSelectionService selectionService) {
-        return new WorkflowConfigurationController(configurationService, selectionService);
+        return new WorkflowConfigurationController(configurationService, selectionService, messageSource());
+    }
+
+    private static org.springframework.context.MessageSource messageSource() {
+        org.springframework.context.support.ResourceBundleMessageSource ms =
+                new org.springframework.context.support.ResourceBundleMessageSource();
+        ms.setBasename("messages");
+        ms.setDefaultEncoding("UTF-8");
+        return ms;
     }
 
     @Test

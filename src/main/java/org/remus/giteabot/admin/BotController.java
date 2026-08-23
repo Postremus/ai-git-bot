@@ -29,6 +29,8 @@ import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
 import java.util.List;
 import java.util.Map;
+import org.springframework.context.MessageSource;
+import org.springframework.context.i18n.LocaleContextHolder;
 
 @Slf4j
 @Controller
@@ -46,6 +48,7 @@ public class BotController {
     private final BotToolSelectionService botToolSelectionService;
     private final WorkflowConfigurationService workflowConfigurationService;
     private final DeploymentTargetService deploymentTargetService;
+    private final MessageSource messageSource;
 
     @GetMapping
     public String list(Model model) {
@@ -79,7 +82,7 @@ public class BotController {
                     return "bots/form";
                 })
                 .orElseGet(() -> {
-                    redirectAttributes.addFlashAttribute("error", "Bot not found");
+                    redirectAttributes.addFlashAttribute("error", messageSource.getMessage("flash.botNotFound", null, LocaleContextHolder.getLocale()));
                     return "redirect:/bots";
                 });
     }
@@ -141,10 +144,10 @@ public class BotController {
             }
             bot.setDeploymentTarget(deploymentTarget);
             botService.save(bot, clearWebhookSigningSecret);
-            redirectAttributes.addFlashAttribute("success", "Bot saved successfully");
+            redirectAttributes.addFlashAttribute("success", messageSource.getMessage("flash.botSaved", null, LocaleContextHolder.getLocale()));
         } catch (Exception e) {
             log.error("Failed to save Bot", e);
-            model.addAttribute("error", "Failed to save: " + e.getMessage());
+            model.addAttribute("error", messageSource.getMessage("flash.saveFailed", new Object[]{e.getMessage()}, LocaleContextHolder.getLocale()));
             addFormAttributes(model);
             return "bots/form";
         }
@@ -174,10 +177,10 @@ public class BotController {
     public String delete(@PathVariable Long id, RedirectAttributes redirectAttributes) {
         try {
             botService.deleteById(id);
-            redirectAttributes.addFlashAttribute("success", "Bot deleted successfully");
+            redirectAttributes.addFlashAttribute("success", messageSource.getMessage("flash.botDeleted", null, LocaleContextHolder.getLocale()));
         } catch (Exception e) {
             log.error("Failed to delete Bot", e);
-            redirectAttributes.addFlashAttribute("error", "Failed to delete: " + e.getMessage());
+            redirectAttributes.addFlashAttribute("error", messageSource.getMessage("flash.deleteFailed", new Object[]{e.getMessage()}, LocaleContextHolder.getLocale()));
         }
         return "redirect:/bots";
     }

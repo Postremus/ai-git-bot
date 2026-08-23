@@ -9,6 +9,8 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
 import java.util.List;
+import org.springframework.context.MessageSource;
+import org.springframework.context.i18n.LocaleContextHolder;
 
 @Slf4j
 @Controller
@@ -18,6 +20,7 @@ public class AiIntegrationController {
 
     private final AiIntegrationService aiIntegrationService;
     private final AiProviderRegistry providerRegistry;
+    private final MessageSource messageSource;
 
     @GetMapping
     public String list(Model model) {
@@ -45,7 +48,7 @@ public class AiIntegrationController {
                     return "ai-integrations/form";
                 })
                 .orElseGet(() -> {
-                    redirectAttributes.addFlashAttribute("error", "AI Integration not found");
+                    redirectAttributes.addFlashAttribute("error", messageSource.getMessage("flash.aiNotFound", null, LocaleContextHolder.getLocale()));
                     return "redirect:/ai-integrations";
                 });
     }
@@ -72,10 +75,10 @@ public class AiIntegrationController {
                 integration.setApiKey(apiKey);
             }
             aiIntegrationService.save(integration, clearApiKey);
-            redirectAttributes.addFlashAttribute("success", "AI Integration saved successfully");
+            redirectAttributes.addFlashAttribute("success", messageSource.getMessage("flash.aiSaved", null, LocaleContextHolder.getLocale()));
         } catch (Exception e) {
             log.error("Failed to save AI Integration", e);
-            redirectAttributes.addFlashAttribute("error", "Failed to save: " + e.getMessage());
+            redirectAttributes.addFlashAttribute("error", messageSource.getMessage("flash.saveFailed", new Object[]{e.getMessage()}, LocaleContextHolder.getLocale()));
         }
         return "redirect:/ai-integrations";
     }
@@ -84,10 +87,10 @@ public class AiIntegrationController {
     public String delete(@PathVariable Long id, RedirectAttributes redirectAttributes) {
         try {
             aiIntegrationService.deleteById(id);
-            redirectAttributes.addFlashAttribute("success", "AI Integration deleted successfully");
+            redirectAttributes.addFlashAttribute("success", messageSource.getMessage("flash.aiDeleted", null, LocaleContextHolder.getLocale()));
         } catch (Exception e) {
             log.error("Failed to delete AI Integration", e);
-            redirectAttributes.addFlashAttribute("error", "Failed to delete: " + e.getMessage());
+            redirectAttributes.addFlashAttribute("error", messageSource.getMessage("flash.deleteFailed", new Object[]{e.getMessage()}, LocaleContextHolder.getLocale()));
         }
         return "redirect:/ai-integrations";
     }

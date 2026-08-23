@@ -46,6 +46,7 @@ public class WorkflowSelectionService {
     private final PrWorkflowRegistry workflowRegistry;
     private final IssueWorkflowRegistry issueWorkflowRegistry;
     private final WorkflowParamsValidator paramsValidator;
+    private final WorkflowTextResolver workflowTextResolver;
 
     @Transactional(readOnly = true)
     public List<WorkflowSelectionRow> loadAvailableWorkflows(Long configurationId) {
@@ -60,9 +61,11 @@ public class WorkflowSelectionService {
             WorkflowSelection persisted = persistedByKey.get(workflow.key());
             rows.put(workflow.key(), new WorkflowSelectionRow(
                     workflow.key(),
-                    workflow.displayName(),
+                    workflowTextResolver.displayName(workflow),
+                    workflowTextResolver.description(workflow),
                     categoryOf(workflow),
                     workflow,
+                    workflowTextResolver.localizedSchema(workflow),
                     persisted != null,
                     persisted != null ? persisted.getParamsMap() : Map.of()));
         }
@@ -72,8 +75,10 @@ public class WorkflowSelectionService {
                 rows.put(persisted.getWorkflowKey(), new WorkflowSelectionRow(
                         persisted.getWorkflowKey(),
                         persisted.getWorkflowKey() + " (not registered)",
+                        null,
                         "UNKNOWN",
                         null,
+                        org.remus.giteabot.prworkflow.WorkflowParamsSchema.empty(),
                         true,
                         persisted.getParamsMap()));
             }
@@ -140,7 +145,7 @@ public class WorkflowSelectionService {
                             rawParams, registered.get().paramsSchema());
                     row.replaceParams(canonical);
                 } catch (IllegalArgumentException e) {
-                    errors.add("Workflow '" + registered.get().displayName() + "': " + e.getMessage());
+                    errors.add("Workflow '" + workflowTextResolver.displayName(registered.get()) + "': " + e.getMessage());
                     continue;
                 }
             } else {
