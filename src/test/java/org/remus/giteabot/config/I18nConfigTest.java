@@ -9,6 +9,8 @@ import org.springframework.web.servlet.i18n.LocaleChangeInterceptor;
 import java.util.Locale;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class I18nConfigTest {
 
@@ -48,9 +50,9 @@ class I18nConfigTest {
         assertEquals(Locale.GERMAN, I18nConfig.supportedLocaleOrEnglish(Locale.GERMANY));
         assertEquals(Locale.JAPANESE, I18nConfig.supportedLocaleOrEnglish(Locale.JAPAN));
         assertEquals(Locale.ENGLISH, I18nConfig.supportedLocaleOrEnglish(Locale.US));
-        assertEquals(Locale.SIMPLIFIED_CHINESE, I18nConfig.supportedLocaleOrEnglish(new Locale("zh", "CN")));
-        assertEquals(Locale.ENGLISH, I18nConfig.supportedLocaleOrEnglish(new Locale("zh", "TW")));
-        assertEquals(Locale.ENGLISH, I18nConfig.supportedLocaleOrEnglish(new Locale("zh")));
+        assertEquals(Locale.SIMPLIFIED_CHINESE, I18nConfig.supportedLocaleOrEnglish(Locale.of("zh", "CN")));
+        assertEquals(Locale.ENGLISH, I18nConfig.supportedLocaleOrEnglish(Locale.of("zh", "TW")));
+        assertEquals(Locale.ENGLISH, I18nConfig.supportedLocaleOrEnglish(Locale.of("zh")));
         assertEquals(Locale.ENGLISH, I18nConfig.supportedLocaleOrEnglish(null));
     }
 
@@ -65,5 +67,18 @@ class I18nConfigTest {
         assertEquals(7, I18nConfig.SUPPORTED.size());
         assertEquals("en", I18nConfig.SUPPORTED.get(0).code());
         assertEquals("zh_CN", I18nConfig.SUPPORTED.get(6).code());
+    }
+
+    @Test
+    void localeOption_matches_ignoresChineseScriptVariant() {
+        var zh = I18nConfig.SUPPORTED.get(6);
+        assertEquals("zh_CN", zh.code());
+        assertTrue(zh.matches(Locale.SIMPLIFIED_CHINESE));
+        assertTrue(zh.matches(Locale.forLanguageTag("zh-Hans-CN")));
+        assertFalse(zh.matches(Locale.FRENCH));
+
+        assertTrue(I18nConfig.SUPPORTED.get(0).matches(Locale.ENGLISH));
+        assertTrue(I18nConfig.SUPPORTED.get(1).matches(Locale.FRENCH));
+        assertTrue(I18nConfig.SUPPORTED.get(2).matches(Locale.GERMAN));
     }
 }

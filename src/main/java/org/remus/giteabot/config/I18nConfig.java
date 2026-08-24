@@ -1,6 +1,6 @@
 package org.remus.giteabot.config;
 
-import jakarta.servlet.http.HttpServletRequest;
+import org.jspecify.annotations.NonNull;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.servlet.LocaleResolver;
@@ -18,9 +18,24 @@ public class I18nConfig {
     public static final String LOCALE_COOKIE = "lang";
     public static final String LOCALE_PARAM = "lang";
 
-    public record LocaleOption(String code, String displayName) {}
+    public record LocaleOption(String code, String displayName) {
 
-    /** Supported UI locales. Display names are the language's native name (constant across locales). */
+        /**
+         * True when the given locale selects this option (language + country for zh_CN).
+         */
+        public boolean matches(Locale locale) {
+            if (locale == null) {
+                return false;
+            }
+            String language = locale.getLanguage();
+            String country = locale.getCountry();
+            return code.equals(country.isEmpty() ? language : language + "_" + country);
+        }
+    }
+
+    /**
+     * Supported UI locales. Display names are the language's native name (constant across locales).
+     */
     public static final List<LocaleOption> SUPPORTED = List.of(
             new LocaleOption("en", "English"),
             new LocaleOption("fr", "Français"),
@@ -48,11 +63,10 @@ public class I18nConfig {
                     ? Locale.SIMPLIFIED_CHINESE : Locale.ENGLISH;
         }
         return switch (lang) {
-            case "en" -> Locale.ENGLISH;
             case "fr" -> Locale.FRENCH;
             case "de" -> Locale.GERMAN;
-            case "es" -> new Locale("es");
-            case "pt" -> new Locale("pt");
+            case "es" -> Locale.of("es");
+            case "pt" -> Locale.of("pt");
             case "ja" -> Locale.JAPANESE;
             default -> Locale.ENGLISH;
         };
@@ -78,7 +92,7 @@ public class I18nConfig {
     public WebMvcConfigurer localeWebMvcConfigurer(LocaleChangeInterceptor interceptor) {
         return new WebMvcConfigurer() {
             @Override
-            public void addInterceptors(InterceptorRegistry registry) {
+            public void addInterceptors(@NonNull InterceptorRegistry registry) {
                 registry.addInterceptor(interceptor);
             }
         };

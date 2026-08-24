@@ -13,7 +13,7 @@
             <a class="dropdown-item" href="#"
                th:href="@{${baseUrl}(lang=${localeOption.code})}"
                th:text="${localeOption.displayName}"
-               th:classappend="${localeOption.code == #locale.toString()} ? 'active'">English</a>
+               th:classappend="${localeOption.matches(#locale)} ? 'active'">English</a>
         </li>
     </ul>
 </div>
