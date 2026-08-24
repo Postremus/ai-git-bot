@@ -14,6 +14,9 @@
         <div class="col-md-6 col-lg-5">
             <div class="card shadow">
                 <div class="card-body p-4">
+                    <div class="d-flex justify-content-end mb-2">
+                        <div th:replace="~{fragments/locale-selector :: localeSelector('/setup')}"></div>
+                    </div>
                     <div class="text-center mb-4">
                         <img th:src="@{/images/favicon.png}" alt="AI Git Bot logo" width="64" height="64" class="mb-2 brand-icon"/>
                         <h3 class="mt-2" th:text="#{page.setup.heading}">Welcome to AI Git Bot</h3>
