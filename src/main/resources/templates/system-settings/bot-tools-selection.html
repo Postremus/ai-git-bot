@@ -15,7 +15,7 @@
                     <span th:text="#{label.configuration}">Configuration</span>: <strong th:text="${botToolConfiguration.name}"></strong>
                     <span th:if="${botToolConfiguration.defaultEntry}" class="badge bg-primary ms-2" th:text="#{badge.default}">Default</span>
                 </p>
-                <p class="text-secondary mb-4">
+                <p class="text-secondary mb-4" th:text="#{help.botTools.whitelist}">
                     Whitelist of built-in agent tools (file, context, validation, repository) that bots assigned
                     to this configuration may expose to the AI. Disabled tools are excluded from both native
                     tool calling and legacy prompt-based tool instructions, and any attempt to invoke them at

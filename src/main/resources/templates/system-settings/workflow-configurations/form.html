@@ -28,7 +28,7 @@
                 <label class="form-label" th:text="#{label.name}">Name</label>
                 <input type="text" class="form-control" th:field="*{name}" required
                        th:readonly="${workflowConfiguration.defaultEntry}"/>
-                <div class="form-text" th:if="${workflowConfiguration.defaultEntry}">
+                <div class="form-text" th:if="${workflowConfiguration.defaultEntry}" th:text="#{help.workflow.defaultNotRenamed}">
                     The default workflow configuration cannot be renamed.
                 </div>
             </div>

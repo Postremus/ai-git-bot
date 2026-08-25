@@ -22,7 +22,7 @@
                         <div class="col-md-6">
                             <label for="name" class="form-label" th:text="#{label.name}">Name</label>
                             <input type="text" class="form-control" id="name" th:field="*{name}"
-                                   placeholder="e.g. My OpenAI Integration" required/>
+                                   th:placeholder="#{placeholder.aiName}" placeholder="e.g. My OpenAI Integration" required/>
                         </div>
                         <div class="col-md-6">
                             <label for="providerType" class="form-label" th:text="#{label.providerType}">Provider Type</label>
@@ -37,7 +37,7 @@
                         <div class="col-md-6">
                             <label for="apiUrl" class="form-label" th:text="#{label.apiUrl}">API URL</label>
                             <input type="url" class="form-control" id="apiUrl" th:field="*{apiUrl}"
-                                   placeholder="e.g. https://api.openai.com" required/>
+                                   th:placeholder="#{placeholder.aiBaseUrl}" placeholder="e.g. https://api.openai.com" required/>
                             <div class="form-text" id="apiUrlHint"></div>
                         </div>
                         <div class="col-md-6">
@@ -65,13 +65,13 @@
                         <div class="col-md-6">
                             <label for="apiVersion" class="form-label" th:text="#{label.apiVersion}">API Version</label>
                             <input type="text" class="form-control" id="apiVersion" th:field="*{apiVersion}"
-                                   placeholder="e.g. 2024-02-15-preview (optional)"/>
+                                   th:placeholder="#{placeholder.aiApiVersion}" placeholder="e.g. 2024-02-15-preview (optional)"/>
                         </div>
                         <div class="col-md-6">
                             <label for="model" class="form-label" th:text="#{label.model}">Model</label>
                             <div class="input-group">
                                 <input type="text" class="form-control" id="model" th:field="*{model}"
-                                       placeholder="e.g. gpt-5.6-sol, claude-sonnet-5" required/>
+                                       th:placeholder="#{placeholder.aiModels}" placeholder="e.g. gpt-5.6-sol, claude-sonnet-5" required/>
                                 <button class="btn btn-outline-secondary dropdown-toggle" type="button"
                                         id="modelDropdownBtn" data-bs-toggle="dropdown" aria-expanded="false"
                                         style="display: none;" th:text="#{button.select}">

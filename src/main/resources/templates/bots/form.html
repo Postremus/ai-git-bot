@@ -30,7 +30,7 @@
                         <div class="col-md-6">
                             <label for="name" class="form-label" th:text="#{label.name}">Name</label>
                             <input type="text" class="form-control" id="name" th:field="*{name}"
-                                   placeholder="e.g. Code Review Bot" required/>
+                                   th:placeholder="#{placeholder.botName}" placeholder="e.g. Code Review Bot" required/>
                         </div>
                         <div class="col-md-6">
                             <label for="username" class="form-label" th:text="#{label.username}">Username</label>
@@ -531,6 +531,16 @@
             const tKey = /*[[#{label.key}]]*/ 'Key';
             const tName = /*[[#{label.name}]]*/ 'Name';
             const tParams = /*[[#{label.params}]]*/ 'Params';
+            const i18nSelectSystemPromptFirst = /*[[#{message.selectSystemPromptFirst}]]*/ 'Select a system prompt first.';
+            const i18nPreviewLoadFailed = /*[[#{message.previewLoadFailed}]]*/ 'Preview could not be loaded.';
+            const i18nPreview = /*[[#{label.preview}]]*/ 'Preview';
+            const i18nMcpDetailsLoadFailed = /*[[#{message.mcpDetailsLoadFailed}]]*/ 'MCP tool details could not be loaded.';
+            const i18nToolConfigDetailsLoadFailed = /*[[#{message.toolConfigDetailsLoadFailed}]]*/ 'Tool configuration details could not be loaded.';
+            const i18nWorkflowDetailsLoadFailed = /*[[#{message.workflowDetailsLoadFailed}]]*/ 'Workflow configuration details could not be loaded.';
+            const i18nNoSelectedMcpTools = /*[[#{message.noSelectedMcpTools}]]*/ 'No selected MCP tools.';
+            const i18nNoEnabledBuiltinTools = /*[[#{message.noEnabledBuiltinTools}]]*/ 'No built-in tools enabled for this configuration.';
+            const i18nNoEnabledWorkflows = /*[[#{message.noEnabledWorkflows}]]*/ 'No workflows enabled for this configuration.';
+            const i18nWebhookSecretRemoved = /*[[#{help.bot.webhookSecretRemoved}]]*/ 'signing secret will be removed on save';
 
             document.addEventListener('DOMContentLoaded', function() {
                 const systemPromptSelect = document.getElementById('systemPromptId');
@@ -567,18 +577,18 @@
                 previewButton.addEventListener('click', function() {
                     const selectedPromptId = systemPromptSelect.value;
                     if (!selectedPromptId) {
-                        alert('Select a system prompt first.');
+                        alert(i18nSelectSystemPromptFirst);
                         return;
                     }
                     fetch(systemPromptPreviewBaseUrl + encodeURIComponent(selectedPromptId) + '/preview')
                         .then(function(response) {
                             if (!response.ok) {
-                                throw new Error('Preview could not be loaded.');
+                                throw new Error(i18nPreviewLoadFailed);
                             }
                             return response.json();
                         })
                         .then(function(selectedPrompt) {
-                            previewTitle.textContent = selectedPrompt.name + ' Preview';
+                            previewTitle.textContent = selectedPrompt.name + ' ' + i18nPreview;
                             reviewPreview.innerHTML = renderMarkdown(selectedPrompt.reviewSystemPrompt);
                             reviewAgentPreview.innerHTML = renderMarkdown(selectedPrompt.reviewAgentSystemPrompt);
                             agentPreview.innerHTML = renderMarkdown(selectedPrompt.issueAgentSystemPrompt);
@@ -606,7 +616,7 @@
                             .replace(/'/g, '&#39;');
                     }
                     if (!tools || tools.length === 0) {
-                        return '<p class="text-secondary mb-0">No selected MCP tools.</p>';
+                        return '<p class="text-secondary mb-0">' + i18nNoSelectedMcpTools + '</p>';
                     }
                     const rows = tools.map(function(tool) {
                         const title = tool.title && tool.title.trim() ? escapeHtml(tool.title) : '-';
@@ -638,7 +648,7 @@
                     fetch(mcpSelectedToolsBaseUrl + encodeURIComponent(selectedMcpId) + '/selected-tools')
                         .then(function(response) {
                             if (!response.ok) {
-                                throw new Error('MCP tool details could not be loaded.');
+                                throw new Error(i18nMcpDetailsLoadFailed);
                             }
                             return response.json();
                         })
@@ -667,7 +677,7 @@
                             .replace(/'/g, '&#39;');
                     }
                     if (!tools || tools.length === 0) {
-                        return '<p class="text-secondary mb-0">No built-in tools enabled for this configuration.</p>';
+                        return '<p class="text-secondary mb-0">' + i18nNoEnabledBuiltinTools + '</p>';
                     }
                     const rows = tools.map(function(tool) {
                         const description = tool.description && tool.description.trim() ? escapeHtml(tool.description) : '-';
@@ -697,7 +707,7 @@
                     fetch(botToolsBaseUrl + encodeURIComponent(selectedToolConfigId) + '/selected-tools')
                         .then(function(response) {
                             if (!response.ok) {
-                                throw new Error('Tool configuration details could not be loaded.');
+                                throw new Error(i18nToolConfigDetailsLoadFailed);
                             }
                             return response.json();
                         })
@@ -727,7 +737,7 @@
 
                 function renderWorkflowTable(rows) {
                     if (!rows || rows.length === 0) {
-                        return '<p class="text-secondary mb-0">No workflows enabled for this configuration.</p>';
+                        return '<p class="text-secondary mb-0">' + i18nNoEnabledWorkflows + '</p>';
                     }
                     const body = rows.map(function(row) {
                         let paramsCell = '-';
@@ -776,7 +786,7 @@
                     fetch(workflowConfigurationBaseUrl + encodeURIComponent(selectedIssueWorkflowConfigId) + '/selected-workflows')
                         .then(function(response) {
                             if (!response.ok) {
-                                throw new Error('Workflow configuration details could not be loaded.');
+                                throw new Error(i18nWorkflowDetailsLoadFailed);
                             }
                             return response.json();
                         })
@@ -797,7 +807,7 @@
                     fetch(workflowConfigurationBaseUrl + encodeURIComponent(selectedWorkflowConfigId) + '/selected-workflows')
                         .then(function(response) {
                             if (!response.ok) {
-                                throw new Error('Workflow configuration details could not be loaded.');
+                                throw new Error(i18nWorkflowDetailsLoadFailed);
                             }
                             return response.json();
                         })
@@ -818,7 +828,7 @@
                     clearWebhookSigningSecretBtn.addEventListener('click', function() {
                         const secretInput = document.getElementById('webhookSigningSecret');
                         secretInput.value = '';
-                        secretInput.placeholder = 'signing secret will be removed on save';
+                        secretInput.placeholder = i18nWebhookSecretRemoved;
                         document.getElementById('clearWebhookSigningSecret').value = 'true';
                     });
                 }

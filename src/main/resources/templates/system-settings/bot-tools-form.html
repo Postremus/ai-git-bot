@@ -35,9 +35,9 @@
                         <div class="col-md-6">
                             <label for="name" class="form-label" th:text="#{label.name}">Name</label>
                             <input type="text" class="form-control" id="name" th:field="*{name}"
-                                   placeholder="e.g. Java/Maven only" required
+                                   th:placeholder="#{placeholder.botToolsName}" placeholder="e.g. Java/Maven only" required
                                    th:readonly="${botToolConfiguration.defaultEntry}"/>
-                            <div class="form-text">
+                            <div class="form-text" th:text="#{help.botTools.nameDescription}">
                                 A descriptive name shown in the bot configuration page.
                             </div>
                         </div>

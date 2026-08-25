@@ -67,12 +67,12 @@
                 <div class="col-md-4 mb-3">
                     <label class="form-label" th:text="#{label.repoOwnerScope}">Repository owner scope (optional)</label>
                     <input type="text" class="form-control" th:field="*{repoOwner}" maxlength="255"
-                           placeholder="e.g. acme"/>
+                           th:placeholder="#{placeholder.hookRepoOwner}" placeholder="e.g. acme"/>
                 </div>
                 <div class="col-md-4 mb-3">
                     <label class="form-label" th:text="#{label.repoNameScope}">Repository name scope (optional)</label>
                     <input type="text" class="form-control" th:field="*{repoName}" maxlength="255"
-                           placeholder="e.g. payments-service"/>
+                           th:placeholder="#{placeholder.hookRepoName}" placeholder="e.g. payments-service"/>
                 </div>
             </div>
             <div class="form-text mb-3" th:text="#{help.hook.scope}">Leave all three empty for a global endpoint that receives
@@ -93,7 +93,7 @@
                 <label for="plainAuthorizationHeader" class="form-label" th:text="#{label.authorizationHeader}">Authorization header (optional)</label>
                 <input type="password" class="form-control" id="plainAuthorizationHeader"
                        name="plainAuthorizationHeader"
-                       placeholder="e.g. Bearer token123456" autocomplete="new-password"/>
+                       th:placeholder="#{placeholder.hookAuthHeader}" placeholder="e.g. Bearer token123456" autocomplete="new-password"/>
                 <div class="form-text" th:utext="#{help.hook.authorizationHeader}">Optional static <code>Authorization</code> header value, e.g.
                     <code>Bearer token123456</code> or <code>Basic YWxhZGRpbjpvcGVuc2VzYW1l</code>.</div>
                 <div th:if="${endpoint.id != null}" class="form-text" th:text="#{help.hook.keepValue}">

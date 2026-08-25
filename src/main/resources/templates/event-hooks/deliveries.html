@@ -14,9 +14,8 @@
             </a>
         </div>
 
-        <p class="text-secondary">Most recent 50 deliveries for
-            <code th:text="${endpoint.url}"></code>. Any 2xx response counts as success;
-            failed attempts are retried with growing backoff until the attempt cap is reached.</p>
+        <p class="text-secondary"><span th:text="#{page.deliveries.recentIntro}">Most recent 50 deliveries for</span>
+            <code th:text="${endpoint.url}"></code><span th:text="#{page.deliveries.retryInfo}">. Any 2xx response counts as success; failed attempts are retried with growing backoff until the attempt cap is reached.</span></p>
 
         <div th:if="${#lists.isEmpty(deliveries)}" class="card">
             <div class="card-body text-center py-4">

@@ -27,7 +27,7 @@
                         <div class="col-md-6">
                             <label for="name" class="form-label" th:text="#{label.name}">Name</label>
                             <input type="text" class="form-control" id="name" th:field="*{name}"
-                                   placeholder="e.g. GitHub MCP" required/>
+                                   th:placeholder="#{placeholder.mcpName}" placeholder="e.g. GitHub MCP" required/>
                         </div>
 
                         <div class="col-12">
