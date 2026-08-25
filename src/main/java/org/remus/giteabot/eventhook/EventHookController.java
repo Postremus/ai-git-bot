@@ -17,6 +17,8 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
 import java.util.Optional;
+import org.springframework.context.MessageSource;
+import org.springframework.context.i18n.LocaleContextHolder;
 
 /**
  * Admin CRUD UI for outgoing-webhook endpoints ({@link EventHookEndpoint}) and
@@ -44,17 +46,20 @@ public class EventHookController {
     private final EventHookDeliveryWorker deliveryWorker;
     private final BotService botService;
     private final ObjectMapper objectMapper;
+    private final MessageSource messageSource;
 
     public EventHookController(EventHookEndpointService endpointService,
                                EventHookDeliveryRepository deliveryRepository,
                                EventHookDeliveryWorker deliveryWorker,
                                BotService botService,
-                               ObjectMapper objectMapper) {
+                               ObjectMapper objectMapper,
+                               MessageSource messageSource) {
         this.endpointService = endpointService;
         this.deliveryRepository = deliveryRepository;
         this.deliveryWorker = deliveryWorker;
         this.botService = botService;
         this.objectMapper = objectMapper;
+        this.messageSource = messageSource;
     }
 
     @InitBinder("endpoint")
@@ -83,7 +88,7 @@ public class EventHookController {
                     return VIEW_FORM;
                 })
                 .orElseGet(() -> {
-                    redirectAttributes.addFlashAttribute("error", "Event hook endpoint not found");
+                    redirectAttributes.addFlashAttribute("error", messageSource.getMessage("flash.hookNotFound", null, LocaleContextHolder.getLocale()));
                     return REDIRECT_LIST;
                 });
     }
@@ -100,7 +105,7 @@ public class EventHookController {
             // rejected instead of falling into JPA merge semantics.
             Optional<EventHookEndpoint> existing = endpointService.findById(endpoint.getId());
             if (existing.isEmpty()) {
-                redirectAttributes.addFlashAttribute("error", "Event hook endpoint not found");
+                redirectAttributes.addFlashAttribute("error", messageSource.getMessage("flash.hookNotFound", null, LocaleContextHolder.getLocale()));
                 return REDIRECT_LIST;
             }
             // Blank credential inputs on edit mean "keep current" — copy the
@@ -121,11 +126,11 @@ public class EventHookController {
             try {
                 endpointService.save(endpoint, plainSecret, plainAuthorizationHeader, plainCustomHeaders);
                 redirectAttributes.addFlashAttribute("success",
-                        "Event hook endpoint '" + endpoint.getName() + "' saved successfully");
+                        messageSource.getMessage("flash.hookSaved", new Object[]{endpoint.getName()}, LocaleContextHolder.getLocale()));
                 return REDIRECT_LIST;
             } catch (Exception e) {
                 log.error("Failed to save event hook endpoint", e);
-                error = "Failed to save: " + e.getMessage();
+                error = messageSource.getMessage("flash.saveFailed", new Object[]{e.getMessage()}, LocaleContextHolder.getLocale());
             }
         }
         model.addAttribute("error", error);
@@ -139,9 +144,9 @@ public class EventHookController {
             endpoint.setEnabled(!endpoint.isEnabled());
             endpointService.save(endpoint, null, null, null);
             redirectAttributes.addFlashAttribute("success",
-                    "Event hook endpoint '" + endpoint.getName() + "' "
-                            + (endpoint.isEnabled() ? "enabled" : "disabled"));
-        }, () -> redirectAttributes.addFlashAttribute("error", "Event hook endpoint not found"));
+                    messageSource.getMessage(endpoint.isEnabled() ? "flash.hookEnabled" : "flash.hookDisabled",
+                            new Object[]{endpoint.getName()}, LocaleContextHolder.getLocale()));
+        }, () -> redirectAttributes.addFlashAttribute("error", messageSource.getMessage("flash.hookNotFound", null, LocaleContextHolder.getLocale())));
         return REDIRECT_LIST;
     }
 
@@ -149,10 +154,10 @@ public class EventHookController {
     public String delete(@PathVariable Long id, RedirectAttributes redirectAttributes) {
         try {
             endpointService.deleteById(id);
-            redirectAttributes.addFlashAttribute("success", "Event hook endpoint deleted successfully");
+            redirectAttributes.addFlashAttribute("success", messageSource.getMessage("flash.hookDeleted", null, LocaleContextHolder.getLocale()));
         } catch (Exception e) {
             log.error("Failed to delete event hook endpoint", e);
-            redirectAttributes.addFlashAttribute("error", "Failed to delete: " + e.getMessage());
+            redirectAttributes.addFlashAttribute("error", messageSource.getMessage("flash.deleteFailed", new Object[]{e.getMessage()}, LocaleContextHolder.getLocale()));
         }
         return REDIRECT_LIST;
     }
@@ -167,7 +172,7 @@ public class EventHookController {
                     return VIEW_DELIVERIES;
                 })
                 .orElseGet(() -> {
-                    redirectAttributes.addFlashAttribute("error", "Event hook endpoint not found");
+                    redirectAttributes.addFlashAttribute("error", messageSource.getMessage("flash.hookNotFound", null, LocaleContextHolder.getLocale()));
                     return REDIRECT_LIST;
                 });
     }
@@ -182,14 +187,14 @@ public class EventHookController {
                         delivery.setNextAttemptAt(null);
                         deliveryRepository.save(delivery);
                         deliveryWorker.deliverAsync(delivery.getId());
-                        redirectAttributes.addFlashAttribute("success", "Delivery re-queued");
+                        redirectAttributes.addFlashAttribute("success", messageSource.getMessage("flash.deliveryRequeued", null, LocaleContextHolder.getLocale()));
                     }
                     // Redirect target is derived from the delivery itself — the
                     // caller cannot steer a retry across endpoints.
                     return "redirect:/admin/event-hooks/" + delivery.getEndpointId() + "/deliveries";
                 })
                 .orElseGet(() -> {
-                    redirectAttributes.addFlashAttribute("error", "Delivery not found");
+                    redirectAttributes.addFlashAttribute("error", messageSource.getMessage("flash.deliveryNotFound", null, LocaleContextHolder.getLocale()));
                     return REDIRECT_LIST;
                 });
     }

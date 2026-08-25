@@ -11,6 +11,8 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
+import org.springframework.context.MessageSource;
+import org.springframework.context.i18n.LocaleContextHolder;
 
 /**
  * CRUD UI for {@link DeploymentTarget} rows. Mirrors the structure of the
@@ -33,11 +35,14 @@ public class DeploymentTargetController {
 
     private final DeploymentTargetService service;
     private final String publicBaseUrl;
+    private final MessageSource messageSource;
 
     public DeploymentTargetController(DeploymentTargetService service,
-                                      @Value("${ai-git-bot.public-base-url:}") String publicBaseUrl) {
+                                      @Value("${ai-git-bot.public-base-url:}") String publicBaseUrl,
+                                  MessageSource messageSource) {
         this.service = service;
         this.publicBaseUrl = publicBaseUrl == null ? "" : publicBaseUrl.trim();
+        this.messageSource = messageSource;
     }
 
     @GetMapping
@@ -65,7 +70,7 @@ public class DeploymentTargetController {
                     return VIEW_FORM;
                 })
                 .orElseGet(() -> {
-                    redirectAttributes.addFlashAttribute("error", "Deployment target not found");
+                    redirectAttributes.addFlashAttribute("error", messageSource.getMessage("flash.deploymentTargetNotFound", null, LocaleContextHolder.getLocale()));
                     return "redirect:/system-settings/deployment-targets";
                 });
     }
@@ -76,11 +81,12 @@ public class DeploymentTargetController {
         try {
             DeploymentTarget saved = service.save(target);
             redirectAttributes.addFlashAttribute("success",
-                    "Deployment target '" + saved.getName() + "' saved successfully");
+                    messageSource.getMessage("flash.deploymentTargetSaved",
+                            new Object[]{saved.getName()}, LocaleContextHolder.getLocale()));
             return "redirect:/system-settings/deployment-targets";
         } catch (Exception e) {
             log.error("Failed to save deployment target", e);
-            model.addAttribute("error", "Failed to save: " + e.getMessage());
+            model.addAttribute("error", messageSource.getMessage("flash.saveFailed", new Object[]{e.getMessage()}, LocaleContextHolder.getLocale()));
             populateForm(model, target);
             return VIEW_FORM;
         }
@@ -90,10 +96,10 @@ public class DeploymentTargetController {
     public String delete(@PathVariable Long id, RedirectAttributes redirectAttributes) {
         try {
             service.deleteById(id);
-            redirectAttributes.addFlashAttribute("success", "Deployment target deleted successfully");
+            redirectAttributes.addFlashAttribute("success", messageSource.getMessage("flash.deploymentTargetDeleted", null, LocaleContextHolder.getLocale()));
         } catch (Exception e) {
             log.error("Failed to delete deployment target", e);
-            redirectAttributes.addFlashAttribute("error", "Failed to delete: " + e.getMessage());
+            redirectAttributes.addFlashAttribute("error", messageSource.getMessage("flash.deleteFailed", new Object[]{e.getMessage()}, LocaleContextHolder.getLocale()));
         }
         return "redirect:/system-settings/deployment-targets";
     }

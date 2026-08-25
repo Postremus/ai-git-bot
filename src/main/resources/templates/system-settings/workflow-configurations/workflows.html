@@ -1,23 +1,23 @@
 <!DOCTYPE html>
 <html lang="en" xmlns:th="http://www.thymeleaf.org">
 <body>
-<div th:replace="~{layout :: layout('Workflow selection', ~{::pageContent})}">
+<div th:replace="~{layout :: layout(#{page.workflowSelection.title}, ~{::pageContent})}">
     <div th:fragment="pageContent">
 
         <div class="d-flex justify-content-between align-items-center mb-4">
             <h2>
                 <i class="bi bi-diagram-3"></i>
-                Workflows for &laquo;<span th:text="${workflowConfiguration.name}"></span>&raquo;
+                <span th:text="#{page.workflowSelection.workflowsFor}">Workflows for</span> &laquo;<span th:text="${workflowConfiguration.name}"></span>&raquo;
             </h2>
             <div class="d-flex align-items-center gap-2">
                 <button type="button" class="btn btn-outline-secondary btn-sm" id="expandAllWorkflows">
-                    <i class="bi bi-arrows-expand"></i> Expand all
+                    <i class="bi bi-arrows-expand"></i> <span th:text="#{page.systemSettings.expandAll}">Expand all</span>
                 </button>
                 <button type="button" class="btn btn-outline-secondary btn-sm" id="collapseAllWorkflows">
-                    <i class="bi bi-arrows-collapse"></i> Collapse all
+                    <i class="bi bi-arrows-collapse"></i> <span th:text="#{page.systemSettings.collapseAll}">Collapse all</span>
                 </button>
                 <a th:href="@{/system-settings}" class="btn btn-outline-secondary btn-sm">
-                    <i class="bi bi-arrow-left"></i> Back to System settings
+                    <i class="bi bi-arrow-left"></i> <span th:text="#{button.backToSystemSettings}">Back to System settings</span>
                 </a>
             </div>
         </div>
@@ -36,13 +36,13 @@
               method="post">
 
             <div th:if="${#lists.isEmpty(workflows)}" class="alert alert-warning"
-                 th:text="'No ' + ${workflowConfigKindLabel} + ' workflows are currently registered in the application.'">
+                 th:text="#{message.noWorkflows(${workflowConfigKindLabel})}">
             </div>
 
             <div th:each="row : ${workflows}" class="card mb-3">
                 <div class="card-header d-flex align-items-center gap-2 py-2">
                     <!-- Collapse toggle (only rendered when the workflow has params) -->
-                    <button th:if="${row.workflow != null and !row.workflow.paramsSchema().empty}"
+                    <button th:if="${row.workflow != null}"
                             type="button"
                             class="btn btn-link p-0 text-body text-decoration-none workflow-toggle"
                             data-bs-toggle="collapse"
@@ -52,7 +52,7 @@
                         <i class="bi bi-chevron-down section-chevron"></i>
                     </button>
                     <!-- Spacer so rows without a toggle button still align -->
-                    <span th:if="${row.workflow == null or row.workflow.paramsSchema().empty}"
+                    <span th:if="${row.workflow == null}"
                           style="width:1.5rem; display:inline-block;"></span>
 
                     <div class="form-check mb-0 flex-grow-1">
@@ -65,20 +65,20 @@
                             <strong th:text="${row.displayName}"></strong>
                             <code class="ms-2 text-secondary" th:text="${row.workflowKey}"></code>
                             <span class="badge bg-body-tertiary text-body ms-2" th:text="${row.category}"></span>
-                            <span th:if="${row.workflow == null}" class="badge bg-warning ms-2">Not registered</span>
+                            <span th:if="${row.workflow == null}" class="badge bg-warning ms-2" th:text="#{badge.notRegistered}">Not registered</span>
                         </label>
                         <!-- Short description of what the workflow does -->
-                        <div th:if="${row.workflow != null and row.workflow.description() != null and !row.workflow.description().isEmpty()}"
+                        <div th:if="${row.description != null and !row.description.isEmpty()}"
                              class="form-text mt-1 mb-0"
-                             th:text="${row.workflow.description()}"></div>
+                             th:text="${row.description}"></div>
                     </div>
                 </div>
 
-                <div th:if="${row.workflow != null and !row.workflow.paramsSchema().empty}"
+                <div th:if="${row.workflow != null}"
                      th:id="'wf-collapse-' + ${row.workflowKey}"
                      class="collapse show">
                     <div class="card-body pt-2">
-                        <div th:each="field : ${row.workflow.paramsSchema().fields()}" class="mb-3"
+                        <div th:each="field : ${row.localizedSchema.fields()}" class="mb-3"
                              th:with="persisted=${row.persistedParams != null ? row.persistedParams.get(field.name) : null},
                                       currentValue=${persisted != null ? persisted : field.defaultValue},
                                       booleanChecked=${persisted != null ? (persisted == 'true') : (field.defaultValue != null and field.defaultValue == 'true')}">
@@ -158,15 +158,17 @@
                             <div class="form-text" th:if="${field.description != null and field.type.name() != 'ENUM'}"
                                  th:text="${field.description}"></div>
                         </div>
+                        <div th:if="${row.workflow.paramsSchema().empty}" class="form-text"
+                             th:text="#{workflow.noParameters}">This workflow has no configurable parameters.</div>
                     </div>
                 </div>
             </div>
 
             <div class="d-flex gap-2">
                 <button type="submit" class="btn btn-primary">
-                    <i class="bi bi-save"></i> Save selection
+                    <i class="bi bi-save"></i> <span th:text="#{button.saveSelection}">Save selection</span>
                 </button>
-                <a th:href="@{/system-settings}" class="btn btn-outline-secondary">Cancel</a>
+                <a th:href="@{/system-settings}" class="btn btn-outline-secondary" th:text="#{button.cancel}">Cancel</a>
             </div>
         </form>
 

@@ -25,7 +25,15 @@ class SystemSettingsControllerTest {
         return new SystemSettingsController(systemPromptService, mcpConfigurationService,
                 mcpToolSelectionService, botToolConfigurationService, botToolSelectionService,
                 mock(WorkflowConfigurationService.class),
-                mock(org.remus.giteabot.prworkflow.config.DeploymentTargetService.class));
+                mock(org.remus.giteabot.prworkflow.config.DeploymentTargetService.class), messageSource());
+    }
+
+    private static org.springframework.context.MessageSource messageSource() {
+        org.springframework.context.support.ResourceBundleMessageSource ms =
+                new org.springframework.context.support.ResourceBundleMessageSource();
+        ms.setBasename("messages");
+        ms.setDefaultEncoding("UTF-8");
+        return ms;
     }
 
     @Test

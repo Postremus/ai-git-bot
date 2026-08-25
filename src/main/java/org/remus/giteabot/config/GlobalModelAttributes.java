@@ -29,4 +29,9 @@ public class GlobalModelAttributes {
     public String appVersion() {
         return appVersion;
     }
+
+    @ModelAttribute("supportedLocales")
+    public java.util.List<I18nConfig.LocaleOption> supportedLocales() {
+        return I18nConfig.SUPPORTED;
+    }
 }

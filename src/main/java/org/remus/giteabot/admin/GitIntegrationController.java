@@ -9,6 +9,8 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
 import java.util.List;
+import org.springframework.context.MessageSource;
+import org.springframework.context.i18n.LocaleContextHolder;
 
 @Slf4j
 @Controller
@@ -16,9 +18,11 @@ import java.util.List;
 public class GitIntegrationController {
 
     private final GitIntegrationService gitIntegrationService;
+    private final MessageSource messageSource;
 
-    public GitIntegrationController(GitIntegrationService gitIntegrationService) {
+    public GitIntegrationController(GitIntegrationService gitIntegrationService, MessageSource messageSource) {
         this.gitIntegrationService = gitIntegrationService;
+        this.messageSource = messageSource;
     }
 
     @GetMapping
@@ -49,7 +53,7 @@ public class GitIntegrationController {
                     return "git-integrations/form";
                 })
                 .orElseGet(() -> {
-                    redirectAttributes.addFlashAttribute("error", "Git Integration not found");
+                    redirectAttributes.addFlashAttribute("error", messageSource.getMessage("flash.gitNotFound", null, LocaleContextHolder.getLocale()));
                     return "redirect:/git-integrations";
                 });
     }
@@ -68,10 +72,10 @@ public class GitIntegrationController {
                 integration.setToken(token);
             }
             gitIntegrationService.save(integration, clearToken);
-            redirectAttributes.addFlashAttribute("success", "Git Integration saved successfully");
+            redirectAttributes.addFlashAttribute("success", messageSource.getMessage("flash.gitSaved", null, LocaleContextHolder.getLocale()));
         } catch (Exception e) {
             log.error("Failed to save Git Integration", e);
-            redirectAttributes.addFlashAttribute("error", "Failed to save: " + e.getMessage());
+            redirectAttributes.addFlashAttribute("error", messageSource.getMessage("flash.saveFailed", new Object[]{e.getMessage()}, LocaleContextHolder.getLocale()));
         }
         return "redirect:/git-integrations";
     }
@@ -80,10 +84,10 @@ public class GitIntegrationController {
     public String delete(@PathVariable Long id, RedirectAttributes redirectAttributes) {
         try {
             gitIntegrationService.deleteById(id);
-            redirectAttributes.addFlashAttribute("success", "Git Integration deleted successfully");
+            redirectAttributes.addFlashAttribute("success", messageSource.getMessage("flash.gitDeleted", null, LocaleContextHolder.getLocale()));
         } catch (Exception e) {
             log.error("Failed to delete Git Integration", e);
-            redirectAttributes.addFlashAttribute("error", "Failed to delete: " + e.getMessage());
+            redirectAttributes.addFlashAttribute("error", messageSource.getMessage("flash.deleteFailed", new Object[]{e.getMessage()}, LocaleContextHolder.getLocale()));
         }
         return "redirect:/git-integrations";
     }

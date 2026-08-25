@@ -18,6 +18,8 @@ import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import org.springframework.context.MessageSource;
+import org.springframework.context.i18n.LocaleContextHolder;
 
 /**
  * CRUD UI for PR-kind {@link WorkflowConfiguration} rows. Mirrors the
@@ -44,6 +46,7 @@ public class WorkflowConfigurationController {
 
     private final WorkflowConfigurationService configurationService;
     private final WorkflowSelectionService selectionService;
+    private final MessageSource messageSource;
 
     /**
      * Exposes the shared-template contract: which base URL the form actions
@@ -105,11 +108,11 @@ public class WorkflowConfigurationController {
         try {
             WorkflowConfiguration saved = configurationService.save(workflowConfiguration);
             redirectAttributes.addFlashAttribute("success",
-                    "Workflow configuration saved. Please select which workflows are enabled.");
+                    messageSource.getMessage("flash.workflowConfigSaved", null, LocaleContextHolder.getLocale()));
             return "redirect:/system-settings/workflow-configurations/" + saved.getId() + "/workflows";
         } catch (Exception e) {
             log.error("Failed to save workflow configuration", e);
-            model.addAttribute("error", "Failed to save: " + e.getMessage());
+            model.addAttribute("error", messageSource.getMessage("flash.saveFailed", new Object[]{e.getMessage()}, LocaleContextHolder.getLocale()));
             model.addAttribute("workflowConfiguration", workflowConfiguration);
             model.addAttribute("activeNav", "system-settings");
             addTemplateAttributes(model);
@@ -149,11 +152,11 @@ public class WorkflowConfigurationController {
                         allParams == null ? null : allParams.keySet(), workflowParams);
             }
             selectionService.saveSelection(id, selectedWorkflowKeys, workflowParams);
-            redirectAttributes.addFlashAttribute("success", "Workflow selection saved successfully");
+            redirectAttributes.addFlashAttribute("success", messageSource.getMessage("flash.workflowSelectionSaved", null, LocaleContextHolder.getLocale()));
             return "redirect:/system-settings";
         } catch (Exception e) {
             log.error("Failed to save workflow selection", e);
-            redirectAttributes.addFlashAttribute("error", "Failed to save workflow selection: " + e.getMessage());
+            redirectAttributes.addFlashAttribute("error", messageSource.getMessage("flash.saveFailed", new Object[]{e.getMessage()}, LocaleContextHolder.getLocale()));
             return "redirect:/system-settings/workflow-configurations/" + id + "/workflows";
         }
     }
@@ -165,10 +168,10 @@ public class WorkflowConfigurationController {
         }
         try {
             configurationService.deleteById(id);
-            redirectAttributes.addFlashAttribute("success", "Workflow configuration deleted successfully");
+            redirectAttributes.addFlashAttribute("success", messageSource.getMessage("flash.workflowConfigDeleted", null, LocaleContextHolder.getLocale()));
         } catch (Exception e) {
             log.error("Failed to delete workflow configuration", e);
-            redirectAttributes.addFlashAttribute("error", "Failed to delete: " + e.getMessage());
+            redirectAttributes.addFlashAttribute("error", messageSource.getMessage("flash.deleteFailed", new Object[]{e.getMessage()}, LocaleContextHolder.getLocale()));
         }
         return "redirect:/system-settings";
     }

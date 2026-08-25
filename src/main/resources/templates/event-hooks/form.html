@@ -1,17 +1,17 @@
 <!DOCTYPE html>
 <html lang="en" xmlns:th="http://www.thymeleaf.org">
 <body>
-<div th:replace="~{layout :: layout('Event hook endpoint', ~{::pageContent})}">
+<div th:replace="~{layout :: layout(#{page.eventHook.title}, ~{::pageContent})}">
     <div th:fragment="pageContent">
 
         <div class="d-flex justify-content-between align-items-center mb-4">
             <h2>
                 <i class="bi bi-send"></i>
-                <span th:if="${endpoint.id == null}">New event hook endpoint</span>
-                <span th:if="${endpoint.id != null}">Edit event hook endpoint</span>
+                <span th:if="${endpoint.id == null}" th:text="#{page.eventHook.newTitle}">New event hook endpoint</span>
+                <span th:if="${endpoint.id != null}" th:text="#{page.eventHook.editTitle}">Edit event hook endpoint</span>
             </h2>
             <a th:href="@{/admin/event-hooks}" class="btn btn-outline-secondary">
-                <i class="bi bi-arrow-left"></i> Back to Outgoing webhooks
+                <i class="bi bi-arrow-left"></i> <span th:text="#{button.backToOutgoingWebhooks}">Back to Outgoing webhooks</span>
             </a>
         </div>
 
@@ -21,21 +21,21 @@
             <input type="hidden" th:field="*{id}"/>
 
             <div class="mb-3">
-                <label class="form-label">Name</label>
+                <label class="form-label" th:text="#{label.name}">Name</label>
                 <input type="text" class="form-control" th:field="*{name}" required maxlength="200"/>
-                <div class="form-text">Human-readable label shown in the endpoint list.</div>
+                <div class="form-text" th:text="#{help.hook.name}">Human-readable label shown in the endpoint list.</div>
             </div>
 
             <div class="mb-3">
-                <label class="form-label">URL</label>
+                <label class="form-label" th:text="#{label.url}">URL</label>
                 <input type="url" class="form-control" th:field="*{url}" required maxlength="1024"
                        placeholder="https://siem.example.com/hooks/ai-git-bot"/>
-                <div class="form-text">Must start with <code>http://</code> or <code>https://</code>.
+                <div class="form-text" th:utext="#{help.hook.url}">Must start with <code>http://</code> or <code>https://</code>.
                     Deliveries are POSTed here with a JSON body; any 2xx response counts as success.</div>
             </div>
 
             <div class="mb-3">
-                <label class="form-label">Event types</label>
+                <label class="form-label" th:text="#{label.eventTypes}">Event types</label>
                 <div th:each="type : ${eventHookEventTypes}" class="form-check">
                     <input class="form-check-input" type="checkbox" name="eventTypes"
                            th:value="${type.name()}" th:id="'et-' + ${type.name()}"
@@ -43,92 +43,92 @@
                     <label class="form-check-label" th:for="'et-' + ${type.name()}"
                            th:text="${type.wireValue()}"></label>
                 </div>
-                <div class="form-text">At least one. The endpoint receives every checked event that
+                <div class="form-text" th:text="#{help.hook.eventTypes}">At least one. The endpoint receives every checked event that
                     matches its scope below.</div>
             </div>
 
             <div class="mb-3">
-                <label class="form-label">Custom headers (JSON object, optional)</label>
+                <label class="form-label" th:text="#{label.customHeaders}">Custom headers (JSON object, optional)</label>
                 <textarea class="form-control font-monospace" rows="3" name="plainCustomHeaders"
-                          th:placeholder="${endpoint.customHeaders != null} ? 'configured - leave blank to keep' : '{ &quot;X-Source&quot;: &quot;ai-git-bot&quot; }'"></textarea>
-                <div class="form-text">Sent with every delivery. Must be a single JSON object. Stored
+                          th:placeholder="${endpoint.customHeaders != null} ? #{placeholder.configuredKeep} : '{ &quot;X-Source&quot;: &quot;ai-git-bot&quot; }'"></textarea>
+                <div class="form-text" th:text="#{help.hook.customHeaders}">Sent with every delivery. Must be a single JSON object. Stored
                     encrypted; leave blank on edit to keep the current value.</div>
             </div>
 
             <div class="row">
                 <div class="col-md-4 mb-3">
-                    <label class="form-label">Bot scope (optional)</label>
+                    <label class="form-label" th:text="#{label.botScope}">Bot scope (optional)</label>
                     <select class="form-select" th:field="*{botId}">
-                        <option value="">All bots</option>
+                        <option value="" th:text="#{label.allBots}">All bots</option>
                         <option th:each="bot : ${bots}" th:value="${bot.id}"
                                 th:text="${bot.name}"></option>
                     </select>
                 </div>
                 <div class="col-md-4 mb-3">
-                    <label class="form-label">Repository owner scope (optional)</label>
+                    <label class="form-label" th:text="#{label.repoOwnerScope}">Repository owner scope (optional)</label>
                     <input type="text" class="form-control" th:field="*{repoOwner}" maxlength="255"
-                           placeholder="e.g. acme"/>
+                           th:placeholder="#{placeholder.hookRepoOwner}" placeholder="e.g. acme"/>
                 </div>
                 <div class="col-md-4 mb-3">
-                    <label class="form-label">Repository name scope (optional)</label>
+                    <label class="form-label" th:text="#{label.repoNameScope}">Repository name scope (optional)</label>
                     <input type="text" class="form-control" th:field="*{repoName}" maxlength="255"
-                           placeholder="e.g. payments-service"/>
+                           th:placeholder="#{placeholder.hookRepoName}" placeholder="e.g. payments-service"/>
                 </div>
             </div>
-            <div class="form-text mb-3">Leave all three empty for a global endpoint that receives
+            <div class="form-text mb-3" th:text="#{help.hook.scope}">Leave all three empty for a global endpoint that receives
                 events from every bot and repository.</div>
 
             <div class="mb-3">
-                <label for="plainSecret" class="form-label">Secret (optional)</label>
+                <label for="plainSecret" class="form-label" th:text="#{label.secret}">Secret (optional)</label>
                 <input type="password" class="form-control" id="plainSecret" name="plainSecret"
-                       placeholder="Enter HMAC signing secret" autocomplete="new-password"/>
-                <div class="form-text">Optional. When set, deliveries are signed with
+                       th:placeholder="#{placeholder.enterSecret}" placeholder="Enter HMAC signing secret" autocomplete="new-password"/>
+                <div class="form-text" th:utext="#{help.hook.secret}">Optional. When set, deliveries are signed with
                     <code>X-EventHook-Signature-256</code>.</div>
-                <div th:if="${endpoint.id != null}" class="form-text">
+                <div th:if="${endpoint.id != null}" class="form-text" th:text="#{help.hook.keepSecret}">
                     Leave blank to keep current secret.
                 </div>
             </div>
 
             <div class="mb-3">
-                <label for="plainAuthorizationHeader" class="form-label">Authorization header (optional)</label>
+                <label for="plainAuthorizationHeader" class="form-label" th:text="#{label.authorizationHeader}">Authorization header (optional)</label>
                 <input type="password" class="form-control" id="plainAuthorizationHeader"
                        name="plainAuthorizationHeader"
-                       placeholder="e.g. Bearer token123456" autocomplete="new-password"/>
-                <div class="form-text">Optional static <code>Authorization</code> header value, e.g.
+                       th:placeholder="#{placeholder.hookAuthHeader}" placeholder="e.g. Bearer token123456" autocomplete="new-password"/>
+                <div class="form-text" th:utext="#{help.hook.authorizationHeader}">Optional static <code>Authorization</code> header value, e.g.
                     <code>Bearer token123456</code> or <code>Basic YWxhZGRpbjpvcGVuc2VzYW1l</code>.</div>
-                <div th:if="${endpoint.id != null}" class="form-text">
+                <div th:if="${endpoint.id != null}" class="form-text" th:text="#{help.hook.keepValue}">
                     Leave blank to keep current value.
                 </div>
             </div>
 
             <div class="mb-3 form-check">
                 <input type="checkbox" class="form-check-input" th:field="*{skipTlsVerify}" id="skipTlsVerify"/>
-                <label class="form-check-label" for="skipTlsVerify">Skip TLS certificate verification</label>
+                <label class="form-check-label" for="skipTlsVerify" th:text="#{label.skipTlsVerify}">Skip TLS certificate verification</label>
                 <div class="form-text text-warning">
                     <i class="bi bi-exclamation-triangle"></i>
-                    Insecure: disables HTTPS certificate validation. Use only for self-signed/internal endpoints.
+                    <span th:text="#{help.hook.skipTls}">Insecure: disables HTTPS certificate validation. Use only for self-signed/internal endpoints.</span>
                 </div>
             </div>
 
             <div class="mb-3 form-check">
                 <input type="checkbox" class="form-check-input" th:field="*{enabled}" id="enabled"/>
-                <label class="form-check-label" for="enabled">Enabled</label>
+                <label class="form-check-label" for="enabled" th:text="#{label.enabled}">Enabled</label>
             </div>
 
             <div class="d-flex gap-2">
                 <button type="submit" class="btn btn-primary">
-                    <i class="bi bi-save"></i> Save
+                    <i class="bi bi-save"></i> <span th:text="#{button.save}">Save</span>
                 </button>
-                <a th:href="@{/admin/event-hooks}" class="btn btn-outline-secondary">Cancel</a>
+                <a th:href="@{/admin/event-hooks}" class="btn btn-outline-secondary" th:text="#{button.cancel}">Cancel</a>
             </div>
         </form>
 
         <form th:if="${endpoint.id != null}"
               th:action="@{/admin/event-hooks/{id}/delete(id=${endpoint.id})}"
               method="post" class="mt-3"
-              onsubmit="return confirm('Delete this endpoint? Its delivery history is deleted as well.');">
+              th:attr="onsubmit=|return confirm('#{message.confirmDeleteEndpoint}')|">
             <button type="submit" class="btn btn-outline-danger">
-                <i class="bi bi-trash"></i> Delete
+                <i class="bi bi-trash"></i> <span th:text="#{button.delete}">Delete</span>
             </button>
         </form>
 
