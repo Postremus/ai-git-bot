@@ -1,8 +1,7 @@
 <!DOCTYPE html>
 <html lang="en" xmlns:th="http://www.thymeleaf.org"
->
+      th:replace="~{layout :: layout(${mcpConfiguration.id != null ? #messages.msg('page.mcpConfiguration.editTitle') : #messages.msg('page.mcpConfiguration.newTitle')}, ~{::pageContent})}">
 <body>
-<div th:replace="~{layout :: layout(${mcpConfiguration.id != null ? #messages.msg('page.mcpConfiguration.editTitle') : #messages.msg('page.mcpConfiguration.newTitle')}, ~{::pageContent})}">
     <div th:fragment="pageContent">
 
         <div class="d-flex justify-content-between align-items-center mb-4">
@@ -54,6 +53,5 @@
         </div>
 
     </div>
-</div>
 </body>
 </html>
