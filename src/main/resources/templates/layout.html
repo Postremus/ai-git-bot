@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en" xmlns:th="http://www.thymeleaf.org"
->
-<head th:fragment="head(title)">
+      th:fragment="layout(title, content)">
+<head>
     <meta charset="UTF-8"/>
     <meta name="viewport" content="width=device-width, initial-scale=1"/>
     <title th:text="${title} + ' - ' + #{app.name}">AI Git Bot</title>
@@ -11,10 +11,6 @@
     <script th:src="@{/js/theme-init.js}"></script>
 </head>
 <body>
-
-<!-- Layout fragment -->
-<div th:fragment="layout(title, content)">
-    <th:block th:replace="~{layout :: head(${title})}"></th:block>
 
     <nav class="navbar navbar-expand-lg border-bottom shadow-sm mb-4" 
          style="background-color: light-dark(#212529, #1a1d20); border-color: light-dark(#dee2e6, #343a40) !important;"
@@ -121,7 +117,6 @@
         window.giteabotTourDismiss = /*[[#{tour.dismiss}]]*/ 'Dismiss';
     </script>
     <script th:src="@{/js/balloon-help.js}"></script>
-</div>
 
 </body>
 </html>

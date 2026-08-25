@@ -1,8 +1,7 @@
 <!DOCTYPE html>
 <html lang="en" xmlns:th="http://www.thymeleaf.org"
->
+      th:replace="~{layout :: layout(#{nav.bots}, ~{::pageContent})}">
 <body>
-<div th:replace="~{layout :: layout(#{nav.bots}, ~{::pageContent})}">
     <div th:fragment="pageContent">
 
         <div class="d-flex justify-content-between align-items-center mb-4">
@@ -82,8 +81,6 @@
             </div>
         </div>
 
-    </div>
-</div>
 
 <script>
     document.addEventListener('DOMContentLoaded', function () {
@@ -98,5 +95,6 @@
         });
     });
 </script>
+    </div>
 </body>
 </html>
