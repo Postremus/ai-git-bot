@@ -18,6 +18,8 @@ import java.io.IOException;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import org.springframework.context.MessageSource;
+import org.springframework.context.i18n.LocaleContextHolder;
 
 /**
  * Admin page that audits AI usage: token consumption per AI interaction and
@@ -31,6 +33,7 @@ public class UsageController {
 
     private final AiUsageService aiUsageService;
     private final AiUsageProperties usageProperties;
+    private final MessageSource messageSource;
 
     @GetMapping("/usage")
     public String usage(@RequestParam(required = false) String from,
@@ -70,7 +73,7 @@ public class UsageController {
     @PostMapping("/usage/clear")
     public String clearUsage(RedirectAttributes redirectAttributes) {
         aiUsageService.clearUsage();
-        redirectAttributes.addFlashAttribute("success", "All AI usage entries have been cleared");
+        redirectAttributes.addFlashAttribute("success", messageSource.getMessage("flash.usageCleared", null, LocaleContextHolder.getLocale()));
         return "redirect:/usage";
     }
 

@@ -2,14 +2,14 @@
 <html lang="en" xmlns:th="http://www.thymeleaf.org"
 >
 <body>
-<div th:replace="~{layout :: layout(${integration.id != null ? 'Edit Git Integration' : 'New Git Integration'}, ~{::pageContent})}">
+<div th:replace="~{layout :: layout(${integration.id != null ? #messages.msg('page.gitIntegration.editTitle') : #messages.msg('page.gitIntegration.newTitle')}, ~{::pageContent})}">
     <div th:fragment="pageContent">
 
         <div class="d-flex justify-content-between align-items-center mb-4">
             <h2>
                 <i class="bi bi-git"></i>
-                <span th:if="${integration.id != null}">Edit Git Integration</span>
-                <span th:if="${integration.id == null}">New Git Integration</span>
+                <span th:if="${integration.id != null}" th:text="#{page.gitIntegration.editTitle}">Edit Git Integration</span>
+                <span th:if="${integration.id == null}" th:text="#{page.gitIntegration.newTitle}">New Git Integration</span>
             </h2>
         </div>
 
@@ -20,83 +20,83 @@
 
                     <div class="row g-3">
                         <div class="col-md-6">
-                            <label for="name" class="form-label">Name</label>
+                            <label for="name" class="form-label" th:text="#{label.name}">Name</label>
                             <input type="text" class="form-control" id="name" th:field="*{name}"
-                                   placeholder="e.g. My Gitea Server" required/>
-                            <div class="form-text">A friendly name to identify this integration.</div>
+                                   th:placeholder="#{placeholder.gitName}" placeholder="e.g. My Gitea Server" required/>
+                            <div class="form-text" th:text="#{help.gitName}">A friendly name to identify this integration.</div>
                         </div>
                         <div class="col-md-6">
-                            <label for="providerType" class="form-label">Provider Type</label>
+                            <label for="providerType" class="form-label" th:text="#{label.providerType}">Provider Type</label>
                             <select class="form-select" id="providerType" th:field="*{providerType}" required
                                     onchange="updateFormFields()">
-                                <option value="">Select a provider...</option>
+                                <option value="" th:text="#{message.selectProvider}">Select a provider...</option>
                                 <option th:each="type : ${providerTypes}"
                                         th:value="${type}" th:text="${type}"></option>
                             </select>
-                            <div class="form-text">The Git hosting platform you want to connect to.</div>
+                            <div class="form-text" th:text="#{help.gitProvider}">The Git hosting platform you want to connect to.</div>
                         </div>
 
                         <!-- URL field - shown for Gitea only -->
                         <div class="col-md-6" id="urlField">
-                            <label for="url" class="form-label">URL</label>
+                            <label for="url" class="form-label" th:text="#{label.url}">URL</label>
                             <input type="url" class="form-control" id="url" th:field="*{url}"
-                                   placeholder="e.g. https://gitea.example.com"/>
-                            <div class="form-text" id="urlDescription">
+                                   th:placeholder="#{placeholder.gitBaseUrl}" placeholder="e.g. https://gitea.example.com"/>
+                            <div class="form-text" id="urlDescription" th:text="#{help.git.urlDescription}">
                                 The base URL of your Gitea instance.
                             </div>
                         </div>
 
                         <!-- Username field - shown for Bitbucket only -->
                         <div class="col-md-6" id="usernameField" style="display: none;">
-                            <label for="username" class="form-label">Username</label>
+                            <label for="username" class="form-label" th:text="#{label.username}">Username</label>
                             <input type="text" class="form-control" id="username" th:field="*{username}"
-                                   placeholder="e.g. your-bitbucket-username"/>
-                            <div class="form-text">
+                                   th:placeholder="#{placeholder.gitUsername}" placeholder="e.g. your-bitbucket-username"/>
+                            <div class="form-text" th:text="#{help.git.bitbucketUsername}">
                                 Your Bitbucket username (used together with the App Password for authentication).
                             </div>
                         </div>
 
                         <!-- Token field - always shown -->
                         <div class="col-md-6" id="tokenField">
-                            <label for="token" class="form-label" id="tokenLabel">Token</label>
+                            <label for="token" class="form-label" id="tokenLabel" th:text="#{label.token}">Token</label>
                             <div class="input-group">
                                 <input type="password" class="form-control" id="token" name="token"
                                        autocomplete="new-password"
-                                       placeholder="Enter access token"/>
+                                       th:placeholder="#{placeholder.enterAccessToken}" placeholder="Enter access token"/>
                                 <button class="btn btn-outline-secondary" type="button" id="clearTokenBtn"
                                         th:if="${integration.id != null}"
-                                        title="Remove the stored token">
-                                    <i class="bi bi-trash"></i> Clear
+                                        th:title="#{button.removeStoredToken}">
+                                    <i class="bi bi-trash"></i> <span th:text="#{button.clear}">Clear</span>
                                 </button>
                             </div>
                             <input type="hidden" id="clearToken" name="clearToken" value="false"/>
                             <div th:if="${integration.id != null}" class="form-text" id="tokenKeepHint">
-                                Leave blank to keep current token.
+                                <span th:text="#{help.keepToken}">Leave blank to keep current token.</span>
                             </div>
                             <div class="form-text text-warning" id="tokenClearPendingHint" style="display: none;">
-                                <i class="bi bi-exclamation-triangle"></i> The stored token will be removed on save.
+                                <i class="bi bi-exclamation-triangle"></i> <span th:text="#{help.git.tokenRemoved}">The stored token will be removed on save.</span>
                             </div>
-                            <div class="form-text" id="tokenDescription">
+                            <div class="form-text" id="tokenDescription" th:text="#{help.git.tokenDescription}">
                                 The access token for API authentication.
                             </div>
                         </div>
 
                         <div class="col-12" id="reviewTriggerNotice" style="display: none;">
                             <div class="alert alert-info mb-0">
-                                Code reviews run only when the bot is explicitly requested as a reviewer.
-                                New commits do not trigger follow-up reviews automatically.
+                                <span th:text="#{help.git.reviewTrigger}">Code reviews run only when the bot is explicitly requested as a reviewer.
+                                New commits do not trigger follow-up reviews automatically.</span>
                             </div>
                         </div>
 
                         <div class="col-md-6" id="postReviewActionField" style="display: none;">
-                            <label for="postReviewAction" class="form-label">Post-review Action</label>
+                            <label for="postReviewAction" class="form-label" th:text="#{label.postReviewAction}">Post-review Action</label>
                             <select class="form-select" id="postReviewAction" th:field="*{postReviewAction}">
                                 <option th:each="action : ${postReviewActions}"
                                         th:value="${action}"
-                                        th:text="${action == T(org.remus.giteabot.repository.PostReviewAction).NONE ? 'None' : (action == T(org.remus.giteabot.repository.PostReviewAction).APPROVE ? 'Approve merge request' : 'Request changes')}">
+                                        th:text="${action == T(org.remus.giteabot.repository.PostReviewAction).NONE ? #messages.msg('postReviewAction.none') : (action == T(org.remus.giteabot.repository.PostReviewAction).APPROVE ? #messages.msg('postReviewAction.approve') : #messages.msg('postReviewAction.requestChanges'))}">
                                 </option>
                             </select>
-                            <div class="form-text">
+                            <div class="form-text" th:text="#{help.git.postReviewAction}">
                                 Defaults to no automatic approve or request-changes action. Currently supported by GitLab.
                             </div>
                         </div>
@@ -104,10 +104,10 @@
 
                     <div class="mt-4">
                         <button type="submit" class="btn btn-primary">
-                            <i class="bi bi-check-lg"></i> Save
+                            <i class="bi bi-check-lg"></i> <span th:text="#{button.save}">Save</span>
                         </button>
                         <a th:href="@{/git-integrations}" class="btn btn-secondary ms-2">
-                            <i class="bi bi-x-lg"></i> Cancel
+                            <i class="bi bi-x-lg"></i> <span th:text="#{button.cancel}">Cancel</span>
                         </a>
                     </div>
                 </form>
@@ -142,11 +142,11 @@
                     urlField.style.display = 'block';
                     urlInput.required = true;
                     urlInput.placeholder = 'e.g. https://gitea.example.com';
-                    urlDescription.textContent = 'The base URL of your Gitea instance (e.g. https://gitea.example.com).';
+                    urlDescription.textContent = /*[[#{help.git.giteaUrl}]]*/ 'The base URL of your Gitea instance (e.g. https://gitea.example.com).';
                     usernameField.style.display = 'none';
                     usernameInput.required = false;
-                    tokenLabel.textContent = 'Token';
-                    tokenDescription.textContent = 'A Gitea access token with repository read/write permissions.';
+                    tokenLabel.textContent = /*[[#{label.token}]]*/ 'Token';
+                    tokenDescription.textContent = /*[[#{help.git.giteaToken}]]*/ 'A Gitea access token with repository read/write permissions.';
                     reviewTriggerNotice.style.display = 'block';
                 } else if (providerType === 'GITHUB') {
                     // GitHub: Token only (URL is fixed)
@@ -155,19 +155,19 @@
                     urlInput.value = 'https://github.com';
                     usernameField.style.display = 'none';
                     usernameInput.required = false;
-                    tokenLabel.textContent = 'Personal Access Token';
-                    tokenDescription.textContent = 'A GitHub Personal Access Token (classic) or Fine-grained token with repository permissions.';
+                    tokenLabel.textContent = /*[[#{label.personalAccessToken}]]*/ 'Personal Access Token';
+                    tokenDescription.textContent = /*[[#{help.git.githubToken}]]*/ 'A GitHub Personal Access Token (classic) or Fine-grained token with repository permissions.';
                     reviewTriggerNotice.style.display = 'block';
                 } else if (providerType === 'GITLAB') {
                     // GitLab: URL + Token
                     urlField.style.display = 'block';
                     urlInput.required = true;
                     urlInput.placeholder = 'e.g. https://gitlab.com or https://gitlab.yourdomain.com';
-                    urlDescription.textContent = 'The base URL of your GitLab instance (e.g. https://gitlab.com for gitlab.com, or https://gitlab.yourdomain.com for self-managed).';
+                    urlDescription.textContent = /*[[#{help.git.gitlabUrl}]]*/ 'The base URL of your GitLab instance (e.g. https://gitlab.com for gitlab.com, or https://gitlab.yourdomain.com for self-managed).';
                     usernameField.style.display = 'none';
                     usernameInput.required = false;
-                    tokenLabel.textContent = 'Personal Access Token';
-                    tokenDescription.textContent = 'A GitLab Personal Access Token with api and read_repository scopes. See GitLab Settings → Access Tokens.';
+                    tokenLabel.textContent = /*[[#{label.personalAccessToken}]]*/ 'Personal Access Token';
+                    tokenDescription.textContent = /*[[#{help.git.gitlabToken}]]*/ 'A GitLab Personal Access Token with api and read_repository scopes. See GitLab Settings → Access Tokens.';
                     reviewTriggerNotice.style.display = 'block';
                     postReviewActionField.style.display = 'block';
                 } else if (providerType === 'BITBUCKET') {
@@ -177,18 +177,18 @@
                     urlInput.value = 'https://bitbucket.org';
                     usernameField.style.display = 'block';
                     usernameInput.required = true;
-                    tokenLabel.textContent = 'App Password';
-                    tokenDescription.textContent = 'A Bitbucket App Password with repository read/write permissions. Create one at Bitbucket Settings → App passwords.';
+                    tokenLabel.textContent = /*[[#{label.appPassword}]]*/ 'App Password';
+                    tokenDescription.textContent = /*[[#{help.git.bitbucketToken}]]*/ 'A Bitbucket App Password with repository read/write permissions. Create one at Bitbucket Settings → App passwords.';
                     reviewTriggerNotice.style.display = 'block';
                 } else {
                     // Default / no selection
                     urlField.style.display = 'block';
                     urlInput.required = true;
-                    urlDescription.textContent = 'The base URL of your Git server.';
+                    urlDescription.textContent = /*[[#{help.git.genericUrl}]]*/ 'The base URL of your Git server.';
                     usernameField.style.display = 'none';
                     usernameInput.required = false;
-                    tokenLabel.textContent = 'Token';
-                    tokenDescription.textContent = 'The access token for API authentication.';
+                    tokenLabel.textContent = /*[[#{label.token}]]*/ 'Token';
+                    tokenDescription.textContent = /*[[#{help.git.tokenDescription}]]*/ 'The access token for API authentication.';
                 }
 
                 // Token is required when creating a new integration; on edit it
@@ -204,12 +204,12 @@
                 const clearTokenInput = document.getElementById('clearToken');
                 const keepHint = document.getElementById('tokenKeepHint');
                 const clearPendingHint = document.getElementById('tokenClearPendingHint');
-                const defaultPlaceholder = 'Enter access token';
+                const defaultPlaceholder = /*[[#{placeholder.enterAccessToken}]]*/ 'Enter access token';
 
                 function setClearPending(pending) {
                     clearTokenInput.value = pending ? 'true' : 'false';
                     if (pending) {
-                        tokenInput.placeholder = 'Token will be removed on save';
+                        tokenInput.placeholder = /*[[#{help.git.tokenWillBeRemoved}]]*/ 'Token will be removed on save';
                         if (keepHint) keepHint.style.display = 'none';
                         clearPendingHint.style.display = 'block';
                     } else {

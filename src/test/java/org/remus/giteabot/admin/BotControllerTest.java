@@ -39,7 +39,15 @@ class BotControllerTest {
                 botToolConfigurationService,
                 botToolSelectionService,
                 mock(WorkflowConfigurationService.class),
-                mock(org.remus.giteabot.prworkflow.config.DeploymentTargetService.class));
+                mock(org.remus.giteabot.prworkflow.config.DeploymentTargetService.class), messageSource());
+    }
+
+    private static org.springframework.context.MessageSource messageSource() {
+        org.springframework.context.support.ResourceBundleMessageSource ms =
+                new org.springframework.context.support.ResourceBundleMessageSource();
+        ms.setBasename("messages");
+        ms.setDefaultEncoding("UTF-8");
+        return ms;
     }
 
     @Test
@@ -73,7 +81,7 @@ class BotControllerTest {
                 mock(BotToolConfigurationService.class),
                 mock(BotToolSelectionService.class),
                 mock(WorkflowConfigurationService.class),
-                mock(org.remus.giteabot.prworkflow.config.DeploymentTargetService.class));
+                mock(org.remus.giteabot.prworkflow.config.DeploymentTargetService.class), messageSource());
 
         org.springframework.ui.Model model = new org.springframework.ui.ExtendedModelMap();
         String view = controller.newForm(model);
@@ -104,7 +112,7 @@ class BotControllerTest {
                 mock(BotToolConfigurationService.class),
                 mock(BotToolSelectionService.class),
                 workflowConfigurationService,
-                mock(org.remus.giteabot.prworkflow.config.DeploymentTargetService.class));
+                mock(org.remus.giteabot.prworkflow.config.DeploymentTargetService.class), messageSource());
 
         org.springframework.ui.Model model = new org.springframework.ui.ExtendedModelMap();
         String view = controller.newForm(model);
@@ -145,7 +153,7 @@ class BotControllerTest {
                 mock(McpConfigurationService.class), mock(McpToolSelectionService.class),
                 botToolConfigurationService, mock(BotToolSelectionService.class),
                 workflowConfigurationService,
-                mock(org.remus.giteabot.prworkflow.config.DeploymentTargetService.class));
+                mock(org.remus.giteabot.prworkflow.config.DeploymentTargetService.class), messageSource());
 
         Bot bot = new Bot();
         String view = controller.save(bot, 1L, 2L, 3L, null, 4L, null, 9L, null, false,

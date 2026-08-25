@@ -66,17 +66,15 @@ public class SecurityConfig {
                                                             ObjectProvider<AutoLoginConfig.AutoLoginFilter> autoLoginFilter) {
         http
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/setup", "/setup/**", "/css/**", "/js/**", "/images/**", "/favicon.ico").permitAll()
+                        .requestMatchers("/login", "/setup", "/setup/**", "/css/**", "/js/**", "/images/**", "/favicon.ico").permitAll()
                         .anyRequest().authenticated()
                 )
                 .formLogin(form -> form
                         .loginPage("/login")
                         .defaultSuccessUrl("/dashboard", true)
-                        .permitAll()
                 )
                 .logout(logout -> logout
                         .logoutSuccessUrl("/login?logout")
-                        .permitAll()
                 );
         // When the auto-login profile is active (giteabot.security.auto-login.enabled=true)
         // an AutoLoginFilter bean is published — insert it before the form-login filter

@@ -2,27 +2,27 @@
 <html lang="en" xmlns:th="http://www.thymeleaf.org"
 >
 <body>
-<div th:replace="~{layout :: layout('Select built-in tools', ~{::pageContent})}">
+<div th:replace="~{layout :: layout(#{page.selectTools.title}, ~{::pageContent})}">
     <div th:fragment="pageContent">
 
         <div class="d-flex justify-content-between align-items-center mb-4">
-            <h2><i class="bi bi-list-check"></i> Select built-in tools</h2>
+            <h2><i class="bi bi-list-check"></i> <span th:text="#{page.selectTools.title}">Select built-in tools</span></h2>
         </div>
 
         <div class="card">
             <div class="card-body">
                 <p class="mb-2">
-                    Configuration: <strong th:text="${botToolConfiguration.name}"></strong>
-                    <span th:if="${botToolConfiguration.defaultEntry}" class="badge bg-primary ms-2">Default</span>
+                    <span th:text="#{label.configuration}">Configuration</span>: <strong th:text="${botToolConfiguration.name}"></strong>
+                    <span th:if="${botToolConfiguration.defaultEntry}" class="badge bg-primary ms-2" th:text="#{badge.default}">Default</span>
                 </p>
-                <p class="text-secondary mb-4">
+                <p class="text-secondary mb-4" th:text="#{help.botTools.whitelist}">
                     Whitelist of built-in agent tools (file, context, validation, repository) that bots assigned
                     to this configuration may expose to the AI. Disabled tools are excluded from both native
                     tool calling and legacy prompt-based tool instructions, and any attempt to invoke them at
                     runtime is rejected.
                 </p>
 
-                <div th:if="${botToolConfiguration.defaultEntry}" class="alert alert-info">
+                <div th:if="${botToolConfiguration.defaultEntry}" class="alert alert-info" th:utext="#{help.botTools.defaultSelectionInfo}">
                     <i class="bi bi-info-circle"></i>
                     The <strong>default</strong> tool configuration always contains every registered built-in
                     tool and is read-only. Clone it to create a customised subset.
@@ -30,18 +30,18 @@
 
                 <div class="row g-3 mb-3">
                     <div class="col-md-5">
-                        <label for="toolFilter" class="form-label">Filter</label>
+                        <label for="toolFilter" class="form-label" th:text="#{button.filter}">Filter</label>
                         <input id="toolFilter" type="text" class="form-control"
-                               placeholder="Filter by tool name or description">
+                               th:placeholder="#{placeholder.filterTools}" placeholder="Filter by tool name or description">
                     </div>
                     <div class="col-md-3">
-                        <label for="kindFilter" class="form-label">Kind</label>
+                        <label for="kindFilter" class="form-label" th:text="#{label.kind}">Kind</label>
                         <select id="kindFilter" class="form-select">
-                            <option value="">All kinds</option>
+                            <option value="" th:text="#{label.allKinds}">All kinds</option>
                         </select>
                     </div>
                     <div class="col-md-2">
-                        <label for="pageSize" class="form-label">Rows per page</label>
+                        <label for="pageSize" class="form-label" th:text="#{label.rowsPerPage}">Rows per page</label>
                         <select id="pageSize" class="form-select">
                             <option value="10">10</option>
                             <option value="25" selected>25</option>
@@ -50,7 +50,7 @@
                         </select>
                     </div>
                     <div class="col-md-2">
-                        <label class="form-label">Selected</label>
+                        <label class="form-label" th:text="#{label.selected}">Selected</label>
                         <div class="form-control bg-body-tertiary" id="selectedCount">0</div>
                     </div>
                 </div>
@@ -61,16 +61,16 @@
                         <tr>
                             <th style="width: 48px;">
                                 <input id="selectAllVisible" type="checkbox" class="form-check-input"
-                                       title="Select all visible rows"
+                                       th:title="#{label.selectAllVisible}"
                                        th:disabled="${botToolConfiguration.defaultEntry}">
                             </th>
                             <th>
-                                <button type="button" class="btn btn-link p-0 text-decoration-none" data-sort="toolKind">Kind</button>
+                                <button type="button" class="btn btn-link p-0 text-decoration-none" data-sort="toolKind"><span th:text="#{label.kind}">Kind</span></button>
                             </th>
                             <th>
-                                <button type="button" class="btn btn-link p-0 text-decoration-none" data-sort="toolName">Tool</button>
+                                <button type="button" class="btn btn-link p-0 text-decoration-none" data-sort="toolName"><span th:text="#{label.tool}">Tool</span></button>
                             </th>
-                            <th>Description</th>
+                            <th th:text="#{label.description}">Description</th>
                         </tr>
                         </thead>
                         <tbody id="toolRows"></tbody>
@@ -80,8 +80,8 @@
                 <div class="d-flex justify-content-between align-items-center mb-3">
                     <div class="text-secondary" id="paginationInfo"></div>
                     <div class="btn-group">
-                        <button type="button" id="prevPage" class="btn btn-outline-secondary btn-sm">Previous</button>
-                        <button type="button" id="nextPage" class="btn btn-outline-secondary btn-sm">Next</button>
+                        <button type="button" id="prevPage" class="btn btn-outline-secondary btn-sm"><span th:text="#{button.previous}">Previous</span></button>
+                        <button type="button" id="nextPage" class="btn btn-outline-secondary btn-sm"><span th:text="#{button.next}">Next</span></button>
                     </div>
                 </div>
 
@@ -92,10 +92,10 @@
                     <div id="selectionInputs"></div>
                     <button type="submit" class="btn btn-primary"
                             th:disabled="${botToolConfiguration.defaultEntry}">
-                        <i class="bi bi-check-lg"></i> Save selection
+                        <i class="bi bi-check-lg"></i> <span th:text="#{button.saveSelection}">Save selection</span>
                     </button>
                     <a th:href="@{/system-settings}" class="btn btn-secondary ms-2">
-                        <i class="bi bi-x-lg"></i> Cancel
+                        <i class="bi bi-x-lg"></i> <span th:text="#{button.cancel}">Cancel</span>
                     </a>
                 </form>
             </div>
@@ -105,6 +105,9 @@
             /*<![CDATA[*/
             const allTools = /*[[${tools}]]*/ [];
             const readOnly = /*[[${botToolConfiguration.defaultEntry}]]*/ false;
+            const i18nNoToolsFound = /*[[#{message.noToolsFound}]]*/ 'No tools found for current filter.';
+            const i18nZeroTools = /*[[#{message.zeroTools}]]*/ '0 tools';
+            const i18nToolPageInfo = /*[[#{message.toolPageInfo}]]*/ '{0}-{1} of {2} tools';
 
             document.addEventListener('DOMContentLoaded', function() {
                 const selected = new Set(allTools.filter(t => t.selected).map(t => t.toolName));
@@ -206,7 +209,7 @@
                         const td = document.createElement('td');
                         td.colSpan = 4;
                         td.className = 'text-center text-secondary py-4';
-                        td.textContent = 'No tools found for current filter.';
+                        td.textContent = i18nNoToolsFound;
                         tr.appendChild(td);
                         rowsBody.appendChild(tr);
                     } else {
@@ -268,8 +271,8 @@
                     }
 
                     paginationInfo.textContent = page.totalItems === 0
-                        ? '0 tools'
-                        : page.start + '-' + page.end + ' of ' + page.totalItems + ' tools';
+                        ? i18nZeroTools
+                        : i18nToolPageInfo.replace('{0}', page.start).replace('{1}', page.end).replace('{2}', page.totalItems);
                     prevPage.disabled = currentPage <= 1;
                     nextPage.disabled = currentPage >= page.totalPages;
                     syncSelectAllVisible(page.rows);

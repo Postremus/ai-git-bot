@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 import org.remus.giteabot.agent.tools.ToolCatalog;
 import org.remus.giteabot.agent.tools.ToolKind;
 import org.remus.giteabot.config.AgentConfigProperties;
+import org.springframework.context.support.StaticMessageSource;
 
 import java.util.List;
 
@@ -16,7 +17,7 @@ class BuiltinToolRegistryTest {
     private BuiltinToolRegistry registry() {
         AgentConfigProperties agentConfig = new AgentConfigProperties();
         agentConfig.getValidation().setAvailableTools(List.of("mvn", "npm"));
-        return new BuiltinToolRegistry(new ToolCatalog(agentConfig));
+        return new BuiltinToolRegistry(new ToolCatalog(agentConfig), new StaticMessageSource());
     }
 
     @Test

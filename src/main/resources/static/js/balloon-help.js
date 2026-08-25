@@ -182,12 +182,12 @@
             var dismiss = document.createElement('button');
             dismiss.type = 'button';
             dismiss.className = 'btn btn-sm btn-outline-secondary me-2';
-            dismiss.textContent = 'Dismiss';
+            dismiss.textContent = window.giteabotTourDismiss || 'Dismiss';
             dismiss.addEventListener('click', finish);
             var next = document.createElement('button');
             next.type = 'button';
             next.className = 'btn btn-sm btn-primary';
-            next.textContent = 'Next';
+            next.textContent = window.giteabotTourNext || 'Next';
             next.addEventListener('click', function () {
                 showStep(index + 1);
             });

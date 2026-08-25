@@ -2,17 +2,17 @@
 <html lang="en" xmlns:th="http://www.thymeleaf.org"
 >
 <body>
-<div th:replace="~{layout :: layout('Usage', ~{::pageContent})}">
+<div th:replace="~{layout :: layout(#{nav.usage}, ~{::pageContent})}">
     <div th:fragment="pageContent">
 
         <div class="d-flex justify-content-between align-items-center mb-4">
-            <h2><i class="bi bi-graph-up"></i> Usage</h2>
+            <h2><i class="bi bi-graph-up"></i> <span th:text="#{nav.usage}">Usage</span></h2>
             <div>
                 <button type="button" class="btn btn-outline-secondary btn-sm me-2" id="expandAllSections">
-                    <i class="bi bi-arrows-expand"></i> Expand all
+                    <i class="bi bi-arrows-expand"></i> <span th:text="#{page.systemSettings.expandAll}">Expand all</span>
                 </button>
                 <button type="button" class="btn btn-outline-secondary btn-sm" id="collapseAllSections">
-                    <i class="bi bi-arrows-collapse"></i> Collapse all
+                    <i class="bi bi-arrows-collapse"></i> <span th:text="#{page.systemSettings.collapseAll}">Collapse all</span>
                 </button>
             </div>
         </div>
@@ -29,18 +29,18 @@
         <!-- Timespan filter -->
         <form method="get" th:action="@{/usage}" class="row g-2 align-items-end mb-4">
             <div class="col-auto">
-                <label for="filterFrom" class="form-label mb-0 small">From</label>
+                <label for="filterFrom" class="form-label mb-0 small" th:text="#{label.from}">From</label>
                 <input type="date" class="form-control form-control-sm" id="filterFrom" name="from" th:value="${from}"/>
             </div>
             <div class="col-auto">
-                <label for="filterTo" class="form-label mb-0 small">To</label>
+                <label for="filterTo" class="form-label mb-0 small" th:text="#{label.to}">To</label>
                 <input type="date" class="form-control form-control-sm" id="filterTo" name="to" th:value="${to}"/>
             </div>
             <div class="col-auto">
                 <button type="submit" class="btn btn-primary btn-sm">
-                    <i class="bi bi-funnel"></i> Filter
+                    <i class="bi bi-funnel"></i> <span th:text="#{button.filter}">Filter</span>
                 </button>
-                <a th:href="@{/usage}" class="btn btn-outline-secondary btn-sm">Reset</a>
+                <a th:href="@{/usage}" class="btn btn-outline-secondary btn-sm" th:text="#{button.reset}">Reset</a>
             </div>
         </form>
 
@@ -55,17 +55,17 @@
                              role="button" aria-expanded="true" aria-controls="section-ai-usage">
                             <i class="bi bi-chevron-down section-chevron me-2"></i>
                             <div>
-                                <h5 class="mb-0">AI usage</h5>
-                                <small class="text-secondary">Token consumption of every AI interaction.</small>
+                                <h5 class="mb-0" th:text="#{usage.aiUsage}">AI usage</h5>
+                                <small class="text-secondary" th:text="#{usage.aiUsageDescription}">Token consumption of every AI interaction.</small>
                             </div>
                         </div>
                         <div class="d-flex align-items-center gap-2 flex-shrink-0">
                             <span class="badge text-bg-secondary"
-                                  th:text="${usagePage.totalElements} + ' entries'">0 entries</span>
+                                  th:text="|${usagePage.totalElements} #{usage.entries}|">0 entries</span>
                             <form th:action="@{/usage/clear}" method="post" class="d-inline"
-                                  onsubmit="return confirm('Are you sure you want to clear all AI usage entries?');">
+                                  th:attr="onsubmit=|return confirm('#{message.confirmClearAiUsage}')|">
                                 <button type="submit" class="btn btn-outline-danger btn-sm">
-                                    <i class="bi bi-trash"></i> Clear all
+                                    <i class="bi bi-trash"></i> <span th:text="#{button.clearAll}">Clear all</span>
                                 </button>
                             </form>
                         </div>
@@ -74,7 +74,7 @@
                         <div class="card-body">
                             <div th:if="${usagePage.totalElements == 0}" class="text-center py-4">
                                 <i class="bi bi-inbox fs-1 text-secondary"></i>
-                                <p class="text-secondary mt-2">No AI usage recorded yet.</p>
+                                <p class="text-secondary mt-2" th:text="#{message.noAiUsage}">No AI usage recorded yet.</p>
                             </div>
                             <div th:if="${usagePage.totalElements > 0}" class="table-responsive">
                                 <table class="table table-hover align-middle mb-0">
@@ -86,19 +86,13 @@
                                                           usageSort=${col},
                                                           usageDir=${usageSort == col && usageDir == 'desc'} ? 'asc' : 'desc',
                                                           errorPage=${errorPage.number}, errorSort=${errorSort}, errorDir=${errorDir})}">
-                                                <span th:text="${col == 'timestamp' ? 'Timestamp'
-                                                        : (col == 'aiIntegrationName' ? 'AI-Integration'
-                                                        : (col == 'sessionId' ? 'Session-ID'
-                                                        : (col == 'inputTokens' ? 'Input tokens'
-                                                        : (col == 'outputTokens' ? 'Output tokens'
-                                                        : (col == 'cacheCreationInputTokens' ? 'Cache write'
-                                                        : 'Cache read')))))}">Column</span>
+                                                <span th:text="${#messages.msg('usage.column.' + col)}">Column</span>
                                                 <i th:if="${usageSort == col}"
                                                    th:class="${usageDir == 'asc'} ? 'bi bi-caret-up-fill' : 'bi bi-caret-down-fill'"></i>
                                             </a>
                                         </th>
                                         <th th:if="${rawPayloadsEnabled}">
-                                            <span>Details</span>
+                                            <span th:text="#{label.details}">Details</span>
                                         </th>
                                     </tr>
                                     </thead>
@@ -115,27 +109,27 @@
                                             <button type="button" class="btn btn-outline-primary btn-sm"
                                                     data-bs-toggle="modal"
                                                     th:data-bs-target="'#rawPayloadModal-' + ${entry.id}">
-                                                <i class="bi bi-eye"></i> Raw
+                                                <i class="bi bi-eye"></i> <span th:text="#{button.raw}">Raw</span>
                                             </button>
                                             <div class="modal fade" th:id="'rawPayloadModal-' + ${entry.id}" tabindex="-1"
                                                  aria-hidden="true">
                                                 <div class="modal-dialog modal-lg modal-dialog-scrollable">
                                                     <div class="modal-content">
                                                         <div class="modal-header">
-                                                            <h5 class="modal-title">Raw LLM payloads</h5>
+                                                            <h5 class="modal-title" th:text="#{usage.rawPayloads}">Raw LLM payloads</h5>
                                                             <button type="button" class="btn-close" data-bs-dismiss="modal"
-                                                                    aria-label="Close"></button>
+                                                                    th:aria-label="#{button.close}"></button>
                                                         </div>
                                                         <div class="modal-body">
-                                                            <h6>Request</h6>
+                                                            <h6 th:text="#{usage.request}">Request</h6>
                                                             <pre class="error-log-pre border rounded p-2 small mb-3"
                                                                  th:text="${entry.rawRequest != null ? entry.rawRequest : '—'}"></pre>
-                                                            <h6>Response</h6>
+                                                            <h6 th:text="#{usage.response}">Response</h6>
                                                             <pre class="error-log-pre border rounded p-2 small mb-0"
                                                                  th:text="${entry.rawResponse != null ? entry.rawResponse : '—'}"></pre>
                                                         </div>
                                                         <div class="modal-footer">
-                                                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                                                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" th:text="#{button.close}">
                                                                 Close
                                                             </button>
                                                         </div>
@@ -153,17 +147,17 @@
                                         <a class="page-link"
                                            th:href="@{/usage(from=${from}, to=${to}, usagePage=${usagePage.number - 1},
                                                       usageSort=${usageSort}, usageDir=${usageDir},
-                                                      errorPage=${errorPage.number}, errorSort=${errorSort}, errorDir=${errorDir})}">Previous</a>
+                                                      errorPage=${errorPage.number}, errorSort=${errorSort}, errorDir=${errorDir})}"><span th:text="#{button.previous}">Previous</span></a>
                                     </li>
                                     <li class="page-item disabled">
                                         <span class="page-link"
-                                              th:text="'Page ' + (${usagePage.number} + 1) + ' of ' + ${usagePage.totalPages}">Page 1</span>
+                                              th:text="#{usage.pageOf(${usagePage.number} + 1, ${usagePage.totalPages})}">Page 1</span>
                                     </li>
                                     <li class="page-item" th:classappend="${usagePage.last} ? 'disabled'">
                                         <a class="page-link"
                                            th:href="@{/usage(from=${from}, to=${to}, usagePage=${usagePage.number + 1},
                                                       usageSort=${usageSort}, usageDir=${usageDir},
-                                                      errorPage=${errorPage.number}, errorSort=${errorSort}, errorDir=${errorDir})}">Next</a>
+                                                      errorPage=${errorPage.number}, errorSort=${errorSort}, errorDir=${errorDir})}"><span th:text="#{button.next}">Next</span></a>
                                     </li>
                                 </ul>
                             </nav>
@@ -181,20 +175,20 @@
                              role="button" aria-expanded="true" aria-controls="section-ai-errors">
                             <i class="bi bi-chevron-down section-chevron me-2"></i>
                             <div>
-                                <h5 class="mb-0">Errors</h5>
-                                <small class="text-secondary">Failed AI interactions (e.g. HTTP error responses).</small>
+                                <h5 class="mb-0" th:text="#{usage.errors}">Errors</h5>
+                                <small class="text-secondary" th:text="#{usage.errorsDescription}">Failed AI interactions (e.g. HTTP error responses).</small>
                             </div>
                         </div>
                         <a th:href="@{/usage/errors/export(from=${from}, to=${to})}"
                            class="btn btn-outline-secondary btn-sm flex-shrink-0">
-                            <i class="bi bi-download"></i> Export as JSON
+                            <i class="bi bi-download"></i> <span th:text="#{button.exportJson}">Export as JSON</span>
                         </a>
                     </div>
                     <div class="collapse show" id="section-ai-errors">
                         <div class="card-body">
                             <div th:if="${errorPage.totalElements == 0}" class="text-center py-4">
                                 <i class="bi bi-check-circle fs-1 text-success"></i>
-                                <p class="text-secondary mt-2">No AI errors recorded.</p>
+                                <p class="text-secondary mt-2" th:text="#{message.noAiErrors}">No AI errors recorded.</p>
                             </div>
                             <div th:if="${errorPage.totalElements > 0}" class="table-responsive">
                                 <table class="table table-hover align-middle mb-0">
@@ -206,9 +200,7 @@
                                                           usagePage=${usagePage.number}, usageSort=${usageSort}, usageDir=${usageDir},
                                                           errorPage=0, errorSort=${col},
                                                           errorDir=${errorSort == col && errorDir == 'desc'} ? 'asc' : 'desc')}">
-                                                <span th:text="${col == 'timestamp' ? 'Timestamp'
-                                                        : (col == 'aiIntegrationName' ? 'AI-Integration'
-                                                        : (col == 'sessionId' ? 'Session-ID' : 'Error-Log'))}">Column</span>
+                                                <span th:text="${#messages.msg('usage.column.' + col)}">Column</span>
                                                 <i th:if="${errorSort == col}"
                                                    th:class="${errorDir == 'asc'} ? 'bi bi-caret-up-fill' : 'bi bi-caret-down-fill'"></i>
                                             </a>
@@ -227,7 +219,7 @@
                                                    th:href="'#stack-trace-' + ${entry.id}"
                                                    aria-expanded="false"
                                                    th:attr="aria-controls='stack-trace-' + ${entry.id}">
-                                                    <i class="bi bi-chevron-expand"></i> Stack trace
+                                                    <i class="bi bi-chevron-expand"></i> <span th:text="#{button.stackTrace}">Stack trace</span>
                                                 </a>
                                                 <div class="collapse" th:id="'stack-trace-' + ${entry.id}">
                                                     <pre class="error-log-pre border rounded p-2 small mt-1 mb-0"
@@ -245,17 +237,17 @@
                                         <a class="page-link"
                                            th:href="@{/usage(from=${from}, to=${to},
                                                       usagePage=${usagePage.number}, usageSort=${usageSort}, usageDir=${usageDir},
-                                                      errorPage=${errorPage.number - 1}, errorSort=${errorSort}, errorDir=${errorDir})}">Previous</a>
+                                                      errorPage=${errorPage.number - 1}, errorSort=${errorSort}, errorDir=${errorDir})}"><span th:text="#{button.previous}">Previous</span></a>
                                     </li>
                                     <li class="page-item disabled">
                                         <span class="page-link"
-                                              th:text="'Page ' + (${errorPage.number} + 1) + ' of ' + ${errorPage.totalPages}">Page 1</span>
+                                              th:text="#{usage.pageOf(${errorPage.number} + 1, ${errorPage.totalPages})}">Page 1</span>
                                     </li>
                                     <li class="page-item" th:classappend="${errorPage.last} ? 'disabled'">
                                         <a class="page-link"
                                            th:href="@{/usage(from=${from}, to=${to},
                                                       usagePage=${usagePage.number}, usageSort=${usageSort}, usageDir=${usageDir},
-                                                      errorPage=${errorPage.number + 1}, errorSort=${errorSort}, errorDir=${errorDir})}">Next</a>
+                                                      errorPage=${errorPage.number + 1}, errorSort=${errorSort}, errorDir=${errorDir})}"><span th:text="#{button.next}">Next</span></a>
                                     </li>
                                 </ul>
                             </nav>

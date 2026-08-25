@@ -23,7 +23,7 @@ All AI and Git configuration is managed exclusively through the web UI and store
 
 ### Logging In
 
-Navigate to `http://your-server:8080/login` and enter your administrator credentials.
+Navigate to `http://your-server:8080/login` and enter your administrator credentials. A language selector in the top-right corner of the login card lets you switch the interface language before signing in (native login mode only).
 
 ## Dashboard
 
@@ -38,6 +38,19 @@ The dashboard (`/dashboard`) provides an overview of all your bots and key stati
 The bot table shows each bot's name, status, integrations, and recent activity.
 
 Use the theme toggle in the navbar to cycle between **auto**, **dark**, and **light**. The preference is stored in your browser.
+
+## Interface Language
+
+The web interface is available in seven languages: **English** (default), **Français**, **Deutsch**, **Español**, **Português**, **日本語**, and **简体中文**. The choice is stored in a `lang` cookie (a session cookie, so it lasts until you close your browser) and is not tied to your account or stored server-side.
+
+You can change the language in two places:
+
+- **Login page** — the globe dropdown in the top-right corner of the login card (native login mode only).
+- **System settings → General application settings** — the same dropdown at the top of the page.
+
+When no language has been chosen, the interface follows your browser's `Accept-Language` header if it matches one of the seven supported languages, and falls back to English otherwise. Selecting a language takes effect immediately.
+
+Only the web UI is localized. Everything the bot says or sends to an AI model — system prompts, tool descriptions, and log output — remains in English.
 
 ## Usage
 
