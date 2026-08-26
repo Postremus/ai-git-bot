@@ -261,10 +261,10 @@ public class OpenAiClient extends AbstractAiClient {
             String finishReason = firstChoice != null ? firstChoice.getFinishReason() : null;
             log.warn("Empty response from OpenAI API (finish_reason={})", finishReason);
             if ("length".equals(finishReason)) {
-                return "Unable to generate " + context
-                        + " - the model used its entire token budget without producing visible output"
-                        + " (finish_reason=length; typical for reasoning models)."
-                        + " Increase the max tokens setting of this AI integration.";
+                return """
+                        Unable to generate %s - the model used its entire token budget without producing visible output \
+                        (finish_reason=length; typical for reasoning models). \
+                        Increase the max tokens setting of this AI integration.""".formatted(context);
             }
             return "Unable to generate " + context + " - empty response from AI.";
         }
