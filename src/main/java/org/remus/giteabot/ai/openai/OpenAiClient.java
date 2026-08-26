@@ -247,21 +247,29 @@ public class OpenAiClient extends AbstractAiClient {
                 .body(OpenAiResponse.class);
     }
 
-    private String extractText(OpenAiRequest request, OpenAiResponse response, String context) {
+    String extractText(OpenAiRequest request, OpenAiResponse response, String context) {
         if (response == null || response.getChoices() == null || response.getChoices().isEmpty()) {
             log.warn("Empty response from OpenAI API");
             return "Unable to generate " + context + " - empty response from AI.";
         }
 
         OpenAiResponse.Choice firstChoice = response.getChoices().getFirst();
-        if (firstChoice == null
-                || firstChoice.getMessage() == null
-                || firstChoice.getMessage().getContent() == null) {
-            log.warn("Empty response from OpenAI API");
+        String content = firstChoice != null && firstChoice.getMessage() != null
+                ? firstChoice.getMessage().getContent()
+                : null;
+        if (content == null || content.isBlank()) {
+            String finishReason = firstChoice != null ? firstChoice.getFinishReason() : null;
+            log.warn("Empty response from OpenAI API (finish_reason={})", finishReason);
+            if ("length".equals(finishReason)) {
+                return """
+                        Unable to generate %s - the model used its entire token budget without producing visible output \
+                        (finish_reason=length; typical for reasoning models). \
+                        Increase the max tokens setting of this AI integration.""".formatted(context);
+            }
             return "Unable to generate " + context + " - empty response from AI.";
         }
 
-        String result = firstChoice.getMessage().getContent();
+        String result = content;
         if (response.getUsage() != null) {
             log.info("OpenAI {} response: {} prompt tokens, {} completion tokens",
                     context,

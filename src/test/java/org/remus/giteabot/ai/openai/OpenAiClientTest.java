@@ -73,4 +73,70 @@ class OpenAiClientTest {
         assertFalse(client.supportsNativeTools());
     }
 
+    @Test
+    void extractText_explainsTokenBudget_whenFinishReasonIsLength() {
+        OpenAiClient client = createClient();
+        OpenAiResponse response = responseWith(choice(null, "length"));
+
+        String result = client.extractText(reviewRequest(), response, "review");
+
+        assertTrue(result.contains("finish_reason=length"));
+        assertTrue(result.contains("max tokens"));
+        assertFalse(result.contains("empty response from AI"));
+    }
+
+    @Test
+    void extractText_explainsTokenBudget_whenContentIsBlankAndFinishReasonIsLength() {
+        OpenAiClient client = createClient();
+        OpenAiResponse response = responseWith(choice("", "length"));
+
+        String result = client.extractText(reviewRequest(), response, "review");
+
+        assertTrue(result.contains("finish_reason=length"));
+    }
+
+    @Test
+    void extractText_keepsGenericMessage_whenNoLengthFinishReason() {
+        OpenAiClient client = createClient();
+        OpenAiResponse response = responseWith(choice(null, "stop"));
+
+        String result = client.extractText(reviewRequest(), response, "review");
+
+        assertTrue(result.contains("empty response from AI"));
+        assertFalse(result.contains("finish_reason=length"));
+    }
+
+    @Test
+    void extractText_returnsContent_whenPresent() {
+        OpenAiClient client = createClient();
+        OpenAiResponse response = responseWith(choice("The review looks good.", "stop"));
+
+        String result = client.extractText(reviewRequest(), response, "review");
+
+        assertTrue(result.contains("The review looks good."));
+    }
+
+    private OpenAiRequest reviewRequest() {
+        // Only forwarded to usage reporting; extractText never reads it.
+        return OpenAiRequest.builder()
+                .model("test-model")
+                .maxTokens(1024)
+                .build();
+    }
+
+    private OpenAiResponse responseWith(OpenAiResponse.Choice... choices) {
+        OpenAiResponse response = new OpenAiResponse();
+        response.setChoices(java.util.Arrays.asList(choices));
+        return response;
+    }
+
+    private OpenAiResponse.Choice choice(String content, String finishReason) {
+        OpenAiResponse.Choice choice = new OpenAiResponse.Choice();
+        OpenAiResponse.Message message = new OpenAiResponse.Message();
+        message.setContent(content);
+        choice.setMessage(message);
+        choice.setFinishReason(finishReason);
+        return choice;
+    }
+
 }
