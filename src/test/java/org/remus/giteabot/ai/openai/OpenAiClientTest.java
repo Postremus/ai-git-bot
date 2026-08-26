@@ -117,9 +117,10 @@ class OpenAiClientTest {
     }
 
     private OpenAiRequest reviewRequest() {
+        // Only forwarded to usage reporting; extractText never reads it.
         return OpenAiRequest.builder()
-                .model("openrouter/deepseek")
-                .maxTokens(4096)
+                .model("test-model")
+                .maxTokens(1024)
                 .build();
     }
 
