@@ -11,11 +11,12 @@
  * so that standard form submission continues to work.
  */
 
-import { EditorView, basicSetup } from "https://esm.sh/codemirror@6.0.1";
-import { json, jsonParseLinter } from "https://esm.sh/@codemirror/lang-json@6.0.1";
-import { linter, lintGutter } from "https://esm.sh/@codemirror/lint@6.8.1";
-import { oneDark } from "https://esm.sh/@codemirror/theme-one-dark@6.1.2";
-import { placeholder as cmPlaceholder } from "https://esm.sh/@codemirror/view@6.33.0";
+import { EditorView, basicSetup } from "https://esm.sh/codemirror@6.0.1?deps=@codemirror/state@6.4.1";
+import { Compartment } from "https://esm.sh/@codemirror/state@6.4.1";
+import { json, jsonParseLinter } from "https://esm.sh/@codemirror/lang-json@6.0.1?deps=@codemirror/state@6.4.1";
+import { linter, lintGutter } from "https://esm.sh/@codemirror/lint@6.8.1?deps=@codemirror/state@6.4.1";
+import { oneDark } from "https://esm.sh/@codemirror/theme-one-dark@6.1.2?deps=@codemirror/state@6.4.1";
+import { placeholder as cmPlaceholder } from "https://esm.sh/@codemirror/view@6.33.0?deps=@codemirror/state@6.4.1";
 import * as prettier from "https://esm.sh/prettier@3.3.3/standalone";
 import * as estreePlugin from "https://esm.sh/prettier@3.3.3/plugins/estree";
 import * as babelPlugin from "https://esm.sh/prettier@3.3.3/plugins/babel";
@@ -34,6 +35,10 @@ function jsonLinter() {
 
 function isDarkMode() {
     return document.documentElement.getAttribute('data-bs-theme') === 'dark';
+}
+
+function themeExtension() {
+    return isDarkMode() ? oneDark : [];
 }
 
 async function formatJson(text) {
@@ -101,15 +106,20 @@ export function initJsonEditor(textarea, options) {
         extensions.push(cmPlaceholder(textarea.placeholder));
     }
 
-    if (isDarkMode()) {
-        extensions.push(oneDark);
-    }
+    const themeCompartment = new Compartment();
+    extensions.push(themeCompartment.of(themeExtension()));
 
     const view = new EditorView({
         doc: textarea.value,
         extensions: extensions,
         parent: wrapper
     });
+
+    // Reconfigure the editor theme when the app theme is toggled at runtime.
+    const applyTheme = () => {
+        view.dispatch({ effects: themeCompartment.reconfigure(themeExtension()) });
+    };
+    document.addEventListener('themeChanged', applyTheme);
 
     // Hide the original textarea but keep it in the DOM for form submission.
     textarea.classList.add('d-none');
