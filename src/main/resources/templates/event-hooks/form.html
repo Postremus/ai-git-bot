@@ -1,6 +1,11 @@
 <!DOCTYPE html>
 <html lang="en" xmlns:th="http://www.thymeleaf.org"
-      th:replace="~{layout :: layout(#{page.eventHook.title}, ~{::pageContent})}">
+      th:replace="~{layout :: layoutWithExtras(#{page.eventHook.title}, ~{::pageContent}, ~{::extraHead}, ~{::extraScripts})}">
+<head>
+    <th:block th:fragment="extraHead">
+        <!-- CodeMirror 6 injects its styles via JS; no extra CSS link required. -->
+    </th:block>
+</head>
 <body>
     <div th:fragment="pageContent">
 
@@ -48,8 +53,13 @@
             </div>
 
             <div class="mb-3">
-                <label class="form-label" th:text="#{label.customHeaders}">Custom headers (JSON object, optional)</label>
-                <textarea class="form-control font-monospace" rows="3" name="plainCustomHeaders"
+                <div class="d-flex justify-content-between align-items-center">
+                    <label for="plainCustomHeaders" class="form-label" th:text="#{label.customHeaders}">Custom headers (JSON object, optional)</label>
+                    <button type="button" id="plainCustomHeadersFormatBtn" class="btn btn-sm btn-outline-secondary">
+                        <i class="bi bi-code-slash"></i> Format JSON
+                    </button>
+                </div>
+                <textarea class="form-control font-monospace" rows="3" name="plainCustomHeaders" id="plainCustomHeaders"
                           th:placeholder="${endpoint.customHeaders != null} ? #{placeholder.configuredKeep} : '{ &quot;X-Source&quot;: &quot;ai-git-bot&quot; }'"></textarea>
                 <div class="form-text" th:text="#{help.hook.customHeaders}">Sent with every delivery. Must be a single JSON object. Stored
                     encrypted; leave blank on edit to keep the current value.</div>
@@ -133,5 +143,14 @@
         </form>
 
     </div>
+
+    <th:block th:fragment="extraScripts">
+        <script type="module">
+            import { initJsonEditor } from /*[[@{/js/json-editor.js}]]*/ '/js/json-editor.js';
+            initJsonEditor(document.getElementById('plainCustomHeaders'), {
+                formatButton: document.getElementById('plainCustomHeadersFormatBtn')
+            });
+        </script>
+    </th:block>
 </body>
 </html>
