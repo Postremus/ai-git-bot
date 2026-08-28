@@ -116,6 +116,60 @@ class OpenAiClientTest {
         assertTrue(result.contains("The review looks good."));
     }
 
+    @Test
+    void extractText_reportsProviderError_whenFinishReasonIsError() {
+        OpenAiClient client = createClient();
+        OpenAiResponse response = responseWith(choice(null, "error"));
+        OpenAiResponse.Error error = new OpenAiResponse.Error();
+        error.setCode(502);
+        error.setMessage("Provider disconnected mid-stream");
+        response.getChoices().getFirst().setError(error);
+
+        String result = client.extractText(reviewRequest(), response, "review");
+
+        assertTrue(result.contains("provider returned an error"));
+        assertTrue(result.contains("Provider disconnected mid-stream"));
+        assertFalse(result.contains("empty response from AI"));
+    }
+
+    @Test
+    void extractText_fallsBackToResponseError_whenChoiceErrorMissing() {
+        OpenAiClient client = createClient();
+        OpenAiResponse response = responseWith(choice(null, "error"));
+        OpenAiResponse.Error error = new OpenAiResponse.Error();
+        error.setMessage("Rate limit exceeded");
+        response.setError(error);
+
+        String result = client.extractText(reviewRequest(), response, "review");
+
+        assertTrue(result.contains("Rate limit exceeded"));
+    }
+
+    @Test
+    void extractText_usesUnknownProviderError_whenErrorDetailsMissing() {
+        OpenAiClient client = createClient();
+        OpenAiResponse response = responseWith(choice(null, "error"));
+
+        String result = client.extractText(reviewRequest(), response, "review");
+
+        assertTrue(result.contains("unknown provider error"));
+    }
+
+    @Test
+    void errorField_isSerializedInRawResponseAuditPayload() {
+        OpenAiResponse response = responseWith(choice(null, "error"));
+        OpenAiResponse.Error error = new OpenAiResponse.Error();
+        error.setCode(429);
+        error.setMessage("Rate limit exceeded");
+        response.getChoices().getFirst().setError(error);
+
+        String json = org.remus.giteabot.agent.shared.AgentJackson.mapper().writeValueAsString(response);
+
+        assertTrue(json.contains("\"error\""));
+        assertTrue(json.contains("\"code\":429"));
+        assertTrue(json.contains("Rate limit exceeded"));
+    }
+
     private OpenAiRequest reviewRequest() {
         // Only forwarded to usage reporting; extractText never reads it.
         return OpenAiRequest.builder()
