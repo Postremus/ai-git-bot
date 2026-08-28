@@ -5,6 +5,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Data;
 
 import java.util.List;
+import java.util.Map;
 
 @Data
 @JsonIgnoreProperties(ignoreUnknown = true)
@@ -17,6 +18,8 @@ public class OpenAiResponse {
     private List<Choice> choices;
     private Usage usage;
 
+    private Error error;
+
     @Data
     @JsonIgnoreProperties(ignoreUnknown = true)
     public static class Choice {
@@ -25,6 +28,8 @@ public class OpenAiResponse {
 
         @JsonProperty("finish_reason")
         private String finishReason;
+
+        private Error error;
     }
 
     @Data
@@ -65,5 +70,18 @@ public class OpenAiResponse {
 
         @JsonProperty("total_tokens")
         private int totalTokens;
+    }
+
+    /**
+     * OpenRouter-specific error object describing a provider-side failure.
+     * Kept intentionally loose (metadata is a map) so arbitrary provider
+     * details are preserved in audit logs without requiring a typed model.
+     */
+    @Data
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public static class Error {
+        private int code;
+        private String message;
+        private Map<String, Object> metadata;
     }
 }
