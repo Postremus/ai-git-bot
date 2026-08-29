@@ -1,8 +1,7 @@
 <!DOCTYPE html>
 <html lang="en" xmlns:th="http://www.thymeleaf.org"
->
+      th:replace="~{layout :: layout(#{nav.aiIntegrations}, ~{::pageContent})}">
 <body>
-<div th:replace="~{layout :: layout(#{nav.aiIntegrations}, ~{::pageContent})}">
     <div th:fragment="pageContent">
 
         <div class="d-flex justify-content-between align-items-center mb-4">
@@ -70,6 +69,5 @@
         </div>
 
     </div>
-</div>
 </body>
 </html>

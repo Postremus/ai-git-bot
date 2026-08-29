@@ -34,6 +34,7 @@
             document.documentElement.style.colorScheme = theme;
         }
         document.documentElement.setAttribute('data-bs-theme', actualTheme);
+        document.dispatchEvent(new CustomEvent('themeChanged', { detail: { theme: actualTheme } }));
         updateUI(theme, actualTheme);
     };
 

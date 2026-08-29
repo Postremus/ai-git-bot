@@ -14,6 +14,7 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.List;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
@@ -43,6 +44,22 @@ class DashboardControllerTest {
 
     @MockitoBean
     private AdminUserRepository adminUserRepository;
+
+    @Test
+    void dashboard_rendersFaviconInsideTheDocumentHead() throws Exception {
+        when(botService.findAll()).thenReturn(List.of());
+
+        String html = mockMvc.perform(get("/dashboard").with(user("admin").roles("ADMIN")))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+
+        // Thymeleaf does no HTML tree correction: if the page opened <body> before
+        // pulling in the layout, the head would land inside the body and browsers
+        // would ignore the icon link.
+        assertThat(html.indexOf("rel=\"icon\"")).isGreaterThan(html.indexOf("<head"));
+        assertThat(html.indexOf("rel=\"icon\"")).isLessThan(html.indexOf("</head>"));
+        assertThat(html.indexOf("<head")).isLessThan(html.indexOf("<body"));
+    }
 
     @Test
     void dashboard_rendersSharedBrandingImage() throws Exception {

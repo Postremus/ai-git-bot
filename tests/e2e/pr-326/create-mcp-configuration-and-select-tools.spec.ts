@@ -54,9 +54,10 @@ test('admin can create a new MCP configuration and select tools', async ({ page 
   await nameInput.fill(uniqueName);
 
   // Step 4: Fill the MCP JSON multi-form field (textarea#jsonContent).
-  const jsonTextarea = page.locator('#jsonContent').first();
-  await jsonTextarea.waitFor({ state: 'visible', timeout: 30_000 });
-  await jsonTextarea.fill(jsonContent);
+  const jsonEditor = page.locator('#jsonContent-editor .cm-content').first();
+  await jsonEditor.waitFor({ state: 'visible', timeout: 30_000 });
+  await jsonEditor.click();
+  await jsonEditor.fill(jsonContent);
 
   // Step 5: Click the "Save and select tools" button.
   const saveAndSelectBtn = page.locator('button:has-text("Save and select tools")').first();
