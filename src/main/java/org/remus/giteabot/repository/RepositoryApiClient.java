@@ -101,6 +101,16 @@ public interface RepositoryApiClient {
         return validatedCloneBaseUrl(getCloneUrl()) + "/" + owner + "/" + repo + ".git";
     }
 
+    /**
+     * Returns whether HTTP Git operations must authenticate with a pre-emptive
+     * {@code Authorization: Basic} header instead of a credential helper.
+     * Needed for providers (e.g. Azure DevOps) whose remotes reject the
+     * credential-store challenge/response flow.
+     */
+    default boolean usesGitAuthorizationHeader() {
+        return false;
+    }
+
     /** Returns the authentication token used by this client. */
     default String getToken() {
         return getCredentials().token();

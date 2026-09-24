@@ -89,6 +89,12 @@ public class AzureDevopsApiClient implements RepositoryApiClient {
         return credentials;
     }
 
+    /** Azure DevOps Git remotes only accept the PAT as a pre-emptive Basic header. */
+    @Override
+    public boolean usesGitAuthorizationHeader() {
+        return true;
+    }
+
     // ---- Request scoping ----
 
     /**

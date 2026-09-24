@@ -19,6 +19,7 @@ class WorkspaceSetup {
     private Path sshKnownHostsFile;
     private String repositoryRemote;
     private RepositoryCredentials repositoryCredentials;
+    private boolean usesAuthorizationHeader;
     private volatile boolean closed;
 
     WorkspaceSetup(Path workspaceRoot) {
@@ -68,9 +69,20 @@ class WorkspaceSetup {
         return repositoryCredentials;
     }
 
+    /** Whether HTTP Git commands send the token as an {@code Authorization} header. */
+    boolean usesAuthorizationHeader() {
+        return usesAuthorizationHeader;
+    }
+
     void setAuthentication(String repositoryRemote, RepositoryCredentials repositoryCredentials) {
+        setAuthentication(repositoryRemote, repositoryCredentials, false);
+    }
+
+    void setAuthentication(String repositoryRemote, RepositoryCredentials repositoryCredentials,
+                           boolean usesAuthorizationHeader) {
         this.repositoryRemote = repositoryRemote;
         this.repositoryCredentials = repositoryCredentials;
+        this.usesAuthorizationHeader = usesAuthorizationHeader;
     }
 
     boolean closed() {
