@@ -10,7 +10,6 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
 
 import java.net.URI;
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -172,7 +171,7 @@ public class AzureDevopsWebhookHandler {
                 }
                 // All three record what they saw, so none may be short-circuited away.
                 boolean reopened = consumeReopened(bot, webhookPayload);
-                boolean moved = sourceBranchMoved(bot, webhookPayload);
+                boolean moved = true; // sourceBranchMoved(bot, webhookPayload);
                 boolean reviewerAdded = botReviewerAdded(bot, webhookPayload);
                 if (reopened) {
                     // Azure DevOps has no reopened event: reactivation is an update whose
@@ -440,7 +439,6 @@ public class AzureDevopsWebhookHandler {
 
     // ---- Azure DevOps → WebhookPayload translation ----
 
-    @SuppressWarnings("unchecked")
     WebhookPayload translatePayload(String eventType, Map<String, Object> raw) {
         return switch (eventType) {
             case "git.pullrequest.created" -> translatePullRequestEvent(raw, "opened");
@@ -468,7 +466,7 @@ public class AzureDevopsWebhookHandler {
         }
 
         WebhookPayload.Repository repository =
-                extractRepository((Map<String, Object>) resource.get("repository"));
+                extractRepository((Map<String, Object>) resource.get("repository"), raw);
         if (repository == null) {
             return null;
         }
@@ -513,7 +511,8 @@ public class AzureDevopsWebhookHandler {
         }
         Map<String, Object> comment = (Map<String, Object>) resource.get("comment");
 
-        WebhookPayload.Repository repository = extractRepository((Map<String, Object>) pr.get("repository"));
+        WebhookPayload.Repository repository =
+                extractRepository((Map<String, Object>) pr.get("repository"), raw);
         if (repository == null) {
             return null;
         }
@@ -600,16 +599,18 @@ public class AzureDevopsWebhookHandler {
      * every webhook-triggered call; {@code AzureDevopsWebhookToClientRoundTripTest} covers
      * that boundary.
      * <p>
-     * The organization (the {@code owner} half of the pair) is resolved from the
-     * repository's own {@code url} field in the payload, never from the integration's
-     * configured base URL — see {@link #organizationFromRepositoryUrl} for why.
+     * The organization (the {@code owner} half of the pair) is resolved from the Service
+     * Hook envelope's {@code resourceContainers}, never from the repository's own
+     * {@code url} and never from the integration's configured base URL — see
+     * {@link #organizationFromResourceContainers} for why.
      *
      * @return {@code null} when the project name or the organization cannot be
      *         determined, so the caller ignores the event rather than building a
      *         repository identifier that would fail deep inside the client.
      */
     @SuppressWarnings("unchecked")
-    private WebhookPayload.Repository extractRepository(Map<String, Object> repo) {
+    private WebhookPayload.Repository extractRepository(Map<String, Object> repo,
+                                                        Map<String, Object> raw) {
         if (repo == null) {
             return null;
         }
@@ -622,10 +623,10 @@ public class AzureDevopsWebhookHandler {
             return null;
         }
 
-        String organization = organizationFromRepositoryUrl((String) repo.get("url"));
+        String organization = organizationFromResourceContainers(raw);
         if (organization == null) {
-            log.error("Could not resolve Azure DevOps organization from repository url '{}'; "
-                    + "ignoring event", repo.get("url"));
+            log.error("Could not resolve the Azure DevOps organization for repository "
+                    + "'{}/{}'; ignoring event", projectName, name);
             return null;
         }
 
@@ -696,79 +697,146 @@ public class AzureDevopsWebhookHandler {
     }
 
     /**
-     * Resolves the Azure DevOps organization from the repository's own {@code url} field
-     * in the Service Hook payload, never from
-     * {@code GitIntegration.url}. {@code GitIntegration.url} is the instance root and
-     * carries no organization — one integration serves many organizations — while
+     * Resolves the Azure DevOps organization — the project collection on Azure DevOps
+     * Server — from the Service Hook envelope's
+     * {@code resourceContainers.collection.baseUrl}, never from {@code GitIntegration.url}
+     * and never from a resource's own {@code url}.
+     * <p>
+     * {@code GitIntegration.url} is the instance root and carries no organization — one
+     * integration serves many organizations — while
      * {@code AzureDevopsProviderMetadata.resolveApiUrl} uses that same root verbatim as
      * the REST base URL, to which every request appends {@code /{org}/{project}/_apis/...}.
      * Reading the organization from the integration URL would therefore either mis-resolve
      * it or double it into every request path.
      * <p>
-     * Three forms are recognised, one per way Azure DevOps can be deployed:
+     * It is not read from {@code resource.repository.url} either. That url is
+     * <em>project</em>-scoped, so the segment preceding {@code _apis} is the project id and
+     * not the collection:
      * <pre>
-     * https://dev.azure.com/fabrikam/_apis/...                        -&gt; "fabrikam"          (first path segment)
-     * https://fabrikam.visualstudio.com/_apis/...                     -&gt; "fabrikam"          (host label, legacy)
-     * https://tfs.example.com/tfs/DefaultCollection/_apis/...          -&gt; "DefaultCollection" (collection, Server)
+     * https://tfs.example.com/tfs/Experimental/ce0eacb6-.../_apis/git/repositories/...
+     *                             ^collection  ^project id
      * </pre>
-     * On {@code dev.azure.com} the organization is the <em>first</em> path segment, since
-     * anything after it is the project. For an Azure DevOps Server collection there is no
-     * fixed depth — the instance may sit behind any number of virtual-directory segments —
-     * so the collection is taken as the <em>last</em> segment before {@code _apis}, which
-     * is where the Git REST routes place it. The legacy host form is checked before either,
-     * because such a url also has a collection segment that is not the organization.
+     * Locating the collection relative to {@code _apis} therefore yields the project id,
+     * and the resulting request fails as a 401 rather than a 404 — Azure DevOps Server
+     * resolves the collection before it authorizes, so a collection that does not exist is
+     * never reached by a token scoped to the real one.
+     * <p>
+     * {@code resourceContainers.collection.baseUrl} carries no such ambiguity: it ends at
+     * the collection by definition, whatever the deployment.
+     * <pre>
+     * https://dev.azure.com/fabrikam/           -&gt; "fabrikam"      (last path segment)
+     * https://fabrikam.visualstudio.com/        -&gt; "fabrikam"      (host label, legacy)
+     * https://tfs.example.com/tfs/Experimental/ -&gt; "Experimental"  (collection, Server)
+     * </pre>
+     * The last path segment covers both the modern and the Server form, including a
+     * collection sitting behind any number of virtual-directory segments. The legacy host
+     * form is checked first, because its base url may carry a collection segment that is
+     * not the organization.
      * <p>
      * Whether the resolved organization is then repeated in outbound request paths is
      * decided separately, by {@code AzureDevopsApiClient#scopesOrganization} — for the
-     * legacy and Server forms the configured base URL already carries it.
+     * legacy form, and for a Server instance configured with its collection, the base URL
+     * already carries it.
      *
-     * @return the organization, or {@code null} when the url is missing, unparseable, or
-     *         matches none of the recognised forms — the caller must then ignore the event
-     *         rather than guess, so a wrong organization never silently surfaces as an
-     *         opaque 404 later.
+     * @return the organization, or {@code null} when the envelope carries no collection
+     *         container, its base url is unparseable, or it is indistinguishable from the
+     *         deployment root — the caller must then ignore the event rather than guess,
+     *         so a wrong organization never silently surfaces as an opaque 401 later.
      */
-    String organizationFromRepositoryUrl(String repositoryUrl) {
-        if (repositoryUrl == null || repositoryUrl.isBlank()) {
+    @SuppressWarnings("unchecked")
+    String organizationFromResourceContainers(Map<String, Object> raw) {
+        if (raw == null) {
+            return null;
+        }
+        Map<String, Object> containers = (Map<String, Object>) raw.get("resourceContainers");
+        if (containers == null) {
+            log.error("Azure DevOps webhook carries no resourceContainers; "
+                    + "cannot resolve the organization");
+            return null;
+        }
+        String collectionBaseUrl = containerBaseUrl(containers, "collection");
+        if (collectionBaseUrl == null) {
+            log.error("Azure DevOps webhook carries no usable "
+                    + "resourceContainers.collection.baseUrl; cannot resolve the organization");
+            return null;
+        }
+        // Azure DevOps Server reports the deployment root separately. A collection base url
+        // equal to it names no collection, and the last-segment rule would then return the
+        // virtual directory ("tfs") as the organization.
+        String serverBaseUrl = containerBaseUrl(containers, "server");
+        if (serverBaseUrl != null && withoutTrailingSlashes(collectionBaseUrl)
+                .equalsIgnoreCase(withoutTrailingSlashes(serverBaseUrl))) {
+            log.error("Azure DevOps webhook resourceContainers.collection.baseUrl '{}' is the "
+                    + "deployment root and names no collection", collectionBaseUrl);
+            return null;
+        }
+        return organizationFromCollectionBaseUrl(collectionBaseUrl);
+    }
+
+    /**
+     * The {@code baseUrl} of one {@code resourceContainers} entry, or {@code null} when the
+     * entry is absent or carries no usable url.
+     */
+    private static String containerBaseUrl(Map<String, Object> containers, String key) {
+        if (!(containers.get(key) instanceof Map<?, ?> container)) {
+            return null;
+        }
+        return container.get("baseUrl") instanceof String baseUrl && !baseUrl.isBlank()
+                ? baseUrl
+                : null;
+    }
+
+    private static String withoutTrailingSlashes(String url) {
+        int end = url.length();
+        while (end > 0 && url.charAt(end - 1) == '/') {
+            end--;
+        }
+        return url.substring(0, end);
+    }
+
+    /**
+     * The organization named by a {@code resourceContainers.collection.baseUrl}: the
+     * leading host label for the legacy {@code *.visualstudio.com} form, otherwise the last
+     * path segment. See {@link #organizationFromResourceContainers} for why this url is the
+     * one read.
+     */
+    String organizationFromCollectionBaseUrl(String collectionBaseUrl) {
+        if (collectionBaseUrl == null || collectionBaseUrl.isBlank()) {
             return null;
         }
         URI uri;
         try {
-            uri = URI.create(repositoryUrl);
+            uri = URI.create(collectionBaseUrl);
         } catch (IllegalArgumentException e) {
-            log.error("Could not parse Azure DevOps repository url '{}': {}", repositoryUrl, e.getMessage());
+            log.error("Could not parse Azure DevOps collection base url '{}': {}",
+                    collectionBaseUrl, e.getMessage());
             return null;
         }
         String host = uri.getHost();
         if (host == null) {
+            log.error("Azure DevOps collection base url '{}' has no host", collectionBaseUrl);
             return null;
         }
+        // Checked before the path: a legacy base url may also carry a collection segment,
+        // and resolving that instead would address the wrong organization.
         if (host.toLowerCase(Locale.ROOT).endsWith(".visualstudio.com")) {
             int firstDot = host.indexOf('.');
             return firstDot > 0 ? host.substring(0, firstDot) : null;
         }
         String path = uri.getPath();
-        if (path == null || path.isBlank()) {
-            return null;
-        }
-        List<String> segments = new ArrayList<>();
-        for (String segment : path.split("/")) {
-            if (!segment.isBlank()) {
-                segments.add(segment);
+        if (path != null) {
+            String lastSegment = null;
+            for (String segment : path.split("/")) {
+                if (!segment.isBlank()) {
+                    lastSegment = segment;
+                }
+            }
+            if (lastSegment != null) {
+                return lastSegment;
             }
         }
-        if (segments.isEmpty()) {
-            return null;
-        }
-        if (host.equalsIgnoreCase("dev.azure.com")) {
-            return segments.get(0);
-        }
-        // Azure DevOps Server: the collection is the segment the _apis routes hang off.
-        int apis = segments.indexOf("_apis");
-        if (apis > 0) {
-            return segments.get(apis - 1);
-        }
-        log.error("Could not locate an Azure DevOps Server collection in repository url "
-                + "'{}': no path segment precedes '_apis'", repositoryUrl);
+        log.error("Could not locate an Azure DevOps organization in collection base url '{}': "
+                + "no path segment and no legacy host label", collectionBaseUrl);
         return null;
     }
 

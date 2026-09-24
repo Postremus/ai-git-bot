@@ -187,15 +187,30 @@ class AzureDevopsPayloadTranslationTest {
     }
 
     @Test
-    void translatePullRequestCreated_missingRepositoryUrl_returnsNull() {
-        // The organization is resolved from the repository's own "url" field, never from
-        // GitIntegration.url (which is the instance root and carries no organization).
-        // When it is missing (or unparseable), translation must fail rather than guess.
+    void translatePullRequestCreated_missingResourceContainers_returnsNull() {
+        // The organization is resolved from resourceContainers.collection.baseUrl, never
+        // from GitIntegration.url (the instance root, which carries no organization) and
+        // never from a resource url (which is project-scoped). With the envelope's
+        // containers absent, translation must fail rather than guess.
         Map<String, Object> raw = new java.util.HashMap<>(pullRequestPayload());
+        raw.remove("resourceContainers");
+
+        assertNull(handler.translatePayload("git.pullrequest.created", raw));
+    }
+
+    @Test
+    void translatePullRequestCreated_repositoryUrlAlone_isNotEnough() {
+        // Guards the regression directly: resource.repository.url is project-scoped, so
+        // the segment before _apis is the project id. It must not be used as a fallback —
+        // addressing a non-existent collection fails as an opaque 401.
+        Map<String, Object> raw = new java.util.HashMap<>(pullRequestPayload());
+        raw.remove("resourceContainers");
         Map<String, Object> resource =
                 new java.util.HashMap<>((Map<String, Object>) raw.get("resource"));
         resource.put("repository", Map.of("name", "my-service",
-                "project", Map.of("name", "MyProject")));
+                "project", Map.of("name", "MyProject"),
+                "url", "https://tfs.example.com/tfs/DefaultCollection/"
+                        + "ce0eacb6-6bf0-4a90-946c-89b6201c2457/_apis/git/repositories/my-service"));
         raw.put("resource", resource);
 
         assertNull(handler.translatePayload("git.pullrequest.created", raw));
@@ -207,11 +222,22 @@ class AzureDevopsPayloadTranslationTest {
         Map<String, Object> resource =
                 new java.util.HashMap<>((Map<String, Object>) raw.get("resource"));
         resource.put("repository", Map.of("name", "my-service",
-                "url", "https://dev.azure.com/contoso/DefaultCollection/_apis/git/repositories/my-service"));
+                "url", "https://dev.azure.com/contoso/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee/"
+                        + "_apis/git/repositories/my-service"));
         raw.put("resource", resource);
 
         assertNull(handler.translatePayload("git.pullrequest.created", raw));
     }
+
+    /**
+     * The Service Hook envelope's {@code resourceContainers}. The organization is resolved
+     * from {@code collection.baseUrl}, which ends at the collection by definition.
+     */
+    private static final Map<String, Object> RESOURCE_CONTAINERS = Map.of(
+            "collection", Map.of("id", "c12d0eb8-e382-443b-9f9c-c52cba5014c2",
+                    "baseUrl", "https://dev.azure.com/contoso/"),
+            "project", Map.of("id", "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+                    "baseUrl", "https://dev.azure.com/contoso/"));
 
     private static Map<String, Object> pullRequestPayloadWithStatus(String status) {
         Map<String, Object> raw = new java.util.HashMap<>(pullRequestPayload());
@@ -241,8 +267,12 @@ class AzureDevopsPayloadTranslationTest {
                                 "displayName", "Bot"))),
                         Map.entry("repository", Map.of("name", "my-service",
                                 "project", Map.of("name", "MyProject"),
-                                "url", "https://dev.azure.com/contoso/DefaultCollection/_apis/git/"
-                                        + "repositories/my-service"))));
+                                // Project-scoped, as Azure DevOps sends it: the segment
+                                // before _apis is the project id, not the collection.
+                                "url", "https://dev.azure.com/contoso/"
+                                        + "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee/_apis/git/"
+                                        + "repositories/my-service"))),
+                "resourceContainers", RESOURCE_CONTAINERS);
     }
 
     /**
@@ -274,7 +304,9 @@ class AzureDevopsPayloadTranslationTest {
                                 "createdBy", Map.of("uniqueName", "dev@contoso.com"),
                                 "repository", Map.of("name", "my-service",
                                         "project", Map.of("name", "MyProject"),
-                                        "url", "https://dev.azure.com/contoso/DefaultCollection/_apis/"
-                                                + "git/repositories/my-service"))));
+                                        "url", "https://dev.azure.com/contoso/"
+                                                + "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee/_apis/"
+                                                + "git/repositories/my-service"))),
+                "resourceContainers", RESOURCE_CONTAINERS);
     }
 }

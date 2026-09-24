@@ -170,11 +170,17 @@ public class GitIntegrationService {
 
     private void applyProviderDefaults(GitIntegration integration) {
         if (integration.getProviderType() == RepositoryType.GITHUB) {
-            integration.setUrl("https://github.com");
+            if (integration.getUrl() == null) {
+                integration.setUrl("https://github.com");
+            }
         } else if (integration.getProviderType() == RepositoryType.BITBUCKET) {
-            integration.setUrl("https://bitbucket.org");
+            if (integration.getUrl() == null) {
+                integration.setUrl("https://bitbucket.org");
+            }
         } else if (integration.getProviderType() == RepositoryType.AZURE_DEVOPS) {
-            integration.setUrl("https://dev.azure.com");
+            if (integration.getUrl() == null) {
+                integration.setUrl("https://dev.azure.com");
+            }
         }
     }
 }

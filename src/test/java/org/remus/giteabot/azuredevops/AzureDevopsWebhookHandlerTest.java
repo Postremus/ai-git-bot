@@ -329,70 +329,106 @@ class AzureDevopsWebhookHandlerTest {
         verify(botWebhookService, never()).reviewPullRequest(any(), any());
     }
 
-    // ---- (b) organizationFromRepositoryUrl(String) — payload-based resolution ----
+    // ---- (b) organizationFromResourceContainers(Map) — envelope-based resolution ----
     //
     // GitIntegration.url stays the instance root (no organization) so one integration
-    // serves many organizations; the organization is resolved per-event from the
-    // repository's own "url" field in the Service Hook payload instead. See the design
-    // doc's "D6 — Where the organization comes from".
+    // serves many organizations; the organization is resolved per-event from the Service
+    // Hook envelope's resourceContainers.collection.baseUrl instead. See the design doc's
+    // "D6 — Where the organization comes from".
 
     @Test
-    void organizationFromRepositoryUrl_modernForm_returnsFirstPathSegment() {
-        assertEquals("fabrikam", handler.organizationFromRepositoryUrl(
-                "https://dev.azure.com/fabrikam/DefaultCollection/_apis/git/repositories/foo"));
+    void organizationFromResourceContainers_serverForm_returnsCollectionNotProjectId() {
+        // Regression, from a real Azure DevOps Server envelope: the organization used to be
+        // read from resource.repository.url, whose segment before _apis is the *project
+        // id*, not the collection. That produced ".../tfs/ce0eacb6-.../Demo2/_apis/..." — a
+        // collection that does not exist, which the server rejects with 401 rather than 404
+        // because it resolves the collection before it authorizes.
+        assertEquals("Experimental", handler.organizationFromResourceContainers(Map.of(
+                "resourceContainers", Map.of(
+                        "collection", Map.of("id", "c1d373ed-385a-4447-be66-3ef95bb92c08",
+                                "baseUrl", "https://dmo-tfs.dataphone.ch/tfs/Experimental/"),
+                        "server", Map.of("id", "a3448944-3192-47c6-99e4-13c689ae00d4",
+                                "baseUrl", "https://dmo-tfs.dataphone.ch/tfs/"),
+                        "project", Map.of("id", "ce0eacb6-6bf0-4a90-946c-89b6201c2457",
+                                "baseUrl", "https://dmo-tfs.dataphone.ch/tfs/Experimental/")))));
     }
 
     @Test
-    void organizationFromRepositoryUrl_legacySubdomainForm_returnsHostSubdomain() {
-        assertEquals("fabrikam", handler.organizationFromRepositoryUrl(
-                "https://fabrikam.visualstudio.com/DefaultCollection/_apis/git/repositories/foo"));
+    void organizationFromResourceContainers_modernForm_returnsOrganization() {
+        assertEquals("fabrikam", handler.organizationFromResourceContainers(Map.of(
+                "resourceContainers", Map.of(
+                        "collection", Map.of("baseUrl", "https://dev.azure.com/fabrikam/")))));
     }
 
     @Test
-    void organizationFromRepositoryUrl_missingUrl_returnsNull() {
-        assertNull(handler.organizationFromRepositoryUrl(null));
-        assertNull(handler.organizationFromRepositoryUrl(""));
+    void organizationFromResourceContainers_missingOrUnusableContainers_returnsNull() {
+        // Better to ignore the event than to invent an organization that fails later.
+        assertNull(handler.organizationFromResourceContainers(null));
+        assertNull(handler.organizationFromResourceContainers(Map.of()));
+        assertNull(handler.organizationFromResourceContainers(
+                Map.of("resourceContainers", Map.of())));
+        // A collection container with no baseUrl at all.
+        assertNull(handler.organizationFromResourceContainers(
+                Map.of("resourceContainers", Map.of("collection", Map.of("id", "c1d373ed")))));
+        // A blank baseUrl.
+        assertNull(handler.organizationFromResourceContainers(
+                Map.of("resourceContainers", Map.of("collection", Map.of("baseUrl", "")))));
     }
 
     @Test
-    void organizationFromRepositoryUrl_unparseableUrl_returnsNull() {
-        assertNull(handler.organizationFromRepositoryUrl("not a url"));
+    void organizationFromResourceContainers_collectionEqualToDeploymentRoot_returnsNull() {
+        // A collection base url identical to the deployment root names no collection, so
+        // the last-segment rule would otherwise return the virtual directory "tfs".
+        assertNull(handler.organizationFromResourceContainers(Map.of(
+                "resourceContainers", Map.of(
+                        "collection", Map.of("baseUrl", "https://tfs.example.com/tfs/"),
+                        "server", Map.of("baseUrl", "https://tfs.example.com/tfs")))));
+    }
+
+    // ---- (b') organizationFromCollectionBaseUrl(String) — the url forms themselves ----
+
+    @Test
+    void organizationFromCollectionBaseUrl_modernForm_returnsLastPathSegment() {
+        assertEquals("fabrikam", handler.organizationFromCollectionBaseUrl(
+                "https://dev.azure.com/fabrikam/"));
+        assertEquals("fabrikam", handler.organizationFromCollectionBaseUrl(
+                "https://dev.azure.com/fabrikam"));
     }
 
     @Test
-    void organizationFromRepositoryUrl_noOrganizationSegment_returnsNull() {
-        // A base URL with no organization segment must not degenerate to a bogus
-        // organization (e.g. the literal host) — that surfaces as an opaque 404 later.
-        assertNull(handler.organizationFromRepositoryUrl("https://dev.azure.com/"));
+    void organizationFromCollectionBaseUrl_serverFormBehindVirtualDirectories_returnsCollection() {
+        // Azure DevOps Server can sit behind any number of virtual-directory segments, so
+        // the collection is the last segment rather than one at a fixed depth.
+        assertEquals("DefaultCollection", handler.organizationFromCollectionBaseUrl(
+                "https://tfs.example.com/tfs/DefaultCollection/"));
+        assertEquals("DefaultCollection", handler.organizationFromCollectionBaseUrl(
+                "https://tfs.example.com/DefaultCollection/"));
+        assertEquals("ProjectCollection", handler.organizationFromCollectionBaseUrl(
+                "https://tfs.example.com/a/b/c/ProjectCollection/"));
     }
 
     @Test
-    void organizationFromRepositoryUrl_serverForm_returnsCollectionBeforeApis() {
-        // Azure DevOps Server can sit behind any number of virtual-directory segments,
-        // so the collection is located relative to _apis rather than at a fixed depth.
-        assertEquals("DefaultCollection", handler.organizationFromRepositoryUrl(
-                "https://tfs.example.com/tfs/DefaultCollection/_apis/git/repositories/foo"));
-        assertEquals("DefaultCollection", handler.organizationFromRepositoryUrl(
-                "https://tfs.example.com/DefaultCollection/_apis/git/repositories/foo"));
-        assertEquals("ProjectCollection", handler.organizationFromRepositoryUrl(
-                "https://tfs.example.com/a/b/c/ProjectCollection/_apis/git/repositories/foo"));
+    void organizationFromCollectionBaseUrl_legacyForm_returnsHostLabel() {
+        // The legacy collection base url has an empty path.
+        assertEquals("fabrikam", handler.organizationFromCollectionBaseUrl(
+                "https://fabrikam.visualstudio.com/"));
     }
 
     @Test
-    void organizationFromRepositoryUrl_serverFormWithoutCollectionSegment_returnsNull() {
-        // Nothing precedes _apis, so there is no collection to read — better to ignore
-        // the event than to invent an organization that 404s later.
-        assertNull(handler.organizationFromRepositoryUrl(
-                "https://tfs.example.com/_apis/git/repositories/foo"));
-        assertNull(handler.organizationFromRepositoryUrl("https://tfs.example.com/"));
+    void organizationFromCollectionBaseUrl_legacyHostWins_overItsCollectionSegment() {
+        // A legacy base url may also carry a collection segment, but the organization is
+        // the host label — resolving the collection instead would address the wrong one.
+        assertEquals("fabrikam", handler.organizationFromCollectionBaseUrl(
+                "https://fabrikam.visualstudio.com/DefaultCollection/"));
     }
 
     @Test
-    void organizationFromRepositoryUrl_legacyHostWins_overItsCollectionSegment() {
-        // A legacy url also has a collection segment, but the organization is the host
-        // label — resolving the collection instead would address the wrong organization.
-        assertEquals("fabrikam", handler.organizationFromRepositoryUrl(
-                "https://fabrikam.visualstudio.com/DefaultCollection/_apis/git/repositories/foo"));
+    void organizationFromCollectionBaseUrl_unusableUrl_returnsNull() {
+        assertNull(handler.organizationFromCollectionBaseUrl(null));
+        assertNull(handler.organizationFromCollectionBaseUrl(""));
+        assertNull(handler.organizationFromCollectionBaseUrl("not a url"));
+        // Nothing to read: no path segment, and no legacy host label to fall back to.
+        assertNull(handler.organizationFromCollectionBaseUrl("https://tfs.example.com/"));
     }
 
     private static Map<String, Object> pullRequestPayloadWithHeadSha(String eventType,
@@ -452,7 +488,15 @@ class AzureDevopsWebhookHandlerTest {
                         "reviewers", List.of(),
                         "repository", Map.of("name", "my-service",
                                 "project", Map.of("name", "MyProject"),
-                                "url", "https://dev.azure.com/contoso/DefaultCollection/_apis/git/"
-                                        + "repositories/my-service")));
+                                // Project-scoped, as Azure DevOps sends it: the segment
+                                // before _apis is the project id, not the collection.
+                                "url", "https://dev.azure.com/contoso/"
+                                        + "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee/_apis/git/"
+                                        + "repositories/my-service")),
+                "resourceContainers", Map.of(
+                        "collection", Map.of("id", "c12d0eb8-e382-443b-9f9c-c52cba5014c2",
+                                "baseUrl", "https://dev.azure.com/contoso/"),
+                        "project", Map.of("id", "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+                                "baseUrl", "https://dev.azure.com/contoso/")));
     }
 }
