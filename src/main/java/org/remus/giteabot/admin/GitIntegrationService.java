@@ -173,6 +173,8 @@ public class GitIntegrationService {
             integration.setUrl("https://github.com");
         } else if (integration.getProviderType() == RepositoryType.BITBUCKET) {
             integration.setUrl("https://bitbucket.org");
+        } else if (integration.getProviderType() == RepositoryType.AZURE_DEVOPS) {
+            integration.setUrl("https://dev.azure.com");
         }
     }
 }
