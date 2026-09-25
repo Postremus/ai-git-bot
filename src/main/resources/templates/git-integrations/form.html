@@ -281,8 +281,8 @@
                     // as HTTP Basic with an empty username; the organization lives in the repo address.
                     urlField.style.display = 'block';
                     urlInput.required = true;
-                    urlInput.placeholder = 'https://dev.azure.com';
-                    urlDescription.textContent = /*[[#{help.git.genericUrl}]]*/ 'The base URL of your Git server.';
+                    urlInput.placeholder = 'e.g. https://dev.azure.com or https://tfs.example.com/tfs';
+                    urlDescription.textContent = /*[[#{help.git.azureDevopsUrl}]]*/ 'https://dev.azure.com for Azure DevOps Services (without your organization), or your Azure DevOps Server URL, e.g. https://tfs.example.com/tfs. On Azure DevOps Server the collection is optional: without it one integration serves every collection, with it (…/tfs/DefaultCollection) only that one.';
                     usernameField.style.display = 'none';
                     usernameInput.required = false;
                     tokenLabel.textContent = /*[[#{label.personalAccessToken}]]*/ 'Personal Access Token';

@@ -37,7 +37,13 @@ username, so the bot never collects one for this provider.
 |---|---|---|
 | Azure DevOps Services | `https://dev.azure.com` | Many |
 | Azure DevOps Services, legacy host | `https://contoso.visualstudio.com` | One (`contoso`) |
-| Azure DevOps Server (on-premises) | `https://tfs.example.com/tfs/DefaultCollection` | One (`DefaultCollection`) |
+| Azure DevOps Server (on-premises), without collection | `https://tfs.example.com/tfs` | Many (every collection on the server) |
+| Azure DevOps Server (on-premises), with collection | `https://tfs.example.com/tfs/DefaultCollection` | One (`DefaultCollection`) |
+
+**On Azure DevOps Server the collection in the URL is optional.** Both forms above work.
+Leave it out to serve every collection on the server with one integration; include it to
+pin the integration to a single collection. `/tfs` is not a collection but the server's
+virtual directory — keep whatever prefix your server uses (some installations have none).
 
 **On `https://dev.azure.com`, one integration serves many organizations.** The URL is the
 instance root and must **not** include your organization name. Do not enter
@@ -45,13 +51,13 @@ instance root and must **not** include your organization name. Do not enter
 end up addressing `dev.azure.com/contoso/contoso/...`. The organization is resolved
 per-event from the incoming webhook payload, so a single integration can serve pull
 requests from any number of organizations, each with its own PAT-holding bot as needed.
+An Azure DevOps Server URL without a collection behaves the same way, with the collection
+resolved from the payload.
 
-**The other two forms pin the organization into the URL**, so they need one integration
-each. The bot detects this and omits the organization from its request paths rather than
-addressing it twice — you do not have to configure anything for that. For Azure DevOps
-Server you may enter the URL either with the collection
-(`https://tfs.example.com/tfs/DefaultCollection`, recommended) or without it
-(`https://tfs.example.com/tfs`); both work.
+**The legacy host and a Server URL with a collection pin the organization into the URL**,
+so they need one integration each. The bot detects this and omits the organization from
+its request paths rather than addressing it twice — you do not have to configure anything
+for that.
 
 > **Note:** on Azure DevOps Server the "organization" is the **collection**. Wherever this
 > document says `owner` = organization, read `owner` = collection name.
@@ -179,7 +185,7 @@ into the repository half of the pair. For the repository at
 The `owner` is resolved per event: from the webhook payload on `https://dev.azure.com`,
 from the hostname on the legacy host (`contoso.visualstudio.com` → `contoso`), and from
 the collection on Azure DevOps Server (`.../tfs/DefaultCollection/_apis/...` →
-`DefaultCollection`). Azure DevOps repository names cannot contain a `/`, so splitting the
+`DefaultCollection`) — whether or not the collection is part of the configured URL. Azure DevOps repository names cannot contain a `/`, so splitting the
 `repo` half on the first slash is unambiguous.
 
 Where you do type it yourself: an **Event Hook**'s optional **Repository owner scope** and

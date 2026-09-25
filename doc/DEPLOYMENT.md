@@ -265,7 +265,7 @@ All AI provider and Git configuration is managed through the web interface:
    - **GitHub**: github.com or GitHub Enterprise Server — see [GitHub Setup](GITHUB_SETUP.md)
    - **GitLab**: gitlab.com or self-managed GitLab — see [GitLab Setup](GITLAB_SETUP.md)
    - **Bitbucket Cloud**: bitbucket.org — see [Bitbucket Setup](BITBUCKET_SETUP.md)
-   - **Azure DevOps**: dev.azure.com or Azure DevOps Server — see [Azure DevOps Setup](AZURE_DEVOPS_SETUP.md)
+   - **Azure DevOps**: dev.azure.com or Azure DevOps Server (collection in the URL is optional) — see [Azure DevOps Setup](AZURE_DEVOPS_SETUP.md)
    - Tokens are encrypted at rest when `APP_ENCRYPTION_KEY` is configured
 
 3. **Bots**: Create bots that combine an AI integration with a Git integration

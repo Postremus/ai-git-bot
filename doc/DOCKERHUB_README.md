@@ -207,7 +207,7 @@ environment variables needed beyond what's listed above.
 | **GitHub Enterprise** | Self-hosted GitHub Enterprise Server |
 | **GitLab** | gitlab.com and self-managed GitLab CE/EE |
 | **Bitbucket Cloud** | bitbucket.org |
-| **Azure DevOps** | dev.azure.com, `*.visualstudio.com`, and Azure DevOps Server |
+| **Azure DevOps** | dev.azure.com, `*.visualstudio.com`, and Azure DevOps Server (collection in the URL optional) |
 
 Issue-based agent workflows (coding and writer) require issue assignment and
 webhook support — **Gitea, GitHub, and GitLab**. Bitbucket Cloud and Azure

@@ -207,7 +207,7 @@ Git Integrations define connections to Git providers. Navigate to **Git Integrat
 | **GitHub** | github.com or GitHub Enterprise Server | [GitHub Setup](GITHUB_SETUP.md) |
 | **GitLab** | gitlab.com or self-managed GitLab CE/EE | [GitLab Setup](GITLAB_SETUP.md) |
 | **Bitbucket Cloud** | bitbucket.org | [Bitbucket Setup](BITBUCKET_SETUP.md) |
-| **Azure DevOps** | dev.azure.com, the legacy `*.visualstudio.com` hosts, and Azure DevOps Server | [Azure DevOps Setup](AZURE_DEVOPS_SETUP.md) |
+| **Azure DevOps** | dev.azure.com, the legacy `*.visualstudio.com` hosts, and Azure DevOps Server (collection in the URL optional) | [Azure DevOps Setup](AZURE_DEVOPS_SETUP.md) |
 
 ### Creating a Git Integration
 
@@ -229,7 +229,7 @@ Git Integrations define connections to Git providers. Navigate to **Git Integrat
      - For GitHub: `https://github.com` or `https://github.yourdomain.com` (Enterprise)
      - For GitLab: `https://gitlab.com` or `https://gitlab.yourdomain.com` (self-managed)
      - For Bitbucket: `https://bitbucket.org`
-     - For Azure DevOps: `https://dev.azure.com` (Services), `https://yourorg.visualstudio.com` (legacy) or `https://tfs.yourdomain.com/CollectionName` (Server)
+     - For Azure DevOps: `https://dev.azure.com` (Services), `https://yourorg.visualstudio.com` (legacy) or `https://tfs.yourdomain.com/tfs` (Server; appending the collection, e.g. `/tfs/DefaultCollection`, is optional and pins the integration to that one collection)
     - **Token**: Your Git API token (encrypted at rest when `APP_ENCRYPTION_KEY` is configured)
     - **Post-review Action**: defaults to **None**. Currently GitLab and Azure DevOps can use it to approve the pull/merge request or post a request-changes vote or note after each bot review.
 3. Click **Save**
