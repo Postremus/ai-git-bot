@@ -234,9 +234,10 @@ public class AzureDevopsApiClient implements RepositoryApiClient {
                     pullNumber, repo, e.getMessage(), e);
             return null;
         }
-        if (baseSha == null || headSha == null) {
-            log.error("Cannot build diff for PR #{} in {}: unresolved {} commit",
-                    pullNumber, repo, baseSha == null ? "base" : "head");
+        // Both end up as git arguments, so anything but a full object id is refused.
+        if (!isCommitSha(baseSha) || !isCommitSha(headSha)) {
+            log.error("Cannot build diff for PR #{} in {}: unresolved or malformed {} commit",
+                    pullNumber, repo, isCommitSha(baseSha) ? "head" : "base");
             return null;
         }
         return gitDiffService.diffCommits(this, owner, repo, baseSha, headSha);
@@ -303,7 +304,11 @@ public class AzureDevopsApiClient implements RepositoryApiClient {
      * branch than an abbreviated sha.
      */
     private static String versionType(String ref) {
-        return ref != null && COMMIT_SHA.matcher(ref).matches() ? "commit" : "branch";
+        return isCommitSha(ref) ? "commit" : "branch";
+    }
+
+    private static boolean isCommitSha(String value) {
+        return value != null && COMMIT_SHA.matcher(value).matches();
     }
 
     /** Extracts {@code commitId} from a {@code lastMergeTargetCommit}/{@code lastMergeSourceCommit} node. */
@@ -798,10 +803,16 @@ public class AzureDevopsApiClient implements RepositoryApiClient {
                         .build(scope.vars()))
                 .retrieve()
                 .body(new ParameterizedTypeReference<>() {});
-        if (result != null && result.get("value") instanceof List<?> value && !value.isEmpty()
-                && value.get(0) instanceof Map<?, ?> ref
-                && ref.get("objectId") instanceof String objectId) {
-            return objectId;
+        if (result == null || !(result.get("value") instanceof List<?> value)) {
+            return null;
+        }
+        // The filter is a prefix match: heads/release also returns heads/release-2.0.
+        String refName = "refs/heads/" + branch;
+        for (Object entry : value) {
+            if (entry instanceof Map<?, ?> ref && refName.equals(ref.get("name"))
+                    && ref.get("objectId") instanceof String objectId) {
+                return objectId;
+            }
         }
         return null;
     }

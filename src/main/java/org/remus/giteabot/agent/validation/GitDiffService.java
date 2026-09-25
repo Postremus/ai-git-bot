@@ -67,7 +67,9 @@ public class GitDiffService {
                 return failed(owner, repo, "git fetch", fetch);
             }
             // Written to a file: git's warnings share the captured output stream, which is
-            // also capped far below a large diff.
+            // also capped far below a large diff. The file itself is uncapped until read();
+            // that is bounded in practice by the fetched snapshot already on disk next to
+            // it, and binary files take a single line.
             Path diffFile = setup.workspaceRoot().resolve("changes.diff");
             CommandResult diff = workspaceService.runCommand(workspaceDir.toFile(),
                     new String[]{"git", "-c", "core.quotePath=false", "diff", "--no-color",

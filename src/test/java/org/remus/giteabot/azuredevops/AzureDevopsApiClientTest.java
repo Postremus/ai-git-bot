@@ -555,7 +555,8 @@ class AzureDevopsApiClientTest {
                         "https://dev.azure.com/contoso/MyProject/_apis/git/repositories/my-service"
                                 + "/refs?filter=heads/main&api-version=7.2-preview.1"))
                 .andExpect(method(HttpMethod.GET))
-                .andRespond(withSuccess("{\"value\":[{\"objectId\":\"abc123tip\"}]}",
+                .andRespond(withSuccess(
+                        "{\"value\":[{\"name\":\"refs/heads/main\",\"objectId\":\"abc123tip\"}]}",
                         MediaType.APPLICATION_JSON));
         server.expect(method(HttpMethod.POST))
                 .andExpect(jsonPath("$.refUpdates[0].oldObjectId").value("abc123tip"))
@@ -568,6 +569,48 @@ class AzureDevopsApiClientTest {
         new AzureDevopsApiClient(builder.build(), creds(), null)
                 .createOrUpdateFile("contoso", "MyProject/my-service", "src/Foo.java",
                         "content", "message", "main", "blobsha123");
+
+        server.verify();
+    }
+
+    @Test
+    void createOrUpdateFile_matchesTheBranchExactlyNotByPrefix() {
+        RestClient.Builder builder = RestClient.builder().baseUrl("https://dev.azure.com");
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        // The refs filter is a prefix match, so a longer branch name comes back too.
+        server.expect(requestTo(
+                        "https://dev.azure.com/contoso/MyProject/_apis/git/repositories/my-service"
+                                + "/refs?filter=heads/release&api-version=7.2-preview.1"))
+                .andRespond(withSuccess("{\"value\":["
+                                + "{\"name\":\"refs/heads/release-2.0\",\"objectId\":\"wrongtip\"},"
+                                + "{\"name\":\"refs/heads/release\",\"objectId\":\"righttip\"}]}",
+                        MediaType.APPLICATION_JSON));
+        server.expect(method(HttpMethod.POST))
+                .andExpect(jsonPath("$.refUpdates[0].oldObjectId").value("righttip"))
+                .andRespond(withSuccess("{}", MediaType.APPLICATION_JSON));
+
+        new AzureDevopsApiClient(builder.build(), creds(), null)
+                .createOrUpdateFile("contoso", "MyProject/my-service", "src/Foo.java",
+                        "content", "message", "release", "blobsha123");
+
+        server.verify();
+    }
+
+    @Test
+    void createOrUpdateFile_abortsWhenOnlyALongerBranchMatchesThePrefix() {
+        RestClient.Builder builder = RestClient.builder().baseUrl("https://dev.azure.com");
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        // Only this one request may occur: no push to a branch that does not exist.
+        server.expect(requestTo(
+                        "https://dev.azure.com/contoso/MyProject/_apis/git/repositories/my-service"
+                                + "/refs?filter=heads/release&api-version=7.2-preview.1"))
+                .andRespond(withSuccess(
+                        "{\"value\":[{\"name\":\"refs/heads/release-2.0\",\"objectId\":\"wrongtip\"}]}",
+                        MediaType.APPLICATION_JSON));
+
+        new AzureDevopsApiClient(builder.build(), creds(), null)
+                .createOrUpdateFile("contoso", "MyProject/my-service", "src/Foo.java",
+                        "content", "message", "release", "blobsha123");
 
         server.verify();
     }

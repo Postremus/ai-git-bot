@@ -83,6 +83,15 @@ class AzureDevopsApiClientDiffTest {
     }
 
     @Test
+    void getPullRequestDiff_refusesACommitIdThatIsNotAFullSha() {
+        // The ids become git arguments; an option-like value must never reach git.
+        AzureDevopsApiClient client = client(pr(TARGET_TIP, "--upload-pack=evil"), "{\"value\":[]}");
+
+        assertNull(client.getPullRequestDiff("contoso", "MyProject/my-service", 42L));
+        verify(gitDiffService, never()).diffCommits(any(), anyString(), anyString(), any(), any());
+    }
+
+    @Test
     void getPullRequestDiff_returnsNullWhenTheIterationsRequestFails() {
         RestClient.Builder builder = RestClient.builder().baseUrl("https://dev.azure.com");
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder)

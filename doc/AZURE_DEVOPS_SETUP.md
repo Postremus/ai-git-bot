@@ -8,6 +8,10 @@ This guide explains how to configure AI-Git-Bot to work with Azure DevOps Servic
 - An Azure DevOps organization
 - A project and Git repository where you want to enable the bot
 - Permission to create Personal Access Tokens and Service Hook subscriptions
+- Outbound HTTPS access from the bot host to the repository's Git URL
+  (`…/_git/<repository>`), not just to the REST API: pull request diffs are produced by
+  fetching the two commits with `git` and running `git diff`. On a firewalled Azure
+  DevOps Server, allow Git traffic from the bot host as well.
 
 ## Step 1: Create a Personal Access Token
 
