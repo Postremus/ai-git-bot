@@ -5,7 +5,8 @@ This guide explains how to configure AI-Git-Bot to work with Azure DevOps Servic
 
 ## Prerequisites
 
-- An Azure DevOps organization
+- An Azure DevOps organization on Azure DevOps Services, or Azure DevOps Server 2020 or
+  newer (the bot uses REST API version 6.0)
 - A project and Git repository where you want to enable the bot
 - Permission to create Personal Access Tokens and Service Hook subscriptions
 - Outbound HTTPS access from the bot host to the repository's Git URL

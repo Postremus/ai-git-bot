@@ -49,7 +49,7 @@ class AzureDevopsApiClientTest {
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
         server.expect(requestTo(
                         "https://dev.azure.com/contoso/MyProject/_apis/git/repositories/my-service"
-                                + "/pullRequests/7/threads?api-version=7.2-preview.1"))
+                                + "/pullRequests/7/threads?api-version=6.0"))
                 .andExpect(method(HttpMethod.POST))
                 .andRespond(withSuccess("{}", MediaType.APPLICATION_JSON));
 
@@ -67,7 +67,7 @@ class AzureDevopsApiClientTest {
         RestClient.Builder builder = RestClient.builder().baseUrl(base);
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
         server.expect(requestTo(base + "/MyProject/_apis/git/repositories/my-service"
-                        + "/pullRequests/7/threads?api-version=7.2-preview.1"))
+                        + "/pullRequests/7/threads?api-version=6.0"))
                 .andExpect(method(HttpMethod.POST))
                 .andRespond(withSuccess("{}", MediaType.APPLICATION_JSON));
 
@@ -83,7 +83,7 @@ class AzureDevopsApiClientTest {
         RestClient.Builder builder = RestClient.builder().baseUrl(base);
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
         server.expect(requestTo(base + "/MyProject/_apis/git/repositories/my-service"
-                        + "/pullRequests/7/threads?api-version=7.2-preview.1"))
+                        + "/pullRequests/7/threads?api-version=6.0"))
                 .andExpect(method(HttpMethod.POST))
                 .andRespond(withSuccess("{}", MediaType.APPLICATION_JSON));
 
@@ -102,7 +102,7 @@ class AzureDevopsApiClientTest {
         RestClient.Builder builder = RestClient.builder().baseUrl(base);
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
         server.expect(requestTo(base + "/DefaultCollection/MyProject/_apis/git/repositories/"
-                        + "my-service/pullRequests/7/threads?api-version=7.2-preview.1"))
+                        + "my-service/pullRequests/7/threads?api-version=6.0"))
                 .andExpect(method(HttpMethod.POST))
                 .andRespond(withSuccess("{}", MediaType.APPLICATION_JSON));
 
@@ -121,7 +121,7 @@ class AzureDevopsApiClientTest {
         RestClient.Builder builder = RestClient.builder().baseUrl(base);
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
         server.expect(requestTo(base + "/tfs/MyProject/_apis/git/repositories/my-service"
-                        + "/pullRequests/7/threads?api-version=7.2-preview.1"))
+                        + "/pullRequests/7/threads?api-version=6.0"))
                 .andExpect(method(HttpMethod.POST))
                 .andRespond(withSuccess("{}", MediaType.APPLICATION_JSON));
 
@@ -140,7 +140,7 @@ class AzureDevopsApiClientTest {
         RestClient.Builder builder = RestClient.builder().baseUrl(base);
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
         server.expect(requestTo(base + "/MyProject/_apis/git/repositories/my-service"
-                        + "/pullRequests/7/threads?api-version=7.2-preview.1"))
+                        + "/pullRequests/7/threads?api-version=6.0"))
                 .andExpect(method(HttpMethod.POST))
                 .andRespond(withSuccess("{}", MediaType.APPLICATION_JSON));
 
@@ -156,12 +156,12 @@ class AzureDevopsApiClientTest {
         RestClient.Builder builder = RestClient.builder().baseUrl(base);
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder)
                 .ignoreExpectOrder(true).build();
-        server.expect(requestTo(base + "/_apis/connectionData?api-version=7.2-preview.1"))
+        server.expect(requestTo(base + "/_apis/connectionData?api-version=6.0-preview.1"))
                 .andExpect(method(HttpMethod.GET))
                 .andRespond(withSuccess("{\"authenticatedUser\":{\"id\":\"guid-1\"}}",
                         MediaType.APPLICATION_JSON));
         server.expect(requestTo(base + "/MyProject/_apis/git/repositories/my-service"
-                        + "/pullRequests/7/reviewers/guid-1?api-version=7.2-preview.1"))
+                        + "/pullRequests/7/reviewers/guid-1?api-version=6.0"))
                 .andExpect(method(HttpMethod.PUT))
                 .andRespond(withSuccess("{}", MediaType.APPLICATION_JSON));
 
@@ -226,7 +226,7 @@ class AzureDevopsApiClientTest {
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
         server.expect(requestTo(
                         "https://dev.azure.com/contoso/MyProject/_apis/git/repositories/my-service"
-                                + "/pullRequests/42/threads?api-version=7.2-preview.1"))
+                                + "/pullRequests/42/threads?api-version=6.0"))
                 .andExpect(method(HttpMethod.POST))
                 .andExpect(jsonPath("$.comments[0].content").value("hello"))
                 .andExpect(jsonPath("$.comments[0].commentType").value(1))
@@ -359,7 +359,7 @@ class AzureDevopsApiClientTest {
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
         server.expect(requestTo(
                         "https://dev.azure.com/contoso/MyProject/_apis/git/repositories/my-service"
-                                + "/pullRequests/42/threads/5?api-version=7.2-preview.1"))
+                                + "/pullRequests/42/threads/5?api-version=6.0"))
                 .andExpect(method(HttpMethod.GET))
                 .andRespond(withSuccess("""
                         {"id":5,"threadContext":{"filePath":"/src/Foo.java",
@@ -553,7 +553,7 @@ class AzureDevopsApiClientTest {
         // refs lookup returns the current branch tip commit id.
         server.expect(requestTo(
                         "https://dev.azure.com/contoso/MyProject/_apis/git/repositories/my-service"
-                                + "/refs?filter=heads/main&api-version=7.2-preview.1"))
+                                + "/refs?filter=heads/main&api-version=6.0"))
                 .andExpect(method(HttpMethod.GET))
                 .andRespond(withSuccess(
                         "{\"value\":[{\"name\":\"refs/heads/main\",\"objectId\":\"abc123tip\"}]}",
@@ -580,7 +580,7 @@ class AzureDevopsApiClientTest {
         // The refs filter is a prefix match, so a longer branch name comes back too.
         server.expect(requestTo(
                         "https://dev.azure.com/contoso/MyProject/_apis/git/repositories/my-service"
-                                + "/refs?filter=heads/release&api-version=7.2-preview.1"))
+                                + "/refs?filter=heads/release&api-version=6.0"))
                 .andRespond(withSuccess("{\"value\":["
                                 + "{\"name\":\"refs/heads/release-2.0\",\"objectId\":\"wrongtip\"},"
                                 + "{\"name\":\"refs/heads/release\",\"objectId\":\"righttip\"}]}",
@@ -603,7 +603,7 @@ class AzureDevopsApiClientTest {
         // Only this one request may occur: no push to a branch that does not exist.
         server.expect(requestTo(
                         "https://dev.azure.com/contoso/MyProject/_apis/git/repositories/my-service"
-                                + "/refs?filter=heads/release&api-version=7.2-preview.1"))
+                                + "/refs?filter=heads/release&api-version=6.0"))
                 .andRespond(withSuccess(
                         "{\"value\":[{\"name\":\"refs/heads/release-2.0\",\"objectId\":\"wrongtip\"}]}",
                         MediaType.APPLICATION_JSON));
@@ -622,7 +622,7 @@ class AzureDevopsApiClientTest {
         // refs lookup finds no matching branch; only this one request should occur.
         server.expect(requestTo(
                         "https://dev.azure.com/contoso/MyProject/_apis/git/repositories/my-service"
-                                + "/refs?filter=heads/main&api-version=7.2-preview.1"))
+                                + "/refs?filter=heads/main&api-version=6.0"))
                 .andExpect(method(HttpMethod.GET))
                 .andRespond(withSuccess("{\"value\":[]}", MediaType.APPLICATION_JSON));
 
@@ -642,7 +642,7 @@ class AzureDevopsApiClientTest {
                         MediaType.APPLICATION_JSON));
         server.expect(requestTo(
                         "https://dev.azure.com/contoso/MyProject/_apis/git/repositories/my-service"
-                                + "/pullRequests/42/reviewers/reviewer-guid-1?api-version=7.2-preview.1"))
+                                + "/pullRequests/42/reviewers/reviewer-guid-1?api-version=6.0"))
                 .andExpect(method(HttpMethod.PUT))
                 .andExpect(jsonPath("$.vote").value(10))
                 .andRespond(withSuccess("{}", MediaType.APPLICATION_JSON));
@@ -663,20 +663,20 @@ class AzureDevopsApiClientTest {
         RestClient.Builder builder = RestClient.builder().baseUrl("https://dev.azure.com");
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder)
                 .ignoreExpectOrder(true).build();
-        server.expect(requestTo("https://dev.azure.com/contoso/_apis/connectionData?api-version=7.2-preview.1"))
+        server.expect(requestTo("https://dev.azure.com/contoso/_apis/connectionData?api-version=6.0-preview.1"))
                 .andRespond(withSuccess("{\"authenticatedUser\":{\"id\":\"guid-contoso\"}}",
                         MediaType.APPLICATION_JSON));
-        server.expect(requestTo("https://dev.azure.com/fabrikam/_apis/connectionData?api-version=7.2-preview.1"))
+        server.expect(requestTo("https://dev.azure.com/fabrikam/_apis/connectionData?api-version=6.0-preview.1"))
                 .andRespond(withSuccess("{\"authenticatedUser\":{\"id\":\"guid-fabrikam\"}}",
                         MediaType.APPLICATION_JSON));
         server.expect(requestTo(
                         "https://dev.azure.com/contoso/MyProject/_apis/git/repositories/my-service"
-                                + "/pullRequests/42/reviewers/guid-contoso?api-version=7.2-preview.1"))
+                                + "/pullRequests/42/reviewers/guid-contoso?api-version=6.0"))
                 .andExpect(method(HttpMethod.PUT))
                 .andRespond(withSuccess("{}", MediaType.APPLICATION_JSON));
         server.expect(requestTo(
                         "https://dev.azure.com/fabrikam/OtherProject/_apis/git/repositories/other-service"
-                                + "/pullRequests/7/reviewers/guid-fabrikam?api-version=7.2-preview.1"))
+                                + "/pullRequests/7/reviewers/guid-fabrikam?api-version=6.0"))
                 .andExpect(method(HttpMethod.PUT))
                 .andRespond(withSuccess("{}", MediaType.APPLICATION_JSON));
 
@@ -695,7 +695,7 @@ class AzureDevopsApiClientTest {
         RestClient.Builder builder = RestClient.builder().baseUrl("https://dev.azure.com");
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
         server.expect(requestTo("https://dev.azure.com/contoso/_apis/connectionData"
-                        + "?api-version=7.2-preview.1"))
+                        + "?api-version=6.0-preview.1"))
                 .andRespond(withSuccess("{}", MediaType.APPLICATION_JSON));
 
         AzureDevopsApiClient client = new AzureDevopsApiClient(builder.build(),
@@ -734,7 +734,7 @@ class AzureDevopsApiClientTest {
         // connectionData lookup is expected, and a third request would fail the mock.
         RestClient.Builder builder = RestClient.builder().baseUrl("https://dev.azure.com");
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
-        server.expect(requestTo("https://dev.azure.com/contoso/_apis/connectionData?api-version=7.2-preview.1"))
+        server.expect(requestTo("https://dev.azure.com/contoso/_apis/connectionData?api-version=6.0-preview.1"))
                 .andRespond(withSuccess("{\"authenticatedUser\":{\"id\":\"guid-contoso\"}}",
                         MediaType.APPLICATION_JSON));
         server.expect(method(HttpMethod.PUT)).andRespond(withSuccess("{}", MediaType.APPLICATION_JSON));

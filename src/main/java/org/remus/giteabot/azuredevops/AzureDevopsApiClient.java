@@ -35,8 +35,14 @@ import java.util.regex.Pattern;
 @Slf4j
 public class AzureDevopsApiClient implements RepositoryApiClient {
 
-    static final String API_PREVIEW_1 = "7.2-preview.1";
-    static final String API_PREVIEW_2 = "7.2-preview.2";
+    /**
+     * REST API version for every documented endpoint. 6.0 is the highest version Azure
+     * DevOps Server 2020 accepts; Services and newer servers accept it too.
+     */
+    static final String API_VERSION = "6.0";
+
+    /** {@code connectionData} exists only as a preview API and rejects a release version. */
+    static final String API_VERSION_CONNECTION_DATA = "6.0-preview.1";
 
     private static final int VOTE_APPROVE = 10;
     private static final int VOTE_REJECT = -10;
@@ -252,7 +258,7 @@ public class AzureDevopsApiClient implements RepositoryApiClient {
         Map<String, Object> result = restClient.get()
                 .uri(builder -> builder
                         .path(scope.path() + "/pullRequests/{prId}/iterations")
-                        .queryParam("api-version", API_PREVIEW_1)
+                        .queryParam("api-version", API_VERSION)
                         .build(vars(scope, pullNumber)))
                 .retrieve()
                 .body(new ParameterizedTypeReference<>() {});
@@ -324,7 +330,7 @@ public class AzureDevopsApiClient implements RepositoryApiClient {
         run(() -> restClient.post()
                 .uri(builder -> builder
                         .path(scope.path() + "/pullRequests/{prId}/threads")
-                        .queryParam("api-version", API_PREVIEW_1)
+                        .queryParam("api-version", API_VERSION)
                         .build(vars(scope, pullNumber)))
                 .body(Map.of(
                         "comments", List.of(Map.of(
@@ -357,7 +363,7 @@ public class AzureDevopsApiClient implements RepositoryApiClient {
         run(() -> restClient.post()
                 .uri(builder -> builder
                         .path(scope.path() + "/pullRequests/{prId}/threads")
-                        .queryParam("api-version", API_PREVIEW_1)
+                        .queryParam("api-version", API_VERSION)
                         .build(vars(scope, pullNumber)))
                 .body(Map.of(
                         "comments", List.of(Map.of(
@@ -390,7 +396,7 @@ public class AzureDevopsApiClient implements RepositoryApiClient {
         run(() -> restClient.put()
                 .uri(builder -> builder
                         .path(scope.path() + "/pullRequests/{prId}/reviewers/{reviewerId}")
-                        .queryParam("api-version", API_PREVIEW_1)
+                        .queryParam("api-version", API_VERSION)
                         .build(vars(scope, pullNumber, reviewerId)))
                 .body(Map.of("vote", vote))
                 .retrieve()
@@ -406,7 +412,7 @@ public class AzureDevopsApiClient implements RepositoryApiClient {
             Map<String, Object> result = restClient.get()
                     .uri(builder -> builder
                             .path(scope.path() + "/pullRequests/{prId}")
-                            .queryParam("api-version", API_PREVIEW_1)
+                            .queryParam("api-version", API_VERSION)
                             .build(vars(scope, pullNumber)))
                     .retrieve()
                     .body(new ParameterizedTypeReference<>() {});
@@ -451,7 +457,7 @@ public class AzureDevopsApiClient implements RepositoryApiClient {
             Map<String, Object> result = restClient.get()
                     .uri(builder -> builder
                             .path(scope.path() + "/pullRequests/{prId}/threads")
-                            .queryParam("api-version", API_PREVIEW_1)
+                            .queryParam("api-version", API_VERSION)
                             .build(vars(scope, pullNumber)))
                     .retrieve()
                     .body(new ParameterizedTypeReference<>() {});
@@ -532,7 +538,7 @@ public class AzureDevopsApiClient implements RepositoryApiClient {
             Map<String, Object> thread = restClient.get()
                     .uri(builder -> builder
                             .path(scope.path() + "/pullRequests/{prId}/threads/{threadId}")
-                            .queryParam("api-version", API_PREVIEW_1)
+                            .queryParam("api-version", API_VERSION)
                             .build(vars(scope, pullNumber, threadId)))
                     .retrieve()
                     .body(new ParameterizedTypeReference<>() {});
@@ -580,7 +586,7 @@ public class AzureDevopsApiClient implements RepositoryApiClient {
             Map<String, Object> result = restClient.get()
                     .uri(builder -> builder
                             .path(scope.path() + "/pullRequests/{prId}/commits")
-                            .queryParam("api-version", API_PREVIEW_1)
+                            .queryParam("api-version", API_VERSION)
                             .build(vars(scope, pullNumber)))
                     .retrieve()
                     .body(new ParameterizedTypeReference<>() {});
@@ -627,7 +633,7 @@ public class AzureDevopsApiClient implements RepositoryApiClient {
         return call(() -> restClient.get()
                 .uri(builder -> builder
                         .path(scope.path() + "/pullRequests/{prId}")
-                        .queryParam("api-version", API_PREVIEW_1)
+                        .queryParam("api-version", API_VERSION)
                         .build(vars(scope, pullNumber)))
                 .retrieve()
                 .body(new ParameterizedTypeReference<Map<String, Object>>() {}),
@@ -644,7 +650,7 @@ public class AzureDevopsApiClient implements RepositoryApiClient {
             Map<String, Object> result = restClient.get()
                     .uri(builder -> builder
                             .path(scope.path())
-                            .queryParam("api-version", API_PREVIEW_1)
+                            .queryParam("api-version", API_VERSION)
                             .build(scope.vars()))
                     .retrieve()
                     .body(new ParameterizedTypeReference<>() {});
@@ -669,7 +675,7 @@ public class AzureDevopsApiClient implements RepositoryApiClient {
                             .queryParam("scopePath", "/")
                             .queryParam("versionDescriptor.versionType", versionType(ref))
                             .queryParam("versionDescriptor.version", ref)
-                            .queryParam("api-version", API_PREVIEW_1)
+                            .queryParam("api-version", API_VERSION)
                             .build(scope.vars()))
                     .retrieve()
                     .body(new ParameterizedTypeReference<>() {});
@@ -727,7 +733,7 @@ public class AzureDevopsApiClient implements RepositoryApiClient {
                             .queryParam("includeContent", "true")
                             .queryParam("versionDescriptor.versionType", versionType(ref))
                             .queryParam("versionDescriptor.version", ref)
-                            .queryParam("api-version", API_PREVIEW_1)
+                            .queryParam("api-version", API_VERSION)
                             .build(scope.vars()))
                     .retrieve()
                     .body(new ParameterizedTypeReference<>() {});
@@ -768,7 +774,7 @@ public class AzureDevopsApiClient implements RepositoryApiClient {
         run(() -> restClient.post()
                 .uri(builder -> builder
                         .path(scope.path() + "/pushes")
-                        .queryParam("api-version", API_PREVIEW_2)
+                        .queryParam("api-version", API_VERSION)
                         .build(scope.vars()))
                 .body(Map.of(
                         "refUpdates", List.of(Map.of(
@@ -799,7 +805,7 @@ public class AzureDevopsApiClient implements RepositoryApiClient {
                 .uri(builder -> builder
                         .path(scope.path() + "/refs")
                         .queryParam("filter", "heads/" + branch)
-                        .queryParam("api-version", API_PREVIEW_1)
+                        .queryParam("api-version", API_VERSION)
                         .build(scope.vars()))
                 .retrieve()
                 .body(new ParameterizedTypeReference<>() {});
@@ -826,7 +832,7 @@ public class AzureDevopsApiClient implements RepositoryApiClient {
             Map<String, Object> result = restClient.post()
                     .uri(builder -> builder
                             .path(scope.path() + "/pullrequests")
-                            .queryParam("api-version", API_PREVIEW_2)
+                            .queryParam("api-version", API_VERSION)
                             .build(scope.vars()))
                     .body(Map.of(
                             "sourceRefName", "refs/heads/" + head,
@@ -895,7 +901,7 @@ public class AzureDevopsApiClient implements RepositoryApiClient {
             Map<String, Object> data = restClient.get()
                     .uri(builder -> builder
                             .path(scope.path() + "/connectionData")
-                            .queryParam("api-version", API_PREVIEW_1)
+                            .queryParam("api-version", API_VERSION_CONNECTION_DATA)
                             .build(scope.vars()))
                     .retrieve()
                     .body(new ParameterizedTypeReference<>() {});
