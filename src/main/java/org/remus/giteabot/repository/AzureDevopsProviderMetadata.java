@@ -3,6 +3,7 @@ package org.remus.giteabot.repository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.remus.giteabot.admin.GitIntegration;
+import org.remus.giteabot.agent.validation.GitDiffService;
 import org.remus.giteabot.azuredevops.AzureDevopsApiClient;
 import org.remus.giteabot.repository.model.RepositoryCredentials;
 import org.springframework.beans.factory.ObjectProvider;
@@ -39,6 +40,7 @@ public class AzureDevopsProviderMetadata implements RepositoryProviderMetadata {
     private static final String DEFAULT_URL = "https://dev.azure.com";
 
     private final ObjectProvider<RestClient.Builder> restClientBuilder;
+    private final GitDiffService gitDiffService;
 
     @Override
     public RepositoryType getProviderType() {
@@ -87,6 +89,6 @@ public class AzureDevopsProviderMetadata implements RepositoryProviderMetadata {
     @Override
     public RepositoryApiClient createClient(RestClient restClient,
                                             RepositoryCredentials credentials) {
-        return new AzureDevopsApiClient(restClient, credentials);
+        return new AzureDevopsApiClient(restClient, credentials, gitDiffService);
     }
 }

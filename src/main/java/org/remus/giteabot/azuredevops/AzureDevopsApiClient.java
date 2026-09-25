@@ -1,6 +1,7 @@
 package org.remus.giteabot.azuredevops;
 
 import lombok.extern.slf4j.Slf4j;
+import org.remus.giteabot.agent.validation.GitDiffService;
 import org.remus.giteabot.azuredevops.model.AzureDevopsReview;
 import org.remus.giteabot.azuredevops.model.AzureDevopsReviewComment;
 import org.remus.giteabot.repository.PostReviewAction;
@@ -9,19 +10,15 @@ import org.remus.giteabot.repository.model.RepositoryCredentials;
 import org.remus.giteabot.repository.model.Review;
 import org.remus.giteabot.repository.model.ReviewComment;
 import org.springframework.core.ParameterizedTypeReference;
-import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClient;
 
 import java.net.URI;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Supplier;
 import java.util.regex.Pattern;
@@ -44,17 +41,12 @@ public class AzureDevopsApiClient implements RepositoryApiClient {
     private static final int VOTE_APPROVE = 10;
     private static final int VOTE_REJECT = -10;
 
-    /** Change entries requested per page from the iteration-changes endpoint. */
-    private static final int CHANGE_ENTRIES_PAGE_SIZE = 2000;
-
-    /** Upper bound on change entries walked for one diff, across all pages. */
-    private static final int MAX_CHANGE_ENTRIES = 20_000;
-
     /** A full Git object id. Anything else in a {@code ref} position is a branch name. */
     private static final Pattern COMMIT_SHA = Pattern.compile("[0-9a-fA-F]{40}");
 
     private final RestClient restClient;
     private final RepositoryCredentials credentials;
+    private final GitDiffService gitDiffService;
 
     /**
      * Cached identity GUID of the authenticated bot, resolved lazily for voting, keyed by
@@ -81,9 +73,11 @@ public class AzureDevopsApiClient implements RepositoryApiClient {
      */
     private static final String NO_IDENTITY = "";
 
-    public AzureDevopsApiClient(RestClient restClient, RepositoryCredentials credentials) {
+    public AzureDevopsApiClient(RestClient restClient, RepositoryCredentials credentials,
+                                GitDiffService gitDiffService) {
         this.restClient = restClient;
         this.credentials = credentials;
+        this.gitDiffService = gitDiffService;
     }
 
     @Override
@@ -216,86 +210,43 @@ public class AzureDevopsApiClient implements RepositoryApiClient {
 
     // ---- Pull request operations ----
 
+    /**
+     * Diffs the pull request with {@code git} via {@link GitDiffService}: Azure DevOps
+     * exposes no endpoint returning patch text.
+     * <p>
+     * The old side is the latest iteration's merge base ({@code commonRefCommit}), not
+     * {@code lastMergeTargetCommit}: that is the target branch <em>tip</em>, and diffing
+     * against it mixes the inverse of unrelated target-branch commits into the patch.
+     * The tip is only a fallback for a malformed iterations response.
+     */
     @Override
     public String getPullRequestDiff(String owner, String repo, Long pullNumber) {
         AzureDevopsAddress addr = AzureDevopsAddress.parse(owner, repo);
+        String baseSha;
+        String headSha;
         try {
             Map<String, Object> pr = getPullRequestDetails(owner, repo, pullNumber);
-            String headSha = commitId(pr.get("lastMergeSourceCommit"));
-
-            Iteration iteration = latestIteration(addr, pullNumber);
-            // The change entries below are the pull request's own changes, computed by
-            // Azure DevOps against the iteration's merge base (commonRefCommit). The old
-            // side of each file must be read at that same commit. lastMergeTargetCommit
-            // is the target branch *tip* at the last merge attempt, which Azure DevOps
-            // re-evaluates whenever the target moves: diffing against it mixes the
-            // inverse of unrelated target-branch commits into the patch, so the bot would
-            // review changes the pull request's author never made. Only used as a
-            // fallback for a malformed iterations response.
-            String baseSha = iteration.commonRefCommit() != null
-                    ? iteration.commonRefCommit()
-                    : commitId(pr.get("lastMergeTargetCommit"));
-            if (baseSha == null || headSha == null) {
-                // Both sides must be pinned to a commit. Azure DevOps defaults
-                // versionDescriptor.versionType to the default branch when no version is
-                // given, so fetching a blob with a null sha yields whatever is on the
-                // default branch right now — a plausible-looking but wrong diff. Failing
-                // is the safer answer; the caller already handles a null diff.
-                log.error("Cannot build diff for PR #{} in {}: unresolved {} commit",
-                        pullNumber, repo, baseSha == null ? "base" : "head");
-                return null;
-            }
-            List<Map<String, Object>> changes = iterationChanges(addr, pullNumber, iteration.id());
-
-            StringBuilder sb = new StringBuilder();
-            int rendered = 0;
-            int omitted = 0;
-            for (Map<String, Object> change : changes) {
-                if (!isFileChange(change)) {
-                    // Folders and malformed entries render nothing, so they count neither
-                    // toward the file budget nor toward the "omitted" tally below.
-                    continue;
-                }
-                if (rendered >= AzureDevopsDiffBuilder.MAX_FILES) {
-                    omitted++;
-                    continue;
-                }
-                String block = renderChange(addr, change, baseSha, headSha);
-                if (block.isEmpty()) {
-                    // A change entry whose two sides turn out identical renders nothing,
-                    // so like a folder it spends neither a file budget slot nor an
-                    // "omitted" tally entry — the count below would otherwise promise a
-                    // reviewer files that were never going to appear.
-                    continue;
-                }
-                sb.append(block);
-                rendered++;
-            }
-            if (omitted > 0) {
-                sb.append("Diff truncated: ").append(omitted).append(" further files omitted\n");
-            }
-            return sb.toString();
+            headSha = commitId(pr.get("lastMergeSourceCommit"));
+            String mergeBase = latestMergeBase(addr, pullNumber);
+            baseSha = mergeBase != null ? mergeBase : commitId(pr.get("lastMergeTargetCommit"));
         } catch (Exception e) {
-            log.error("Failed to build diff for PR #{} in {}: {}",
+            log.error("Failed to resolve diff commits for PR #{} in {}: {}",
                     pullNumber, repo, e.getMessage(), e);
             return null;
         }
+        if (baseSha == null || headSha == null) {
+            log.error("Cannot build diff for PR #{} in {}: unresolved {} commit",
+                    pullNumber, repo, baseSha == null ? "base" : "head");
+            return null;
+        }
+        return gitDiffService.diffCommits(this, owner, repo, baseSha, headSha);
     }
 
     /**
-     * One iteration of a pull request: its {@code id} and the merge base its changes were
-     * computed against. {@code commonRefCommit} is {@code null} when the iterations
-     * response did not carry one.
+     * The {@code commonRefCommit} of the pull request's latest iteration (highest
+     * {@code id}), or {@code null} when the iterations response carries none.
      */
-    private record Iteration(int id, String commonRefCommit) { }
-
-    /**
-     * Fetches the pull request's iterations and returns the one with the highest
-     * {@code id}, which is the latest set of changes pushed to the source branch.
-     * Defaults to iteration {@code 1} with an unknown merge base when the response is
-     * malformed or empty, since every PR has at least one iteration.
-     */
-    private Iteration latestIteration(AzureDevopsAddress addr, Long pullNumber) {
+    private String latestMergeBase(AzureDevopsAddress addr, Long pullNumber) {
         Scope scope = repositoryScope(addr);
         Map<String, Object> result = restClient.get()
                 .uri(builder -> builder
@@ -304,182 +255,19 @@ public class AzureDevopsApiClient implements RepositoryApiClient {
                         .build(vars(scope, pullNumber)))
                 .retrieve()
                 .body(new ParameterizedTypeReference<>() {});
-        Iteration latest = new Iteration(1, null);
+        int latestId = Integer.MIN_VALUE;
+        String mergeBase = null;
         if (result != null && result.get("value") instanceof List<?> value) {
             for (Object entry : value) {
                 if (entry instanceof Map<?, ?> iteration
                         && iteration.get("id") instanceof Number n
-                        && n.intValue() >= latest.id()) {
-                    latest = new Iteration(n.intValue(),
-                            commitId(iteration.get("commonRefCommit")));
+                        && n.intValue() >= latestId) {
+                    latestId = n.intValue();
+                    mergeBase = commitId(iteration.get("commonRefCommit"));
                 }
             }
         }
-        return latest;
-    }
-
-    /**
-     * Fetches the changed files for one iteration of a pull request, following the
-     * response's {@code nextSkip} until the iteration is exhausted.
-     * <p>
-     * Paging matters even though {@link AzureDevopsDiffBuilder#MAX_FILES} renders far
-     * fewer files than one page holds: {@code getPullRequestDiff} reports how many files
-     * it left out, and a tally computed from a truncated first page would quietly
-     * under-report. {@link #MAX_CHANGE_ENTRIES} bounds the walk so a pull request
-     * touching an entire repository cannot turn into an unbounded sequence of requests.
-     */
-    @SuppressWarnings("unchecked")
-    private List<Map<String, Object>> iterationChanges(AzureDevopsAddress addr, Long pullNumber,
-                                                        int iteration) {
-        Scope scope = repositoryScope(addr);
-        List<Map<String, Object>> all = new ArrayList<>();
-        int skip = 0;
-        while (true) {
-            int currentSkip = skip;
-            Map<String, Object> result = restClient.get()
-                    .uri(builder -> builder
-                            .path(scope.path()
-                                    + "/pullRequests/{prId}/iterations/{iteration}/changes")
-                            .queryParam("$top", CHANGE_ENTRIES_PAGE_SIZE)
-                            .queryParam("$skip", currentSkip)
-                            .queryParam("api-version", API_PREVIEW_1)
-                            .build(vars(scope, pullNumber, iteration)))
-                    .retrieve()
-                    .body(new ParameterizedTypeReference<>() {});
-            if (result == null || !(result.get("changeEntries") instanceof List<?> entries)
-                    || entries.isEmpty()) {
-                return all;
-            }
-            all.addAll((List<Map<String, Object>>) entries);
-            // nextSkip is 0 (or absent) on the last page.
-            if (!(result.get("nextSkip") instanceof Number next) || next.intValue() <= skip) {
-                return all;
-            }
-            skip = next.intValue();
-            if (all.size() >= MAX_CHANGE_ENTRIES) {
-                log.warn("Pull request #{} in {} has more than {} change entries; "
-                                + "the remainder is not counted towards the diff",
-                        pullNumber, addr.project() + "/" + addr.name(), MAX_CHANGE_ENTRIES);
-                return all;
-            }
-        }
-    }
-
-    /**
-     * Whether a change entry is a renderable file rather than a folder or a malformed
-     * entry. {@code getPullRequestDiff} uses it to decide what counts toward
-     * {@link AzureDevopsDiffBuilder#MAX_FILES} before any network call, and
-     * {@link #renderChange} as its first guard. Both must classify entries identically:
-     * anything that renders nothing would otherwise be reported as "omitted" when the cap
-     * truncates the diff.
-     */
-    private static boolean isFileChange(Map<String, Object> change) {
-        return change.get("item") instanceof Map<?, ?> item
-                && !Boolean.TRUE.equals(item.get("isFolder"))
-                && item.get("path") instanceof String;
-    }
-
-    /**
-     * Renders one change entry into a {@code diff --git} block. Folders and pure renames
-     * (which carry no textual delta of their own) are handled without fetching blob
-     * content; everything else fetches the relevant side(s) and defers to
-     * {@link AzureDevopsDiffBuilder}.
-     * <p>
-     * File classification is delegated to {@link #isFileChange} rather than re-derived,
-     * so this guard and the {@link AzureDevopsDiffBuilder#MAX_FILES} accounting in
-     * {@code getPullRequestDiff} cannot drift apart.
-     * <p>
-     * {@code changeType} is a comma-joined flag set, not a single value: a file that is
-     * both moved and modified arrives as {@code "edit, rename"}. That combination must
-     * take the edit path — stubbing it out as a rename would drop the content change of
-     * exactly the files a refactoring pull request touches. For those entries the old
-     * side lives at {@code sourceServerItem}, the pre-rename path, while the new side is
-     * at {@code item.path}; see {@link #basePath}.
-     */
-    private String renderChange(AzureDevopsAddress addr, Map<String, Object> change,
-                                String baseSha, String headSha) {
-        if (!isFileChange(change)) {
-            return "";
-        }
-        Map<?, ?> item = (Map<?, ?>) change.get("item");
-        String rawPath = (String) item.get("path");
-        String path = stripLeadingSlash(rawPath);
-        Set<String> changeType = changeFlags(change.get("changeType"));
-        String rawBasePath = basePath(change, rawPath, changeType);
-        String oldPath = stripLeadingSlash(rawBasePath);
-
-        if (changeType.contains("rename") && !changeType.contains("edit")) {
-            // Both paths, so the header shows where the file went.
-            return AzureDevopsDiffBuilder.skippedStub(oldPath, path, "file renamed");
-        }
-        // "undelete" restores a file that is absent at the merge base, so it renders as
-        // an addition — and must be matched as a whole flag, not as a substring of
-        // "delete", which would invert it into a deletion.
-        if (changeType.contains("add") || changeType.contains("undelete")) {
-            Blob head = blob(addr, rawPath, headSha);
-            if (head.isSkipped()) {
-                return skippedOrBinaryStub(path, head.skipReason());
-            }
-            // A null path on the side that does not exist renders as /dev/null.
-            return AzureDevopsDiffBuilder.unifiedDiff(null, path, "", head.content());
-        }
-        if (changeType.contains("delete")) {
-            Blob base = blob(addr, rawBasePath, baseSha);
-            if (base.isSkipped()) {
-                return skippedOrBinaryStub(oldPath, base.skipReason());
-            }
-            return AzureDevopsDiffBuilder.unifiedDiff(oldPath, null, base.content(), "");
-        }
-        Blob base = blob(addr, rawBasePath, baseSha);
-        if (base.isSkipped()) {
-            return skippedOrBinaryStub(path, base.skipReason());
-        }
-        Blob head = blob(addr, rawPath, headSha);
-        if (head.isSkipped()) {
-            return skippedOrBinaryStub(path, head.skipReason());
-        }
-        return AzureDevopsDiffBuilder.unifiedDiff(oldPath, path, base.content(), head.content());
-    }
-
-    /**
-     * The path the old side of a change entry must be read at. Identical to the new path
-     * except for a rename, where Azure DevOps puts the pre-rename path in the entry's
-     * {@code sourceServerItem}; reading the old side at the new path would 404 at the
-     * merge base and render the file as newly added.
-     */
-    private static String basePath(Map<String, Object> change, String rawPath,
-                                   Set<String> changeType) {
-        if (changeType.contains("rename") && change.get("sourceServerItem") instanceof String source
-                && !source.isBlank()) {
-            return source;
-        }
-        return rawPath;
-    }
-
-    /**
-     * Splits a change entry's {@code changeType} into its individual flags.
-     * <p>
-     * Azure DevOps sends a comma-joined flag set — {@code "edit, rename"} for a file that
-     * was both moved and modified. Testing it with {@code contains} on the raw string
-     * conflates flags that are substrings of one another: {@code "undelete"} would match
-     * a test for {@code "delete"} and render a restored file as a deletion. Splitting
-     * first makes every test an exact-flag test.
-     *
-     * @return the flags, lower-cased; empty when {@code changeType} is absent or not a
-     *         string, which leaves {@link #renderChange} on its ordinary edit path
-     */
-    private static Set<String> changeFlags(Object changeType) {
-        if (!(changeType instanceof String raw) || raw.isBlank()) {
-            return Set.of();
-        }
-        Set<String> flags = new LinkedHashSet<>();
-        for (String part : raw.split(",")) {
-            String flag = part.trim().toLowerCase(Locale.ROOT);
-            if (!flag.isEmpty()) {
-                flags.add(flag);
-            }
-        }
-        return flags;
+        return mergeBase;
     }
 
     private static String stripLeadingSlash(String path) {
@@ -504,63 +292,6 @@ public class AzureDevopsApiClient implements RepositoryApiClient {
         return path.startsWith("/") ? path : "/" + path;
     }
 
-    private static String skippedOrBinaryStub(String path, String reason) {
-        return "binary".equals(reason)
-                ? AzureDevopsDiffBuilder.binaryStub(path)
-                : AzureDevopsDiffBuilder.skippedStub(path, reason);
-    }
-
-    /**
-     * Fetches one side of a file's content at a given commit.
-     * <p>
-     * {@code includeContentMetadata=true} is required: it is the only way to get
-     * {@code contentMetadata.isBinary} in the response. Without it, binary files would
-     * silently be fed through the text differ.
-     */
-    @SuppressWarnings("unchecked")
-    private Blob blob(AzureDevopsAddress addr, String path, String sha) {
-        Scope scope = repositoryScope(addr);
-        Map<String, Object> result;
-        try {
-            result = restClient.get()
-                    .uri(builder -> builder
-                            .path(scope.path() + "/items")
-                            .queryParam("path", path)
-                            .queryParam("includeContent", "true")
-                            .queryParam("includeContentMetadata", "true")
-                            .queryParam("versionDescriptor.versionType", "commit")
-                            .queryParam("versionDescriptor.version", sha)
-                            .queryParam("api-version", API_PREVIEW_1)
-                            .build(scope.vars()))
-                    .retrieve()
-                    .body(new ParameterizedTypeReference<>() {});
-        } catch (HttpClientErrorException.NotFound e) {
-            return Blob.of("");
-        } catch (Exception e) {
-            // A transient/transport failure on one file must not abort the whole PR
-            // diff — degrade to a skipped stub for this file only.
-            log.warn("Failed to fetch content for {} at {}: {}", path, sha, e.getMessage());
-            return Blob.skipped("content unavailable: " + e.getMessage());
-        }
-        if (result == null) {
-            return Blob.of("");
-        }
-        if (result.get("contentMetadata") instanceof Map<?, ?> metadata
-                && Boolean.TRUE.equals(metadata.get("isBinary"))) {
-            return Blob.skipped("binary");
-        }
-        Object contentObj = result.get("content");
-        String content = contentObj instanceof String s ? s : "";
-        // Measured in UTF-8 bytes, not chars: the budget is a byte budget, and a file of
-        // CJK text or emoji carries up to three times its char count.
-        if (content.getBytes(StandardCharsets.UTF_8).length
-                > AzureDevopsDiffBuilder.MAX_BLOB_BYTES) {
-            return Blob.skipped("file exceeds "
-                    + (AzureDevopsDiffBuilder.MAX_BLOB_BYTES / 1024) + " KiB");
-        }
-        return Blob.of(content);
-    }
-
     /**
      * Picks the {@code versionDescriptor.versionType} matching the shape of {@code ref}.
      * <p>
@@ -578,21 +309,6 @@ public class AzureDevopsApiClient implements RepositoryApiClient {
     /** Extracts {@code commitId} from a {@code lastMergeTargetCommit}/{@code lastMergeSourceCommit} node. */
     private static String commitId(Object node) {
         return node instanceof Map<?, ?> m && m.get("commitId") instanceof String s ? s : null;
-    }
-
-    /** Blob content, or the reason it was deliberately not fetched. Exactly one is non-null. */
-    private record Blob(String content, String skipReason) {
-        static Blob of(String content) {
-            return new Blob(content, null);
-        }
-
-        static Blob skipped(String reason) {
-            return new Blob(null, reason);
-        }
-
-        boolean isSkipped() {
-            return skipReason != null;
-        }
     }
 
     @Override

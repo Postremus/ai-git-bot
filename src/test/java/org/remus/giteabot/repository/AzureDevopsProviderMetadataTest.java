@@ -10,7 +10,7 @@ import static org.junit.jupiter.api.Assertions.*;
 class AzureDevopsProviderMetadataTest {
 
     private final AzureDevopsProviderMetadata metadata =
-            new AzureDevopsProviderMetadata(null);
+            new AzureDevopsProviderMetadata(null, null);
 
     @Test
     void providerType_isAzureDevops() {
