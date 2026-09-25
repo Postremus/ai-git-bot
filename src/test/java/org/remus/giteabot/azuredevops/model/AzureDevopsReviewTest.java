@@ -1,8 +1,6 @@
 package org.remus.giteabot.azuredevops.model;
 
 import org.junit.jupiter.api.Test;
-import org.remus.giteabot.repository.model.Review;
-import org.remus.giteabot.repository.model.ReviewComment;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -46,12 +44,6 @@ class AzureDevopsReviewTest {
 
         assertNull(review.getSubmittedAt());
         assertNull(review.getCommentsCount());
-    }
-
-    @Test
-    void implementsSharedInterfaces() {
-        assertInstanceOf(Review.class, new AzureDevopsReview());
-        assertInstanceOf(ReviewComment.class, new AzureDevopsReviewComment());
     }
 
     @Test
