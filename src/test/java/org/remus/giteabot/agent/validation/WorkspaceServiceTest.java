@@ -310,7 +310,7 @@ class WorkspaceServiceTest {
     void authorizationHeader_notUsedByDefault() throws IOException {
         WorkspaceSetup setup = workspaceService.createWorkspaceSetup();
         setup.setAuthentication("https://git.example.com/owner/repo.git",
-                RepositoryCredentials.of("https://git.example.com", "https://git.example.com", "token"));
+                RepositoryCredentials.of("https://git.example.com", "https://git.example.com", "token"), false);
 
         try {
             assertThat(workspaceService.authorizationHeaderEnvironment(setup)).isEmpty();
@@ -367,7 +367,7 @@ class WorkspaceServiceTest {
         runGit(workspace, "remote", "add", "origin", remote.toAbsolutePath().toString());
         runGit(workspace, "push", "-u", "origin", branch);
         setup.setAuthentication(remote.toString(),
-                RepositoryCredentials.of("", remote.toString(), ""));
+                RepositoryCredentials.of("", remote.toString(), ""), false);
         workspaceService.registerWorkspace(setup);
 
         Path hook = workspace.resolve(".git/hooks/pre-commit");

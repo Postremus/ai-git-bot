@@ -74,10 +74,6 @@ class WorkspaceSetup {
         return usesAuthorizationHeader;
     }
 
-    void setAuthentication(String repositoryRemote, RepositoryCredentials repositoryCredentials) {
-        setAuthentication(repositoryRemote, repositoryCredentials, false);
-    }
-
     void setAuthentication(String repositoryRemote, RepositoryCredentials repositoryCredentials,
                            boolean usesAuthorizationHeader) {
         this.repositoryRemote = repositoryRemote;
