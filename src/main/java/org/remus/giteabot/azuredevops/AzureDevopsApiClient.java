@@ -15,6 +15,7 @@ import org.springframework.web.client.RestClient;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -22,6 +23,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Supplier;
 import java.util.regex.Pattern;
 
 /**
@@ -598,24 +600,20 @@ public class AzureDevopsApiClient implements RepositoryApiClient {
                                        String body) {
         AzureDevopsAddress addr = AzureDevopsAddress.parse(owner, repo);
         Scope scope = repositoryScope(addr);
-        try {
-            restClient.post()
-                    .uri(builder -> builder
-                            .path(scope.path() + "/pullRequests/{prId}/threads")
-                            .queryParam("api-version", API_PREVIEW_1)
-                            .build(vars(scope, pullNumber)))
-                    .body(Map.of(
-                            "comments", List.of(Map.of(
-                                    "parentCommentId", 0,
-                                    "content", body,
-                                    "commentType", 1)),
-                            "status", 1))
-                    .retrieve()
-                    .toBodilessEntity();
-        } catch (Exception e) {
-            log.error("Failed to post comment on PR #{} in {}: {}",
-                    pullNumber, repo, e.getMessage(), e);
-        }
+        run(() -> restClient.post()
+                .uri(builder -> builder
+                        .path(scope.path() + "/pullRequests/{prId}/threads")
+                        .queryParam("api-version", API_PREVIEW_1)
+                        .build(vars(scope, pullNumber)))
+                .body(Map.of(
+                        "comments", List.of(Map.of(
+                                "parentCommentId", 0,
+                                "content", body,
+                                "commentType", 1)),
+                        "status", 1))
+                .retrieve()
+                .toBodilessEntity(),
+                "post comment on PR #{} in {}", pullNumber, repo);
     }
 
     @Override
@@ -635,28 +633,24 @@ public class AzureDevopsApiClient implements RepositoryApiClient {
         AzureDevopsAddress addr = AzureDevopsAddress.parse(owner, repo);
         String path = itemPath(filePath);
         Scope scope = repositoryScope(addr);
-        try {
-            restClient.post()
-                    .uri(builder -> builder
-                            .path(scope.path() + "/pullRequests/{prId}/threads")
-                            .queryParam("api-version", API_PREVIEW_1)
-                            .build(vars(scope, pullNumber)))
-                    .body(Map.of(
-                            "comments", List.of(Map.of(
-                                    "parentCommentId", 0,
-                                    "content", body,
-                                    "commentType", 1)),
-                            "status", 1,
-                            "threadContext", Map.of(
-                                    "filePath", path,
-                                    "rightFileStart", Map.of("line", line, "offset", 1),
-                                    "rightFileEnd", Map.of("line", line, "offset", 1))))
-                    .retrieve()
-                    .toBodilessEntity();
-        } catch (Exception e) {
-            log.error("Failed to post inline comment on PR #{} in {} at {}:{}: {}",
-                    pullNumber, repo, filePath, line, e.getMessage(), e);
-        }
+        run(() -> restClient.post()
+                .uri(builder -> builder
+                        .path(scope.path() + "/pullRequests/{prId}/threads")
+                        .queryParam("api-version", API_PREVIEW_1)
+                        .build(vars(scope, pullNumber)))
+                .body(Map.of(
+                        "comments", List.of(Map.of(
+                                "parentCommentId", 0,
+                                "content", body,
+                                "commentType", 1)),
+                        "status", 1,
+                        "threadContext", Map.of(
+                                "filePath", path,
+                                "rightFileStart", Map.of("line", line, "offset", 1),
+                                "rightFileEnd", Map.of("line", line, "offset", 1))))
+                .retrieve()
+                .toBodilessEntity(),
+                "post inline comment on PR #{} in {} at {}:{}", pullNumber, repo, filePath, line);
     }
 
     @Override
@@ -672,27 +666,22 @@ public class AzureDevopsApiClient implements RepositoryApiClient {
         }
         int vote = action == PostReviewAction.APPROVE ? VOTE_APPROVE : VOTE_REJECT;
         Scope scope = repositoryScope(addr);
-        try {
-            restClient.put()
-                    .uri(builder -> builder
-                            .path(scope.path()
-                                    + "/pullRequests/{prId}/reviewers/{reviewerId}")
-                            .queryParam("api-version", API_PREVIEW_1)
-                            .build(vars(scope, pullNumber, reviewerId)))
-                    .body(Map.of("vote", vote))
-                    .retrieve()
-                    .toBodilessEntity();
-        } catch (Exception e) {
-            log.error("Failed to cast vote on PR #{} in {}: {}",
-                    pullNumber, repo, e.getMessage(), e);
-        }
+        run(() -> restClient.put()
+                .uri(builder -> builder
+                        .path(scope.path() + "/pullRequests/{prId}/reviewers/{reviewerId}")
+                        .queryParam("api-version", API_PREVIEW_1)
+                        .build(vars(scope, pullNumber, reviewerId)))
+                .body(Map.of("vote", vote))
+                .retrieve()
+                .toBodilessEntity(),
+                "cast vote on PR #{} in {}", pullNumber, repo);
     }
 
     @Override
     public List<Review> getReviews(String owner, String repo, Long pullNumber) {
         AzureDevopsAddress addr = AzureDevopsAddress.parse(owner, repo);
         Scope scope = repositoryScope(addr);
-        try {
+        return call(() -> {
             Map<String, Object> result = restClient.get()
                     .uri(builder -> builder
                             .path(scope.path() + "/pullRequests/{prId}")
@@ -700,20 +689,17 @@ public class AzureDevopsApiClient implements RepositoryApiClient {
                             .build(vars(scope, pullNumber)))
                     .retrieve()
                     .body(new ParameterizedTypeReference<>() {});
-            if (result != null && result.get("reviewers") instanceof List<?> reviewers) {
-                List<Review> mapped = new ArrayList<>();
-                for (Object entry : reviewers) {
-                    if (entry instanceof Map<?, ?> reviewer) {
-                        mapped.add(toAzureDevopsReview(reviewer));
-                    }
-                }
-                return mapped;
+            if (result == null || !(result.get("reviewers") instanceof List<?> reviewers)) {
+                return null;
             }
-        } catch (Exception e) {
-            log.error("Failed to fetch reviews for PR #{} in {}: {}",
-                    pullNumber, repo, e.getMessage(), e);
-        }
-        return List.of();
+            List<Review> mapped = new ArrayList<>();
+            for (Object entry : reviewers) {
+                if (entry instanceof Map<?, ?> reviewer) {
+                    mapped.add(toAzureDevopsReview(reviewer));
+                }
+            }
+            return mapped;
+        }, List.of(), "fetch reviews for PR #{} in {}", pullNumber, repo);
     }
 
     @SuppressWarnings("unchecked")
@@ -740,7 +726,7 @@ public class AzureDevopsApiClient implements RepositoryApiClient {
                                                  Long pullNumber, Long reviewId) {
         AzureDevopsAddress addr = AzureDevopsAddress.parse(owner, repo);
         Scope scope = repositoryScope(addr);
-        try {
+        return call(() -> {
             Map<String, Object> result = restClient.get()
                     .uri(builder -> builder
                             .path(scope.path() + "/pullRequests/{prId}/threads")
@@ -748,20 +734,17 @@ public class AzureDevopsApiClient implements RepositoryApiClient {
                             .build(vars(scope, pullNumber)))
                     .retrieve()
                     .body(new ParameterizedTypeReference<>() {});
-            if (result != null && result.get("value") instanceof List<?> threads) {
-                List<ReviewComment> mapped = new ArrayList<>();
-                for (Object threadObj : threads) {
-                    if (threadObj instanceof Map<?, ?> thread) {
-                        mapped.addAll(toAzureDevopsReviewComments(thread));
-                    }
-                }
-                return mapped;
+            if (result == null || !(result.get("value") instanceof List<?> threads)) {
+                return null;
             }
-        } catch (Exception e) {
-            log.error("Failed to fetch review comments for PR #{} in {}: {}",
-                    pullNumber, repo, e.getMessage(), e);
-        }
-        return List.of();
+            List<ReviewComment> mapped = new ArrayList<>();
+            for (Object threadObj : threads) {
+                if (threadObj instanceof Map<?, ?> thread) {
+                    mapped.addAll(toAzureDevopsReviewComments(thread));
+                }
+            }
+            return mapped;
+        }, List.of(), "fetch review comments for PR #{} in {}", pullNumber, repo);
     }
 
     private List<ReviewComment> toAzureDevopsReviewComments(Map<?, ?> thread) {
@@ -872,7 +855,7 @@ public class AzureDevopsApiClient implements RepositoryApiClient {
                                                             Long pullNumber) {
         AzureDevopsAddress addr = AzureDevopsAddress.parse(owner, repo);
         Scope scope = repositoryScope(addr);
-        try {
+        return call(() -> {
             Map<String, Object> result = restClient.get()
                     .uri(builder -> builder
                             .path(scope.path() + "/pullRequests/{prId}/commits")
@@ -880,14 +863,9 @@ public class AzureDevopsApiClient implements RepositoryApiClient {
                             .build(vars(scope, pullNumber)))
                     .retrieve()
                     .body(new ParameterizedTypeReference<>() {});
-            if (result != null && result.get("value") instanceof List<?> value) {
-                return normalizeCommitEntries(value);
-            }
-        } catch (Exception e) {
-            log.error("Failed to fetch commits for PR #{} in {}: {}",
-                    pullNumber, repo, e.getMessage(), e);
-        }
-        return List.of();
+            return result != null && result.get("value") instanceof List<?> value
+                    ? normalizeCommitEntries(value) : null;
+        }, List.of(), "fetch commits for PR #{} in {}", pullNumber, repo);
     }
 
     /**
@@ -925,20 +903,14 @@ public class AzureDevopsApiClient implements RepositoryApiClient {
                                                       Long pullNumber) {
         AzureDevopsAddress addr = AzureDevopsAddress.parse(owner, repo);
         Scope scope = repositoryScope(addr);
-        try {
-            Map<String, Object> result = restClient.get()
-                    .uri(builder -> builder
-                            .path(scope.path() + "/pullRequests/{prId}")
-                            .queryParam("api-version", API_PREVIEW_1)
-                            .build(vars(scope, pullNumber)))
-                    .retrieve()
-                    .body(new ParameterizedTypeReference<>() {});
-            return result != null ? result : Map.of();
-        } catch (Exception e) {
-            log.error("Failed to fetch PR #{} details in {}: {}",
-                    pullNumber, repo, e.getMessage(), e);
-            return Map.of();
-        }
+        return call(() -> restClient.get()
+                .uri(builder -> builder
+                        .path(scope.path() + "/pullRequests/{prId}")
+                        .queryParam("api-version", API_PREVIEW_1)
+                        .build(vars(scope, pullNumber)))
+                .retrieve()
+                .body(new ParameterizedTypeReference<Map<String, Object>>() {}),
+                Map.of(), "fetch PR #{} details in {}", pullNumber, repo);
     }
 
     // ---- Repository operations ----
@@ -947,7 +919,7 @@ public class AzureDevopsApiClient implements RepositoryApiClient {
     public String getDefaultBranch(String owner, String repo) {
         AzureDevopsAddress addr = AzureDevopsAddress.parse(owner, repo);
         Scope scope = repositoryScope(addr);
-        try {
+        return call(() -> {
             Map<String, Object> result = restClient.get()
                     .uri(builder -> builder
                             .path(scope.path())
@@ -955,22 +927,20 @@ public class AzureDevopsApiClient implements RepositoryApiClient {
                             .build(scope.vars()))
                     .retrieve()
                     .body(new ParameterizedTypeReference<>() {});
-            if (result != null && result.get("defaultBranch") instanceof String branch) {
-                return branch.startsWith("refs/heads/")
-                        ? branch.substring("refs/heads/".length())
-                        : branch;
+            if (result == null || !(result.get("defaultBranch") instanceof String branch)) {
+                return null;
             }
-        } catch (Exception e) {
-            log.error("Failed to fetch default branch for {}: {}", repo, e.getMessage(), e);
-        }
-        return "main";
+            return branch.startsWith("refs/heads/")
+                    ? branch.substring("refs/heads/".length())
+                    : branch;
+        }, "main", "fetch default branch for {}", repo);
     }
 
     @Override
     public List<Map<String, Object>> getRepositoryTree(String owner, String repo, String ref) {
         AzureDevopsAddress addr = AzureDevopsAddress.parse(owner, repo);
         Scope scope = repositoryScope(addr);
-        try {
+        return call(() -> {
             Map<String, Object> result = restClient.get()
                     .uri(builder -> builder
                             .path(scope.path() + "/items")
@@ -982,14 +952,9 @@ public class AzureDevopsApiClient implements RepositoryApiClient {
                             .build(scope.vars()))
                     .retrieve()
                     .body(new ParameterizedTypeReference<>() {});
-            if (result != null && result.get("value") instanceof List<?> value) {
-                return normalizeTreeEntries(value);
-            }
-        } catch (Exception e) {
-            log.error("Failed to fetch repository tree for {} at ref={}: {}",
-                    repo, ref, e.getMessage(), e);
-        }
-        return List.of();
+            return result != null && result.get("value") instanceof List<?> value
+                    ? normalizeTreeEntries(value) : null;
+        }, List.of(), "fetch repository tree for {} at ref={}", repo, ref);
     }
 
     /**
@@ -1033,7 +998,7 @@ public class AzureDevopsApiClient implements RepositoryApiClient {
         AzureDevopsAddress addr = AzureDevopsAddress.parse(owner, repo);
         String itemPath = itemPath(path);
         Scope scope = repositoryScope(addr);
-        try {
+        return call(() -> {
             Map<String, Object> result = restClient.get()
                     .uri(builder -> builder
                             .path(scope.path() + "/items")
@@ -1045,14 +1010,9 @@ public class AzureDevopsApiClient implements RepositoryApiClient {
                             .build(scope.vars()))
                     .retrieve()
                     .body(new ParameterizedTypeReference<>() {});
-            if (result != null && result.get("content") instanceof String content) {
-                return content;
-            }
-        } catch (Exception e) {
-            log.error("Failed to fetch file content for {}/{} at ref={}: {}",
-                    repo, path, ref, e.getMessage(), e);
-        }
-        return "";
+            return result != null && result.get("content") instanceof String content
+                    ? content : null;
+        }, "", "fetch file content for {}/{} at ref={}", repo, path, ref);
     }
 
     @Override
@@ -1084,30 +1044,26 @@ public class AzureDevopsApiClient implements RepositoryApiClient {
             return;
         }
         Scope scope = repositoryScope(addr);
-        try {
-            restClient.post()
-                    .uri(builder -> builder
-                            .path(scope.path() + "/pushes")
-                            .queryParam("api-version", API_PREVIEW_2)
-                            .build(scope.vars()))
-                    .body(Map.of(
-                            "refUpdates", List.of(Map.of(
-                                    "name", "refs/heads/" + branch,
-                                    "oldObjectId", oldObjectId)),
-                            "commits", List.of(Map.of(
-                                    "comment", message,
-                                    "changes", List.of(Map.of(
-                                            "changeType", changeType,
-                                            "item", Map.of("path", itemPath),
-                                            "newContent", Map.of(
-                                                    "content", content,
-                                                    "contentType", "rawtext")))))))
-                    .retrieve()
-                    .toBodilessEntity();
-        } catch (Exception e) {
-            log.error("Failed to create/update file {} on branch '{}' in {}: {}",
-                    path, branch, repo, e.getMessage(), e);
-        }
+        run(() -> restClient.post()
+                .uri(builder -> builder
+                        .path(scope.path() + "/pushes")
+                        .queryParam("api-version", API_PREVIEW_2)
+                        .build(scope.vars()))
+                .body(Map.of(
+                        "refUpdates", List.of(Map.of(
+                                "name", "refs/heads/" + branch,
+                                "oldObjectId", oldObjectId)),
+                        "commits", List.of(Map.of(
+                                "comment", message,
+                                "changes", List.of(Map.of(
+                                        "changeType", changeType,
+                                        "item", Map.of("path", itemPath),
+                                        "newContent", Map.of(
+                                                "content", content,
+                                                "contentType", "rawtext")))))))
+                .retrieve()
+                .toBodilessEntity(),
+                "create/update file {} on branch '{}' in {}", path, branch, repo);
     }
 
     /**
@@ -1139,7 +1095,7 @@ public class AzureDevopsApiClient implements RepositoryApiClient {
                                   String head, String base) {
         AzureDevopsAddress addr = AzureDevopsAddress.parse(owner, repo);
         Scope scope = repositoryScope(addr);
-        try {
+        return call(() -> {
             Map<String, Object> result = restClient.post()
                     .uri(builder -> builder
                             .path(scope.path() + "/pullrequests")
@@ -1152,17 +1108,38 @@ public class AzureDevopsApiClient implements RepositoryApiClient {
                             "description", body != null ? body : ""))
                     .retrieve()
                     .body(new ParameterizedTypeReference<>() {});
-            if (result != null && result.get("pullRequestId") instanceof Number n) {
-                return n.longValue();
-            }
-        } catch (Exception e) {
-            log.error("Failed to create pull request '{}' in {}: {}",
-                    title, repo, e.getMessage(), e);
-        }
-        return null;
+            return result != null && result.get("pullRequestId") instanceof Number n
+                    ? n.longValue() : null;
+        }, null, "create pull request '{}' in {}", title, repo);
     }
 
     // ---- Internal helpers ----
+
+    /**
+     * Runs a REST request, returning {@code fallback} when it fails or yields
+     * {@code null}. Failures are logged as {@code "Failed to <action>: <message>"}
+     * with the stack trace; {@code action} is an SLF4J pattern over {@code args}.
+     */
+    private <T> T call(Supplier<T> request, T fallback, String action, Object... args) {
+        try {
+            T result = request.get();
+            return result != null ? result : fallback;
+        } catch (Exception e) {
+            Object[] logArgs = Arrays.copyOf(args, args.length + 2);
+            logArgs[args.length] = e.getMessage();
+            logArgs[args.length + 1] = e;
+            log.error("Failed to " + action + ": {}", logArgs);
+            return fallback;
+        }
+    }
+
+    /** {@link #call} for requests without a result. */
+    private void run(Runnable request, String action, Object... args) {
+        call(() -> {
+            request.run();
+            return Boolean.TRUE;
+        }, Boolean.FALSE, action, args);
+    }
 
     /**
      * Resolves the authenticated bot's identity GUID, required to cast a vote, from
