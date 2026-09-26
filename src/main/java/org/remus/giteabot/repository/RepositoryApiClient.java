@@ -248,9 +248,6 @@ public interface RepositoryApiClient {
     String getFileContent(String owner, String repo, String path, String ref);
 
 
-    void createOrUpdateFile(String owner, String repo, String path, String content,
-                            String message, String branch, String sha);
-
     Long createPullRequest(String owner, String repo, String title, String body,
                            String head, String base);
 
