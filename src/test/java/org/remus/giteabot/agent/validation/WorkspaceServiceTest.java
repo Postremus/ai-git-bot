@@ -28,114 +28,120 @@ class WorkspaceServiceTest {
     private RepositoryApiClient repositoryClient;
     @TempDir
     Path tempDir;
-    @Test
-    void cleanupWorkspace_deletesDirectory() throws IOException {
-        Path wsDir = tempDir.resolve("workspace");
-        Files.createDirectories(wsDir.resolve("sub"));
-        Files.writeString(wsDir.resolve("sub/file.txt"), "content");
-        workspaceService.cleanupWorkspace(wsDir);
-        assertThat(wsDir).doesNotExist();
-    }
-    @Test
-    void cleanupWorkspace_nullPath_doesNotThrow() {
-        workspaceService.cleanupWorkspace((Path) null);
-        // no exception expected
-    }
 
     @Test
-    void prepareWorkspace_fallsBackToPrHeadRef_whenBranchCloneFails() throws Exception {
-        // Create a local bare repo with a main branch and a refs/pull/42/head ref
-        Path remoteDir = tempDir.resolve("remote");
-        Files.createDirectories(remoteDir);
-        runGit(remoteDir, "init", "--bare");
+    void openWorkspace_clonesBranch() throws Exception {
+        Path remote = createBareRepository("open", "open content");
+        when(repositoryClient.getRepositoryRemote("owner", "repo")).thenReturn(remote.toString());
+        when(repositoryClient.getCredentials())
+                .thenReturn(RepositoryCredentials.of("", remote.toString(), "dummy-token"));
 
-        Path localRepo = tempDir.resolve("local");
-        Files.createDirectories(localRepo);
-        runGit(localRepo, "init");
-        runGit(localRepo, "config", "user.email", "test@test.com");
-        runGit(localRepo, "config", "user.name", "Test");
-        runGit(localRepo, "branch", "-M", "main");
-        runGit(localRepo, "remote", "add", "origin", remoteDir.toAbsolutePath().toString());
-        Files.writeString(localRepo.resolve("README.md"), "pr content");
-        runGit(localRepo, "add", "README.md");
-        runGit(localRepo, "commit", "-m", "pr commit");
-        runGit(localRepo, "push", "-u", "origin", "main");
-        // Push the same commit as a simulated PR head ref
-        runGit(localRepo, "push", "origin", "main:refs/pull/42/head");
-
-        // Now clone with a branch that does NOT exist in the remote, but prNumber=42
-        // The --branch clone will fail, triggering the PR ref fallback
-        RepositoryApiClient client = repositoryClient(remoteDir.toAbsolutePath().toString());
-        WorkspaceResult result = workspaceService.prepareWorkspace(
-                client, "any", "any", "nonexistent-branch", 42L);
-
-        assertThat(result.success()).isTrue();
-        assertThat(result.workspacePath()).isNotNull();
-
-        // Verify the fallback created a real local branch, not detached HEAD
-        assertThat(runGitCapture(result.workspacePath(), "rev-parse", "--abbrev-ref", "HEAD"))
-                .isEqualTo("nonexistent-branch");
-
-        String content = Files.readString(result.workspacePath().resolve("README.md"));
-        assertThat(content).isEqualTo("pr content");
-
-        verify(client, times(1)).getRepositoryRemote("any", "any");
-        verify(client, times(1)).getCredentials();
-
-        workspaceService.cleanupWorkspace(result.workspacePath());
-    }
-
-    @Test
-    void prepareWorkspace_fallbackRetainsExactlyOneWorkspaceDirectory() throws Exception {
-        // Regression for the agentic review BLOCKER: when the branch clone fails
-        // and the PR-ref fallback kicks in, the first workspace attempt must be
-        // fully removed before the second is created — otherwise a partial
-        // deletion could orphan the first attempt's credential-store file.
-        Path workspaceBaseDir = tempDir.resolve("sandbox-workspaces");
-        workspaceService = new WorkspaceService(workspaceBaseDir.toString());
-
-        Path remoteDir = tempDir.resolve("remote");
-        Files.createDirectories(remoteDir);
-        runGit(remoteDir, "init", "--bare");
-
-        Path localRepo = tempDir.resolve("local");
-        Files.createDirectories(localRepo);
-        runGit(localRepo, "init");
-        runGit(localRepo, "config", "user.email", "test@test.com");
-        runGit(localRepo, "config", "user.name", "Test");
-        runGit(localRepo, "branch", "-M", "main");
-        runGit(localRepo, "remote", "add", "origin", remoteDir.toAbsolutePath().toString());
-        Files.writeString(localRepo.resolve("README.md"), "pr content");
-        runGit(localRepo, "add", "README.md");
-        runGit(localRepo, "commit", "-m", "pr commit");
-        runGit(localRepo, "push", "-u", "origin", "main");
-        runGit(localRepo, "push", "origin", "main:refs/pull/42/head");
-
-        WorkspaceResult result = workspaceService.prepareWorkspace(
-                repositoryClient(remoteDir.toAbsolutePath().toString()),
-                "any", "any", "nonexistent-branch", 42L);
-
-        assertThat(result.success()).isTrue();
-
-        try (var children = Files.list(workspaceBaseDir)) {
-            assertThat(children
-                    .filter(path -> path.getFileName().toString().startsWith("agent-workspace-"))
-                    .count())
-                    .isEqualTo(1);
-        }
-
-        workspaceService.cleanupWorkspace(result.workspacePath());
-
-        try (var children = Files.list(workspaceBaseDir)) {
-            assertThat(children
-                    .filter(path -> path.getFileName().toString().startsWith("agent-workspace-"))
-                    .count())
-                    .isZero();
+        try (Workspace workspace = workspaceService.openWorkspace(repositoryClient, "owner", "repo", "main", null)) {
+            assertThat(Files.readString(workspace.dir().resolve("README.md"))).isEqualTo("open content");
         }
     }
 
     @Test
-    void prepareWritablePullRequestWorkspace_pushesForkMainWithoutChangingTargetMain() throws Exception {
+    void openWorkspace_fallsBackToPrHeadRefAndKeepsOneDirectory() throws Exception {
+        Path base = tempDir.resolve("sandbox-workspaces");
+        workspaceService = new WorkspaceService(base.toString());
+        Path remote = createBareRepository("fallback", "pr content");
+        runGit(remote, "update-ref", "refs/pull/42/head", "refs/heads/main");
+        when(repositoryClient.getRepositoryRemote("owner", "repo")).thenReturn(remote.toString());
+        when(repositoryClient.getCredentials())
+                .thenReturn(RepositoryCredentials.of("", remote.toString(), "dummy-token"));
+
+        Workspace workspace = workspaceService.openWorkspace(repositoryClient, "owner", "repo", "missing-branch", 42L);
+        try {
+            assertThat(runGitCapture(workspace.dir(), "rev-parse", "--abbrev-ref", "HEAD")).isEqualTo("missing-branch");
+            try (var children = Files.list(base)) {
+                assertThat(children.filter(p -> p.getFileName().toString().startsWith("agent-workspace-"))).hasSize(1);
+            }
+        } finally {
+            workspace.close();
+        }
+        try (var children = Files.list(base)) {
+            assertThat(children).isEmpty();
+        }
+    }
+
+    @Test
+    void openWorkspace_prRefFetchFailureLeavesNoDirectory() throws Exception {
+        Path base = tempDir.resolve("sandbox-workspaces");
+        workspaceService = new WorkspaceService(base.toString());
+        Path remote = createBareRepository("no-pr-ref", "content");
+        when(repositoryClient.getRepositoryRemote("owner", "repo")).thenReturn(remote.toString());
+        when(repositoryClient.getCredentials())
+                .thenReturn(RepositoryCredentials.of("", remote.toString(), "dummy-token"));
+
+        assertThatThrownBy(() -> workspaceService.openWorkspace(repositoryClient, "owner", "repo", "missing-branch", 42L))
+                .isInstanceOf(WorkspaceException.class)
+                .hasMessageStartingWith("Failed to fetch PR head ref for PR #42:");
+        try (var children = Files.list(base)) {
+            assertThat(children).isEmpty();
+        }
+    }
+
+    @Test
+    void openWorkspace_cloneFailureWithoutPrThrowsAndLeavesNoDirectory() throws Exception {
+        Path base = tempDir.resolve("sandbox-workspaces");
+        workspaceService = new WorkspaceService(base.toString());
+        Path remote = createBareRepository("no-branch", "content");
+        when(repositoryClient.getRepositoryRemote("owner", "repo")).thenReturn(remote.toString());
+        when(repositoryClient.getCredentials())
+                .thenReturn(RepositoryCredentials.of("", remote.toString(), "dummy-token"));
+
+        assertThatThrownBy(() -> workspaceService.openWorkspace(repositoryClient, "owner", "repo", "missing-branch", null))
+                .isInstanceOf(WorkspaceException.class)
+                .hasMessageStartingWith("Failed to clone repository:");
+        try (var children = Files.list(base)) {
+            assertThat(children).isEmpty();
+        }
+    }
+
+    @Test
+    void openWorkspace_resolutionFailureThrowsWithoutAllocatingWorkspace() {
+        Path base = tempDir.resolve("sandbox-workspaces");
+        workspaceService = new WorkspaceService(base.toString());
+        when(repositoryClient.getRepositoryRemote("owner", "repo"))
+                .thenThrow(new IllegalStateException("provider unavailable"));
+
+        assertThatThrownBy(() -> workspaceService.openWorkspace(repositoryClient, "owner", "repo", "main", null))
+                .isInstanceOf(WorkspaceException.class)
+                .hasMessage("Failed to resolve repository checkout: provider unavailable");
+        assertThat(base).doesNotExist();
+    }
+
+    @Test
+    void openWorkspace_rejectsIncompleteCheckoutConfiguration() {
+        Path base = tempDir.resolve("sandbox-workspaces");
+        workspaceService = new WorkspaceService(base.toString());
+        when(repositoryClient.getRepositoryRemote("owner", "repo")).thenReturn(" ");
+        when(repositoryClient.getCredentials())
+                .thenReturn(RepositoryCredentials.of("", "https://git.example.com", "token"));
+
+        assertThatThrownBy(() -> workspaceService.openWorkspace(repositoryClient, "owner", "repo", "main", null))
+                .isInstanceOf(WorkspaceException.class)
+                .hasMessageContaining("incomplete checkout configuration");
+        assertThat(base).doesNotExist();
+    }
+
+    @Test
+    void openWorkspace_resolvesCheckoutOnceAcrossFallback() throws Exception {
+        Path remote = createBareRepository("once", "content");
+        runGit(remote, "update-ref", "refs/pull/42/head", "refs/heads/main");
+        when(repositoryClient.getRepositoryRemote("owner", "repo")).thenReturn(remote.toString());
+        when(repositoryClient.getCredentials())
+                .thenReturn(RepositoryCredentials.of("", remote.toString(), "dummy-token"));
+
+        workspaceService.openWorkspace(repositoryClient, "owner", "repo", "missing-branch", 42L).close();
+
+        verify(repositoryClient, times(1)).getRepositoryRemote("owner", "repo");
+        verify(repositoryClient, times(1)).getCredentials();
+    }
+
+    @Test
+    void openWritablePullRequestWorkspace_pushesForkMainWithoutChangingTargetMain() throws Exception {
         Path targetRemote = createBareRepository("target", "target content");
         Path forkRemote = createBareRepository("fork", "fork content");
         String targetBefore = runGitCapture(targetRemote, "rev-parse", "refs/heads/main");
@@ -149,37 +155,33 @@ class WorkspaceServiceTest {
         when(repositoryClient.getCredentials())
                 .thenReturn(RepositoryCredentials.of("", forkRemote.toString(), "dummy-token"));
 
-        WorkspaceResult result = workspaceService.prepareWritablePullRequestWorkspace(
-                repositoryClient, "base", "project", "main", 7L);
-
-        assertThat(result.success()).isTrue();
-        Files.writeString(result.workspacePath().resolve("README.md"), "bot update");
-        assertThat(workspaceService.commitAndPush(result.workspacePath(), "main", "docs: update",
-                "AI Agent", "ai-agent@bot.local", false)).isTrue();
+        try (Workspace workspace = workspaceService.openWritablePullRequestWorkspace(
+                repositoryClient, "base", "project", "main", 7L)) {
+            Files.writeString(workspace.dir().resolve("README.md"), "bot update");
+            workspace.commitAndPush("main", "docs: update", "AI Agent", "ai-agent@bot.local", false);
+        }
 
         assertThat(runGitCapture(targetRemote, "rev-parse", "refs/heads/main")).isEqualTo(targetBefore);
         assertThat(runGitCapture(forkRemote, "rev-parse", "refs/heads/main")).isNotEqualTo(forkBefore);
         verify(repositoryClient, never()).getRepositoryRemote("base", "project");
-        workspaceService.cleanupWorkspace(result.workspacePath());
     }
 
     @Test
-    void prepareWritablePullRequestWorkspace_authoritativeFailureNeverFallsBackToTarget() {
+    void openWritablePullRequestWorkspace_authoritativeFailureNeverFallsBackToTarget() {
         when(repositoryClient.requiresAuthoritativePullRequestHead()).thenReturn(true);
         when(repositoryClient.getPullRequestHead("base", "project", 7L, "main"))
                 .thenThrow(new IllegalStateException("missing head repository"));
 
-        WorkspaceResult result = workspaceService.prepareWritablePullRequestWorkspace(
-                repositoryClient, "base", "project", "main", 7L);
-
-        assertThat(result.success()).isFalse();
-        assertThat(result.error()).contains("missing head repository");
+        assertThatThrownBy(() -> workspaceService.openWritablePullRequestWorkspace(
+                repositoryClient, "base", "project", "main", 7L))
+                .isInstanceOf(WorkspaceException.class)
+                .hasMessage("Failed to resolve writable pull-request head: missing head repository");
         verify(repositoryClient, never()).getRepositoryRemote("base", "project");
         verify(repositoryClient, never()).getCredentials();
     }
 
     @Test
-    void prepareWritablePullRequestWorkspace_nonAuthoritativeProviderKeepsPrRefFallback() throws Exception {
+    void openWritablePullRequestWorkspace_nonAuthoritativeProviderKeepsPrRefFallback() throws Exception {
         Path remoteDir = createBareRepository("provider-target", "pr content");
         runGit(remoteDir, "update-ref", "refs/pull/42/head", "refs/heads/main");
         when(repositoryClient.requiresAuthoritativePullRequestHead()).thenReturn(false);
@@ -187,13 +189,11 @@ class WorkspaceServiceTest {
         when(repositoryClient.getCredentials())
                 .thenReturn(RepositoryCredentials.of("", remoteDir.toString(), "dummy-token"));
 
-        WorkspaceResult result = workspaceService.prepareWritablePullRequestWorkspace(
-                repositoryClient, "base", "project", "missing-branch", 42L);
-
-        assertThat(result.success()).isTrue();
-        assertThat(runGitCapture(result.workspacePath(), "rev-parse", "--abbrev-ref", "HEAD"))
-                .isEqualTo("missing-branch");
-        workspaceService.cleanupWorkspace(result.workspacePath());
+        try (Workspace workspace = workspaceService.openWritablePullRequestWorkspace(
+                repositoryClient, "base", "project", "missing-branch", 42L)) {
+            assertThat(runGitCapture(workspace.dir(), "rev-parse", "--abbrev-ref", "HEAD"))
+                    .isEqualTo("missing-branch");
+        }
     }
 
     @Test
@@ -233,30 +233,6 @@ class WorkspaceServiceTest {
     }
 
     @Test
-    void fetchBranch_rejectsWorkspaceWithoutAuthenticationState() {
-        CommandResult result = workspaceService.fetchBranch(tempDir, "main");
-
-        assertThat(result.success()).isFalse();
-        assertThat(result.output()).isEqualTo("Workspace authentication is unavailable");
-    }
-    @Test
-    void prepareWorkspace_returnsFailureWhenProviderResolutionFailsWithoutAllocatingWorkspace() {
-        Path workspaceBaseDir = tempDir.resolve("sandbox-workspaces");
-        workspaceService = new WorkspaceService(workspaceBaseDir.toString());
-        when(repositoryClient.getRepositoryRemote("owner", "repo"))
-                .thenThrow(new IllegalStateException("provider unavailable"));
-
-        WorkspaceResult result = workspaceService.prepareWorkspace(
-                repositoryClient, "owner", "repo", "main", null);
-
-        assertThat(result.success()).isFalse();
-        assertThat(result.error()).contains("provider unavailable");
-        assertThat(workspaceBaseDir).doesNotExist();
-        verify(repositoryClient).getRepositoryRemote("owner", "repo");
-        verify(repositoryClient, never()).getCredentials();
-    }
-
-    @Test
     void gitCommand_sshUsesIntegrationKeyAndPinnedHostKeys() throws IOException {
         WorkspaceSetup setup = workspaceService.createWorkspaceSetup();
         RepositoryCredentials credentials = RepositoryCredentials
@@ -288,7 +264,8 @@ class WorkspaceServiceTest {
 
     @Test
     void createCredentialsFile_keepsTokenOutsideWorkspaceAndCleanupRemovesIt() throws IOException {
-        Path workspace = workspaceService.createWorkspaceDirectory();
+        WorkspaceSetup setup = workspaceService.createWorkspaceSetup();
+        Path workspace = setup.workspaceDir();
 
         Path credentials = workspaceService.createCredentialsFile(
                 "https://git.example.com/owner/repo.git", null, "test-token", workspace);
@@ -299,7 +276,7 @@ class WorkspaceServiceTest {
         assertThat(credentials).isNotEqualTo(workspace.resolveSibling("repository.credentials"));
         assertThat(Files.readString(credentials)).isEqualTo("https://oauth2:test-token@git.example.com\n");
 
-        workspaceService.cleanupWorkspace(workspace);
+        workspaceService.cleanupWorkspace(setup);
 
         assertThat(credentials).doesNotExist();
         assertThat(workspace.getParent()).doesNotExist();
@@ -324,12 +301,13 @@ class WorkspaceServiceTest {
         Path workspaceBaseDir = tempDir.resolve("sandbox-workspaces");
         workspaceService = new WorkspaceService(workspaceBaseDir.toString());
 
-        Path workspace = workspaceService.createWorkspaceDirectory();
+        WorkspaceSetup setup = workspaceService.createWorkspaceSetup();
+        Path workspace = setup.workspaceDir();
 
         assertThat(workspace.startsWith(workspaceBaseDir.toAbsolutePath().normalize())).isTrue();
         assertThat(workspace.getParent().getParent()).isEqualTo(workspaceBaseDir.toAbsolutePath().normalize());
 
-        workspaceService.cleanupWorkspace(workspace);
+        workspaceService.cleanupWorkspace(setup);
 
         assertThat(workspace).doesNotExist();
         assertThat(workspaceBaseDir).exists();
@@ -370,7 +348,7 @@ class WorkspaceServiceTest {
     }
 
     @Test
-    void prepareWorkspace_sendsBasicHeaderWhenProviderOptsIn() throws IOException {
+    void openWorkspace_sendsBasicHeaderWhenProviderOptsIn() throws IOException {
         java.util.List<String> authorizationHeaders = new java.util.concurrent.CopyOnWriteArrayList<>();
         com.sun.net.httpserver.HttpServer server = com.sun.net.httpserver.HttpServer.create(
                 new java.net.InetSocketAddress(java.net.InetAddress.getLoopbackAddress(), 0), 0);
@@ -386,10 +364,8 @@ class WorkspaceServiceTest {
             when(repositoryClient.getCredentials()).thenReturn(RepositoryCredentials.of("", remote, "pat"));
             when(repositoryClient.usesGitAuthorizationHeader()).thenReturn(true);
 
-            WorkspaceResult result = workspaceService.prepareWorkspace(
-                    repositoryClient, "any", "any", "main", null);
-
-            assertThat(result.success()).isFalse();
+            assertThatThrownBy(() -> workspaceService.openWorkspace(repositoryClient, "any", "any", "main", null))
+                    .isInstanceOf(WorkspaceException.class);
             assertThat(authorizationHeaders).isNotEmpty().allMatch(header -> header.equals(
                     "Basic " + java.util.Base64.getEncoder().encodeToString(":pat".getBytes())));
         } finally {
@@ -423,25 +399,8 @@ class WorkspaceServiceTest {
                     "-c", "credential.helper=",
                     "-c", "credential.helper=store --file=" + credentials.toAbsolutePath());
         } finally {
-            workspaceService.cleanupWorkspace(workspace);
+            workspaceService.cleanupWorkspace(setup);
         }
-    }
-
-    @Test
-    void hasUncommittedChanges_detectsModifiedTrackedFile() throws IOException, InterruptedException {
-        initGitRepository(tempDir);
-        Path file = tempDir.resolve("README.md");
-        Files.writeString(file, "changed");
-
-        assertThat(workspaceService.hasUncommittedChanges(tempDir)).isTrue();
-    }
-
-    @Test
-    void hasUncommittedChanges_ignoresEmptyDirectory() throws IOException, InterruptedException {
-        initGitRepository(tempDir);
-        Files.createDirectories(tempDir.resolve("empty-dir"));
-
-        assertThat(workspaceService.hasUncommittedChanges(tempDir)).isFalse();
     }
 
     @Test
@@ -459,7 +418,6 @@ class WorkspaceServiceTest {
         runGit(workspace, "push", "-u", "origin", branch);
         setup.setAuthentication(remote.toString(),
                 RepositoryCredentials.of("", remote.toString(), ""), false);
-        workspaceService.registerWorkspace(setup);
 
         Path hook = workspace.resolve(".git/hooks/pre-commit");
         Files.writeString(hook, "#!/bin/sh\nexit 1\n");
@@ -470,22 +428,11 @@ class WorkspaceServiceTest {
         Files.writeString(workspace.resolve("README.md"), "changed");
 
         try {
-            assertThat(workspaceService.commitAndPush(workspace, branch, "test commit",
-                    "Test User", "test@example.com", false)).isTrue();
+            new Workspace(workspaceService, setup).commitAndPush(branch, "test commit",
+                    "Test User", "test@example.com", false);
         } finally {
             workspaceService.cleanupWorkspace(setup);
         }
-    }
-
-    @Test
-    void commitAndPush_withoutWorkspaceStateDoesNotCreateCommit() throws Exception {
-        initGitRepository(tempDir);
-        String previousHead = runGitCapture(tempDir, "rev-parse", "HEAD");
-        Files.writeString(tempDir.resolve("README.md"), "changed");
-
-        assertThat(workspaceService.commitAndPush(tempDir, "main", "test commit",
-                "Test User", "test@example.com", false)).isFalse();
-        assertThat(runGitCapture(tempDir, "rev-parse", "HEAD")).isEqualTo(previousHead);
     }
 
     @Test
@@ -507,7 +454,8 @@ class WorkspaceServiceTest {
         assertThat(marker).exists();
         Files.delete(marker);
 
-        assertThat(workspaceService.hasUncommittedChanges(tempDir)).isFalse();
+        assertThat(workspaceService.runCommand(tempDir.toFile(),
+                new String[]{"git", "status", "--porcelain"}, 10).success()).isTrue();
         assertThat(marker).doesNotExist();
     }
 
@@ -536,13 +484,6 @@ class WorkspaceServiceTest {
         runGit(source, "remote", "add", "origin", bare.toString());
         runGit(source, "push", "origin", "main");
         return bare;
-    }
-
-    private RepositoryApiClient repositoryClient(String remote) {
-        when(repositoryClient.getRepositoryRemote("any", "any")).thenReturn(remote);
-        when(repositoryClient.getCredentials())
-                .thenReturn(RepositoryCredentials.of("", remote, "dummy-token"));
-        return repositoryClient;
     }
 
     private String runGitCapture(Path dir, String... args) throws IOException, InterruptedException {

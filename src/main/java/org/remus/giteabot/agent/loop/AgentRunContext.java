@@ -2,6 +2,7 @@ package org.remus.giteabot.agent.loop;
 
 import lombok.Setter;
 import org.remus.giteabot.agent.session.AgentSession;
+import org.remus.giteabot.agent.validation.Workspace;
 import org.remus.giteabot.prworkflow.agentreview.DiffSummary;
 
 import java.nio.file.Path;
@@ -17,7 +18,7 @@ public final class AgentRunContext {
     private final String owner;
     private final String repo;
     private final Long issueNumber;
-    private final Path workspaceDir;
+    private final Workspace workspace;
     @Setter
     private String baseBranch;
     @Setter
@@ -28,12 +29,12 @@ public final class AgentRunContext {
     private Consumer<ToolCallRecord> auditToolCallConsumer;
 
     public AgentRunContext(AgentSession session, String owner, String repo,
-                           Long issueNumber, Path workspaceDir, String baseBranch) {
+                           Long issueNumber, Workspace workspace, String baseBranch) {
         this.session = session;
         this.owner = owner;
         this.repo = repo;
         this.issueNumber = issueNumber;
-        this.workspaceDir = workspaceDir;
+        this.workspace = workspace;
         this.baseBranch = baseBranch;
     }
 
@@ -41,7 +42,9 @@ public final class AgentRunContext {
     public String owner() { return owner; }
     public String repo() { return repo; }
     public Long issueNumber() { return issueNumber; }
-    public Path workspaceDir() { return workspaceDir; }
+    /** The workspace of this run; owned (and closed) by whoever created the context. */
+    public Workspace workspace() { return workspace; }
+    public Path workspaceDir() { return workspace == null ? null : workspace.dir(); }
     public String baseBranch() { return baseBranch; }
     public ToolingMode toolingMode() { return toolingMode; }
     public DiffSummary diffSummary() { return diffSummary; }

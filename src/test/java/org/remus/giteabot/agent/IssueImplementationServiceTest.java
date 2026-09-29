@@ -8,9 +8,11 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.remus.giteabot.agent.session.AgentSession;
 import org.remus.giteabot.agent.session.AgentSessionService;
+import org.remus.giteabot.agent.validation.TestWorkspaces;
 import org.remus.giteabot.agent.validation.ToolExecutionService;
 import org.remus.giteabot.agent.validation.ToolResult;
-import org.remus.giteabot.agent.validation.WorkspaceResult;
+import org.remus.giteabot.agent.validation.Workspace;
+import org.remus.giteabot.agent.validation.WorkspaceException;
 import org.remus.giteabot.agent.validation.WorkspaceService;
 import org.remus.giteabot.ai.AiClient;
 import org.remus.giteabot.ai.AiMessage;
@@ -35,11 +37,13 @@ import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.anyBoolean;
 import static org.mockito.Mockito.anyInt;
 import static org.mockito.Mockito.anyList;
+import static org.mockito.Mockito.anyLong;
 import static org.mockito.Mockito.anyString;
 import static org.mockito.Mockito.atLeast;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.contains;
 import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.eq;
 import static org.mockito.Mockito.isNull;
 import static org.mockito.Mockito.lenient;
@@ -63,6 +67,7 @@ class IssueImplementationServiceTest {
     private IssueImplementationService service;
 
     private static final Path FAKE_WORKSPACE = Path.of("/tmp/test-workspace");
+    private Workspace workspace;
 
     @BeforeEach
     void setUp() {
@@ -80,7 +85,8 @@ class IssueImplementationServiceTest {
                 repositoryClient, aiClient, null, null, null, null, McpToolCatalog.empty(), null, 200_000);
         service = new IssueImplementationService(context, collaborators(agentConfig));
 
-        lenient().when(workspaceService.hasUncommittedChanges(any())).thenReturn(true);
+        workspace = TestWorkspaces.at(FAKE_WORKSPACE);
+        lenient().when(workspace.hasUncommittedChanges()).thenReturn(true);
         // createSession returns a managed entity with an id in production; stub it
         // so the AgentRunContext carries a non-null, identified session.
         lenient().when(sessionService.createSession(anyString(), anyString(), any(), anyString()))
@@ -106,9 +112,9 @@ class IssueImplementationServiceTest {
                         Map.of("body", "Please keep backward compatibility", "user", Map.of("login", "alice")),
                         Map.of("body", "Also add a migration note", "user", Map.of("login", "bob"))));
         when(promptService.getSystemPrompt("agent")).thenReturn("You are an agent");
-        when(workspaceService.prepareWorkspace(eq(repositoryClient), eq("testowner"), eq("testrepo"),
+        when(workspaceService.openWorkspace(eq(repositoryClient), eq("testowner"), eq("testrepo"),
                 eq("main"), isNull()))
-                .thenReturn(WorkspaceResult.success(FAKE_WORKSPACE));
+                .thenReturn(workspace);
 
         // AI implementation response with write-file + mvn (single loop call now —
         // the previous "Step 1: which files do you need?" pre-loop turn was folded
@@ -134,16 +140,13 @@ class IssueImplementationServiceTest {
         when(toolExecutionService.executeTool(eq(FAKE_WORKSPACE), eq("mvn"), anyList()))
                 .thenReturn(new ToolResult(true, 0, "BUILD SUCCESS", ""));
 
-        when(workspaceService.commitAndPush(eq(FAKE_WORKSPACE), eq("ai-agent/issue-42"),
-                anyString(), anyString(), anyString(), eq(true)))
-                .thenReturn(true);
         when(repositoryClient.createPullRequest(eq("testowner"), eq("testrepo"), anyString(), anyString(),
                 eq("ai-agent/issue-42"), eq("main"))).thenReturn(1L);
 
         service.handleIssueAssigned(payload);
 
         // Workspace cloned once
-        verify(workspaceService).prepareWorkspace(
+        verify(workspaceService).openWorkspace(
                 eq(repositoryClient), eq("testowner"), eq("testrepo"), eq("main"), isNull());
         // write-file executed
         verify(toolExecutionService).executeFileTool(eq(FAKE_WORKSPACE), eq("write-file"),
@@ -152,13 +155,13 @@ class IssueImplementationServiceTest {
         verify(toolExecutionService).executeTool(eq(FAKE_WORKSPACE), eq("mvn"),
                 eq(List.of("compile", "-q", "-B")));
         // Committed and pushed
-        verify(workspaceService).commitAndPush(eq(FAKE_WORKSPACE), eq("ai-agent/issue-42"),
+        verify(workspace).commitAndPush(eq("ai-agent/issue-42"),
                 anyString(), anyString(), anyString(), eq(true));
         // PR created
         verify(repositoryClient).createPullRequest(eq("testowner"), eq("testrepo"), anyString(), anyString(),
                 eq("ai-agent/issue-42"), eq("main"));
         // workspace cleaned up
-        verify(workspaceService).cleanupWorkspace(FAKE_WORKSPACE);
+        verify(workspace).close();
         // at least 2 comments posted
         verify(repositoryClient, atLeast(2)).postIssueComment(eq("testowner"), eq("testrepo"), eq(42L), anyString());
         ArgumentCaptor<String> promptCaptor = ArgumentCaptor.forClass(String.class);
@@ -182,9 +185,9 @@ class IssueImplementationServiceTest {
                         Map.of("body", "Human clarification that must be implemented",
                                 "user", Map.of("login", "alice"))));
         when(promptService.getSystemPrompt("agent")).thenReturn("You are an agent");
-        when(workspaceService.prepareWorkspace(eq(repositoryClient), eq("testowner"), eq("testrepo"),
+        when(workspaceService.openWorkspace(eq(repositoryClient), eq("testowner"), eq("testrepo"),
                 eq("main"), isNull()))
-                .thenReturn(WorkspaceResult.success(FAKE_WORKSPACE));
+                .thenReturn(workspace);
 
         String implResponse = """
                 ```json
@@ -203,9 +206,6 @@ class IssueImplementationServiceTest {
                 .thenReturn(new ToolResult(true, 0, "File written", ""));
         when(toolExecutionService.executeTool(eq(FAKE_WORKSPACE), eq("mvn"), anyList()))
                 .thenReturn(new ToolResult(true, 0, "BUILD SUCCESS", ""));
-        when(workspaceService.commitAndPush(eq(FAKE_WORKSPACE), eq("ai-agent/issue-42"),
-                anyString(), anyString(), anyString(), eq(true)))
-                .thenReturn(true);
         when(repositoryClient.createPullRequest(eq("testowner"), eq("testrepo"), anyString(), anyString(),
                 eq("ai-agent/issue-42"), eq("main"))).thenReturn(1L);
 
@@ -225,9 +225,9 @@ class IssueImplementationServiceTest {
         when(repositoryClient.getRepositoryTree("testowner", "testrepo", "main"))
                 .thenReturn(List.of(Map.of("type", "blob", "path", "README.md")));
         when(promptService.getSystemPrompt("agent")).thenReturn("You are an agent");
-        when(workspaceService.prepareWorkspace(eq(repositoryClient), eq("testowner"), eq("testrepo"),
+        when(workspaceService.openWorkspace(eq(repositoryClient), eq("testowner"), eq("testrepo"),
                 eq("main"), isNull()))
-                .thenReturn(WorkspaceResult.success(FAKE_WORKSPACE));
+                .thenReturn(workspace);
 
         String failedPatchResponse = """
                 ```json
@@ -261,9 +261,6 @@ class IssueImplementationServiceTest {
         when(toolExecutionService.executeTool(eq(FAKE_WORKSPACE), eq("mvn"), anyList()))
                 .thenReturn(new ToolResult(true, 0, "BUILD SUCCESS", ""));
 
-        when(workspaceService.commitAndPush(eq(FAKE_WORKSPACE), eq("ai-agent/issue-42"),
-                anyString(), anyString(), anyString(), eq(true)))
-                .thenReturn(true);
         when(repositoryClient.createPullRequest(eq("testowner"), eq("testrepo"), anyString(), anyString(),
                 eq("ai-agent/issue-42"), eq("main"))).thenReturn(1L);
 
@@ -273,7 +270,7 @@ class IssueImplementationServiceTest {
                 eq(List.of("README.md", "missing", "replacement")));
         verify(toolExecutionService).executeFileTool(eq(FAKE_WORKSPACE), eq("write-file"),
                 eq(List.of("README.md", "updated")));
-        verify(workspaceService, times(1)).commitAndPush(eq(FAKE_WORKSPACE), eq("ai-agent/issue-42"),
+        verify(workspace, times(1)).commitAndPush(eq("ai-agent/issue-42"),
                 anyString(), anyString(), anyString(), eq(true));
         verify(repositoryClient).createPullRequest(eq("testowner"), eq("testrepo"), anyString(), anyString(),
                 eq("ai-agent/issue-42"), eq("main"));
@@ -284,8 +281,8 @@ class IssueImplementationServiceTest {
         WebhookPayload payload = createIssuePayload();
 
         when(repositoryClient.getDefaultBranch("testowner", "testrepo")).thenReturn("main");
-        when(workspaceService.prepareWorkspace(eq(repositoryClient), any(), any(), any(), any()))
-                .thenReturn(WorkspaceResult.failure("git clone failed"));
+        when(workspaceService.openWorkspace(eq(repositoryClient), any(), any(), any(), any()))
+                .thenThrow(new WorkspaceException("git clone failed"));
 
         service.handleIssueAssigned(payload);
 
@@ -302,9 +299,9 @@ class IssueImplementationServiceTest {
         when(repositoryClient.getRepositoryTree("testowner", "testrepo", "main"))
                 .thenReturn(List.of(Map.of("type", "blob", "path", "README.md")));
         when(promptService.getSystemPrompt("agent")).thenReturn("You are an agent");
-        when(workspaceService.prepareWorkspace(eq(repositoryClient), eq("testowner"), eq("testrepo"),
+        when(workspaceService.openWorkspace(eq(repositoryClient), eq("testowner"), eq("testrepo"),
                 eq("main"), isNull()))
-                .thenReturn(WorkspaceResult.success(FAKE_WORKSPACE));
+                .thenReturn(workspace);
         when(aiClient.chat(anyList(), anyString(), anyString(), isNull(), anyInt()))
                 .thenThrow(new RuntimeException("simulated coding failure"));
 
@@ -322,9 +319,9 @@ class IssueImplementationServiceTest {
         when(repositoryClient.getRepositoryTree("testowner", "testrepo", "main"))
                 .thenReturn(List.of(Map.of("type", "blob", "path", "README.md")));
         when(promptService.getSystemPrompt("agent")).thenReturn("You are an agent");
-        when(workspaceService.prepareWorkspace(eq(repositoryClient), eq("testowner"), eq("testrepo"),
+        when(workspaceService.openWorkspace(eq(repositoryClient), eq("testowner"), eq("testrepo"),
                 eq("main"), isNull()))
-                .thenReturn(WorkspaceResult.success(FAKE_WORKSPACE));
+                .thenReturn(workspace);
 
         String contextResponse = """
                 ```json
@@ -351,7 +348,7 @@ class IssueImplementationServiceTest {
         when(aiClient.chat(anyList(), anyString(), anyString(), isNull(), anyInt()))
                 .thenReturn(contextResponse, implResponse);
 
-        when(toolExecutionService.executeContextTool(eq(FAKE_WORKSPACE), eq("branch-switcher"), eq(List.of("develop"))))
+        when(toolExecutionService.executeContextTool(eq(workspace), eq("branch-switcher"), eq(List.of("develop"))))
                 .thenReturn(new ToolResult(true, 0, "Switched workspace branch to: develop", ""));
         when(toolExecutionService.executeContextTool(eq(FAKE_WORKSPACE), eq("rg"), eq(List.of("Feature", "src"))))
                 .thenReturn(new ToolResult(true, 0, "No matches found for pattern: Feature", ""));
@@ -361,15 +358,12 @@ class IssueImplementationServiceTest {
         when(toolExecutionService.executeTool(eq(FAKE_WORKSPACE), eq("mvn"), anyList()))
                 .thenReturn(new ToolResult(true, 0, "BUILD SUCCESS", ""));
 
-        when(workspaceService.commitAndPush(eq(FAKE_WORKSPACE), eq("ai-agent/issue-42"),
-                anyString(), anyString(), anyString(), eq(true)))
-                .thenReturn(true);
         when(repositoryClient.createPullRequest(eq("testowner"), eq("testrepo"), anyString(), anyString(),
                 eq("ai-agent/issue-42"), eq("develop"))).thenReturn(1L);
 
         service.handleIssueAssigned(payload);
 
-        verify(toolExecutionService).executeContextTool(eq(FAKE_WORKSPACE), eq("branch-switcher"), eq(List.of("develop")));
+        verify(toolExecutionService).executeContextTool(eq(workspace), eq("branch-switcher"), eq(List.of("develop")));
         verify(repositoryClient).createPullRequest(eq("testowner"), eq("testrepo"), anyString(), anyString(),
                 eq("ai-agent/issue-42"), eq("develop"));
     }
@@ -382,9 +376,9 @@ class IssueImplementationServiceTest {
         when(repositoryClient.getRepositoryTree("testowner", "testrepo", "main"))
                 .thenReturn(List.of(Map.of("type", "blob", "path", "README.md")));
         when(promptService.getSystemPrompt("agent")).thenReturn("You are an agent");
-        when(workspaceService.prepareWorkspace(eq(repositoryClient), eq("testowner"), eq("testrepo"),
+        when(workspaceService.openWorkspace(eq(repositoryClient), eq("testowner"), eq("testrepo"),
                 eq("main"), isNull()))
-                .thenReturn(WorkspaceResult.success(FAKE_WORKSPACE));
+                .thenReturn(workspace);
 
         String contextResponse = """
                 ```json
@@ -410,7 +404,7 @@ class IssueImplementationServiceTest {
         when(aiClient.chat(anyList(), anyString(), anyString(), isNull(), anyInt()))
                 .thenReturn(contextResponse, implResponse);
 
-        when(toolExecutionService.executeContextTool(eq(FAKE_WORKSPACE), eq("branch-switcher"), eq(List.of("develop"))))
+        when(toolExecutionService.executeContextTool(eq(workspace), eq("branch-switcher"), eq(List.of("develop"))))
                 .thenReturn(new ToolResult(false, 1, null, null));
 
         when(toolExecutionService.executeFileTool(eq(FAKE_WORKSPACE), eq("write-file"), anyList()))
@@ -418,9 +412,6 @@ class IssueImplementationServiceTest {
         when(toolExecutionService.executeTool(eq(FAKE_WORKSPACE), eq("mvn"), anyList()))
                 .thenReturn(new ToolResult(true, 0, "BUILD SUCCESS", ""));
 
-        when(workspaceService.commitAndPush(eq(FAKE_WORKSPACE), eq("ai-agent/issue-42"),
-                anyString(), anyString(), anyString(), eq(true)))
-                .thenReturn(true);
         when(repositoryClient.createPullRequest(eq("testowner"), eq("testrepo"), anyString(), anyString(),
                 eq("ai-agent/issue-42"), eq("main"))).thenReturn(1L);
 
@@ -439,9 +430,9 @@ class IssueImplementationServiceTest {
         when(repositoryClient.getRepositoryTree("testowner", "testrepo", "release/1.x"))
                 .thenReturn(List.of(Map.of("type", "blob", "path", "pom.xml")));
         when(promptService.getSystemPrompt("agent")).thenReturn("You are an agent");
-        when(workspaceService.prepareWorkspace(eq(repositoryClient), eq("testowner"), eq("testrepo"),
+        when(workspaceService.openWorkspace(eq(repositoryClient), eq("testowner"), eq("testrepo"),
                 eq("release/1.x"), isNull()))
-                .thenReturn(WorkspaceResult.success(FAKE_WORKSPACE));
+                .thenReturn(workspace);
 
         String followUpContextResponse = """
                 ```json
@@ -470,9 +461,6 @@ class IssueImplementationServiceTest {
         when(toolExecutionService.executeTool(eq(FAKE_WORKSPACE), eq("mvn"), anyList()))
                 .thenReturn(new ToolResult(true, 0, "BUILD SUCCESS", ""));
 
-        when(workspaceService.commitAndPush(eq(FAKE_WORKSPACE), eq("ai-agent/issue-42"),
-                anyString(), anyString(), anyString(), eq(true)))
-                .thenReturn(true);
         when(repositoryClient.createPullRequest(eq("testowner"), eq("testrepo"), anyString(), anyString(),
                 eq("ai-agent/issue-42"), eq("release/1.x"))).thenReturn(1L);
 
@@ -491,8 +479,8 @@ class IssueImplementationServiceTest {
         when(repositoryClient.getDefaultBranch("testowner", "testrepo")).thenReturn("main");
         when(repositoryClient.getRepositoryTree("testowner", "testrepo", "main")).thenReturn(List.of());
         when(promptService.getSystemPrompt("agent")).thenReturn("You are an agent");
-        when(workspaceService.prepareWorkspace(eq(repositoryClient), any(), any(), any(), any()))
-                .thenReturn(WorkspaceResult.success(FAKE_WORKSPACE));
+        when(workspaceService.openWorkspace(eq(repositoryClient), any(), any(), any(), any()))
+                .thenReturn(workspace);
         // AI never provides runTools
         when(aiClient.chat(anyList(), anyString(), anyString(), isNull(), anyInt()))
                 .thenReturn("I don't know how to do this");
@@ -500,7 +488,7 @@ class IssueImplementationServiceTest {
         service.handleIssueAssigned(payload);
 
         verify(repositoryClient, never()).createPullRequest(any(), any(), any(), any(), any(), any());
-        verify(workspaceService, never()).commitAndPush(any(), any(), any(), any(), any(), anyBoolean());
+        verify(workspace, never()).commitAndPush(any(), any(), any(), any(), anyBoolean());
     }
 
     @Test
@@ -510,8 +498,8 @@ class IssueImplementationServiceTest {
         when(repositoryClient.getDefaultBranch("testowner", "testrepo")).thenReturn("main");
         when(repositoryClient.getRepositoryTree("testowner", "testrepo", "main")).thenReturn(List.of());
         when(promptService.getSystemPrompt("agent")).thenReturn("You are an agent");
-        when(workspaceService.prepareWorkspace(eq(repositoryClient), any(), any(), any(), any()))
-                .thenReturn(WorkspaceResult.success(FAKE_WORKSPACE));
+        when(workspaceService.openWorkspace(eq(repositoryClient), any(), any(), any(), any()))
+                .thenReturn(workspace);
 
         String implResponse = """
                 ```json
@@ -532,8 +520,8 @@ class IssueImplementationServiceTest {
         when(toolExecutionService.executeTool(any(), any(), any()))
                 .thenReturn(new ToolResult(true, 0, "BUILD SUCCESS", ""));
         // Commit fails
-        when(workspaceService.commitAndPush(any(), any(), any(), any(), any(), anyBoolean()))
-                .thenReturn(false);
+        doThrow(new WorkspaceException("git push failed: rejected"))
+                .when(workspace).commitAndPush(any(), any(), any(), any(), anyBoolean());
 
         service.handleIssueAssigned(payload);
 
@@ -542,6 +530,8 @@ class IssueImplementationServiceTest {
         // Error comment posted
         verify(repositoryClient, atLeast(1)).postIssueComment(eq("testowner"), eq("testrepo"), eq(42L),
                 contains("pushing the branch failed"));
+        verify(repositoryClient).postIssueComment(eq("testowner"), eq("testrepo"), anyLong(),
+                contains("pushing the branch failed: git push failed: rejected"));
     }
 
     @Test
@@ -553,9 +543,9 @@ class IssueImplementationServiceTest {
         when(repositoryClient.getRepositoryTree("testowner", "testrepo", "main"))
                 .thenReturn(List.of(Map.of("type", "blob", "path", "README.md")));
         when(promptService.getSystemPrompt("agent")).thenReturn("You are an agent");
-        when(workspaceService.prepareWorkspace(eq(repositoryClient), eq("testowner"), eq("testrepo"),
+        when(workspaceService.openWorkspace(eq(repositoryClient), eq("testowner"), eq("testrepo"),
                 eq("main"), isNull()))
-                .thenReturn(WorkspaceResult.success(FAKE_WORKSPACE));
+                .thenReturn(workspace);
 
         String implResponse = """
                 ```json
@@ -581,15 +571,12 @@ class IssueImplementationServiceTest {
         when(toolExecutionService.executeTool(eq(FAKE_WORKSPACE), eq("mvn"), anyList()))
                 .thenReturn(new ToolResult(true, 0, "BUILD SUCCESS", ""));
 
-        when(workspaceService.commitAndPush(eq(FAKE_WORKSPACE), eq("ai-agent/issue-42"),
-                anyString(), anyString(), anyString(), eq(true)))
-                .thenReturn(true);
         when(repositoryClient.createPullRequest(eq("testowner"), eq("testrepo"), anyString(), anyString(),
                 eq("ai-agent/issue-42"), eq("main"))).thenReturn(1L);
 
         serviceWithMcp.handleIssueAssigned(payload);
 
-        verify(workspaceService).commitAndPush(eq(FAKE_WORKSPACE), eq("ai-agent/issue-42"),
+        verify(workspace).commitAndPush(eq("ai-agent/issue-42"),
                 anyString(), anyString(), anyString(), eq(true));
         verify(repositoryClient).createPullRequest(eq("testowner"), eq("testrepo"), anyString(), anyString(),
                 eq("ai-agent/issue-42"), eq("main"));
@@ -617,9 +604,9 @@ class IssueImplementationServiceTest {
         when(promptService.getSystemPrompt("agent")).thenReturn("You are an agent");
         when(sessionService.toAiMessages(any())).thenReturn(
                 new ArrayList<>(List.of(AiMessage.builder().role("user").content("Please trace where Config is used").build())));
-        when(workspaceService.prepareWorkspace(eq(repositoryClient), eq("testowner"), eq("testrepo"),
+        when(workspaceService.openWorkspace(eq(repositoryClient), eq("testowner"), eq("testrepo"),
                 eq("ai-agent/issue-42"), isNull()))
-                .thenReturn(WorkspaceResult.success(FAKE_WORKSPACE));
+                .thenReturn(workspace);
 
         // First: request context tools
         String firstResponse = """
@@ -656,9 +643,6 @@ class IssueImplementationServiceTest {
                 .thenReturn(new ToolResult(true, 0, "File patched", ""));
         when(toolExecutionService.executeTool(eq(FAKE_WORKSPACE), eq("mvn"), anyList()))
                 .thenReturn(new ToolResult(true, 0, "BUILD SUCCESS", ""));
-        when(workspaceService.commitAndPush(eq(FAKE_WORKSPACE), eq("ai-agent/issue-42"),
-                anyString(), anyString(), anyString(), eq(false)))
-                .thenReturn(true);
 
         service.handleIssueComment(payload);
 
@@ -666,9 +650,9 @@ class IssueImplementationServiceTest {
                 eq(List.of("ConfigService", "src")));
         verify(toolExecutionService).executeFileTool(eq(FAKE_WORKSPACE), eq("patch-file"),
                 eq(List.of("src/Config.java", "old", "new")));
-        verify(workspaceService).commitAndPush(eq(FAKE_WORKSPACE), eq("ai-agent/issue-42"),
+        verify(workspace).commitAndPush(eq("ai-agent/issue-42"),
                 anyString(), anyString(), anyString(), eq(false));
-        verify(workspaceService).cleanupWorkspace(FAKE_WORKSPACE);
+        verify(workspace).close();
         ArgumentCaptor<String> promptCaptor = ArgumentCaptor.forClass(String.class);
         verify(aiClient, times(2)).chat(anyList(), promptCaptor.capture(), anyString(), isNull(), anyInt());
         assertThat(promptCaptor.getAllValues().getFirst()).contains("Existing clarification from issue author");
@@ -693,9 +677,9 @@ class IssueImplementationServiceTest {
         when(promptService.getSystemPrompt("agent")).thenReturn("You are an agent");
         when(sessionService.toAiMessages(any())).thenReturn(
                 new ArrayList<>(List.of(AiMessage.builder().role("user").content("Please inspect the current branch state").build())));
-        when(workspaceService.prepareWorkspace(eq(repositoryClient), eq("testowner"), eq("testrepo"),
+        when(workspaceService.openWorkspace(eq(repositoryClient), eq("testowner"), eq("testrepo"),
                 eq("ai-agent/issue-42"), isNull()))
-                .thenReturn(WorkspaceResult.success(FAKE_WORKSPACE));
+                .thenReturn(workspace);
 
         String firstResponse = """
                 ```json
@@ -726,9 +710,6 @@ class IssueImplementationServiceTest {
                 .thenReturn(new ToolResult(true, 0, "File patched", ""));
         when(toolExecutionService.executeTool(eq(FAKE_WORKSPACE), eq("mvn"), anyList()))
                 .thenReturn(new ToolResult(true, 0, "BUILD SUCCESS", ""));
-        when(workspaceService.commitAndPush(eq(FAKE_WORKSPACE), eq("ai-agent/issue-42"),
-                anyString(), anyString(), anyString(), eq(false)))
-                .thenReturn(true);
 
         service.handleIssueComment(payload);
 
@@ -752,9 +733,9 @@ class IssueImplementationServiceTest {
         when(sessionService.compactContextWindow(any())).thenReturn(session);
         when(repositoryClient.getDefaultBranch("testowner", "testrepo")).thenReturn("main");
         when(promptService.getSystemPrompt("agent")).thenReturn("You are an agent");
-        when(workspaceService.prepareWorkspace(eq(repositoryClient), eq("testowner"), eq("testrepo"),
+        when(workspaceService.openWorkspace(eq(repositoryClient), eq("testowner"), eq("testrepo"),
                 eq("ai-agent/issue-42"), isNull()))
-                .thenReturn(WorkspaceResult.success(FAKE_WORKSPACE));
+                .thenReturn(workspace);
         when(aiClient.chat(anyList(), anyString(), anyString(), isNull(), anyInt()))
                 .thenThrow(new RuntimeException("follow-up coding failure"));
 
@@ -783,9 +764,9 @@ class IssueImplementationServiceTest {
         when(promptService.getSystemPrompt("agent")).thenReturn("You are an agent");
         when(sessionService.toAiMessages(any())).thenReturn(
                 new ArrayList<>(List.of(AiMessage.builder().role("user").content("Please continue").build())));
-        when(workspaceService.prepareWorkspace(eq(repositoryClient), eq("testowner"), eq("testrepo"),
+        when(workspaceService.openWorkspace(eq(repositoryClient), eq("testowner"), eq("testrepo"),
                 eq("ai-agent/issue-42"), isNull()))
-                .thenReturn(WorkspaceResult.success(FAKE_WORKSPACE));
+                .thenReturn(workspace);
 
         String response = """
                 ```json
@@ -809,13 +790,10 @@ class IssueImplementationServiceTest {
                 .thenReturn(new ToolResult(true, 0, "File patched", ""));
         when(toolExecutionService.executeTool(eq(FAKE_WORKSPACE), eq("mvn"), anyList()))
                 .thenReturn(new ToolResult(true, 0, "BUILD SUCCESS", ""));
-        when(workspaceService.commitAndPush(eq(FAKE_WORKSPACE), eq("ai-agent/issue-42"),
-                anyString(), anyString(), anyString(), eq(false)))
-                .thenReturn(true);
 
         serviceWithMcp.handleIssueComment(payload);
 
-        verify(workspaceService).commitAndPush(eq(FAKE_WORKSPACE), eq("ai-agent/issue-42"),
+        verify(workspace).commitAndPush(eq("ai-agent/issue-42"),
                 anyString(), anyString(), anyString(), eq(false));
     }
 
@@ -828,9 +806,9 @@ class IssueImplementationServiceTest {
         when(repositoryClient.getDefaultBranch("testowner", "testrepo")).thenReturn("main");
         when(repositoryClient.getRepositoryTree("testowner", "testrepo", "main")).thenReturn(List.of());
         when(promptService.getSystemPrompt("agent")).thenReturn("You are an agent");
-        when(workspaceService.prepareWorkspace(eq(repositoryClient), any(), any(), any(), any()))
-                .thenReturn(WorkspaceResult.success(FAKE_WORKSPACE));
-        when(workspaceService.hasUncommittedChanges(any())).thenReturn(false);
+        when(workspaceService.openWorkspace(eq(repositoryClient), any(), any(), any(), any()))
+                .thenReturn(workspace);
+        when(workspace.hasUncommittedChanges()).thenReturn(false);
         // NATIVE mode: the model never calls a tool and answers in prose.
         when(aiClient.supportsNativeTools()).thenReturn(true);
         String answer = "docker-compose.yaml starts with version, services, then the ollama service.";
@@ -854,7 +832,7 @@ class IssueImplementationServiceTest {
             assertThat(comment.toLowerCase()).doesNotContain("no code changes are needed");
         });
         verify(sessionService).setStatus(any(), eq(AgentSession.AgentSessionStatus.ANSWERED));
-        verify(workspaceService, never()).commitAndPush(any(), any(), any(), any(), any(), anyBoolean());
+        verify(workspace, never()).commitAndPush(any(), any(), any(), any(), anyBoolean());
         verify(repositoryClient, never()).createPullRequest(any(), any(), any(), any(), any(), any());
     }
 
@@ -873,9 +851,9 @@ class IssueImplementationServiceTest {
         when(repositoryClient.getDefaultBranch("testowner", "testrepo")).thenReturn("main");
         when(promptService.getSystemPrompt("agent")).thenReturn("You are an agent");
         when(sessionService.toAiMessages(any())).thenReturn(new ArrayList<>());
-        when(workspaceService.prepareWorkspace(eq(repositoryClient), eq("testowner"), eq("testrepo"),
-                eq("ai-agent/issue-42"), isNull())).thenReturn(WorkspaceResult.success(FAKE_WORKSPACE));
-        when(workspaceService.hasUncommittedChanges(any())).thenReturn(false);
+        when(workspaceService.openWorkspace(eq(repositoryClient), eq("testowner"), eq("testrepo"),
+                eq("ai-agent/issue-42"), isNull())).thenReturn(workspace);
+        when(workspace.hasUncommittedChanges()).thenReturn(false);
         when(aiClient.supportsNativeTools()).thenReturn(true);
         String answer = "The compose file declares ollama, gitea and postgres.";
         // doReturn/when (not when/…/thenReturn): chatWithTools is a *default* method,
@@ -896,7 +874,7 @@ class IssueImplementationServiceTest {
         });
         // An answer to a follow-up question must not erase the open-PR state.
         verify(sessionService).setStatus(eq(session), eq(AgentSession.AgentSessionStatus.PR_CREATED));
-        verify(workspaceService, never()).commitAndPush(any(), any(), any(), any(), any(), anyBoolean());
+        verify(workspace, never()).commitAndPush(any(), any(), any(), any(), anyBoolean());
     }
 
     /**
@@ -923,10 +901,10 @@ class IssueImplementationServiceTest {
         });
         assertThat(postedComments()).noneSatisfy(comment -> assertThat(comment).contains(answer));
         verify(sessionService).setStatus(any(), eq(AgentSession.AgentSessionStatus.ANSWERED));
-        verify(workspaceService, never()).commitAndPush(any(), any(), any(), any(), any(), anyBoolean());
+        verify(workspace, never()).commitAndPush(any(), any(), any(), any(), anyBoolean());
         verify(repositoryClient, never()).createPullRequest(any(), any(), any(), any(), any(), any());
         // The cat round really ran against the workspace.
-        verify(toolExecutionService).executeContextTool(eq(FAKE_WORKSPACE), eq("cat"),
+        verify(toolExecutionService).executeContextTool(eq(workspace), eq("cat"),
                 eq(List.of("docker-compose.yaml")));
     }
 
@@ -951,7 +929,7 @@ class IssueImplementationServiceTest {
             assertThat(comment).contains(answer);
         });
         verify(sessionService).setStatus(any(), eq(AgentSession.AgentSessionStatus.ANSWERED));
-        verify(workspaceService, never()).commitAndPush(any(), any(), any(), any(), any(), anyBoolean());
+        verify(workspace, never()).commitAndPush(any(), any(), any(), any(), anyBoolean());
         verify(repositoryClient, never()).createPullRequest(any(), any(), any(), any(), any(), any());
     }
 
@@ -960,11 +938,11 @@ class IssueImplementationServiceTest {
         when(repositoryClient.getDefaultBranch("testowner", "testrepo")).thenReturn("main");
         when(repositoryClient.getRepositoryTree("testowner", "testrepo", "main")).thenReturn(List.of());
         when(promptService.getSystemPrompt("agent")).thenReturn("You are an agent");
-        when(workspaceService.prepareWorkspace(eq(repositoryClient), any(), any(), any(), any()))
-                .thenReturn(WorkspaceResult.success(FAKE_WORKSPACE));
-        when(workspaceService.hasUncommittedChanges(any())).thenReturn(false);
+        when(workspaceService.openWorkspace(eq(repositoryClient), any(), any(), any(), any()))
+                .thenReturn(workspace);
+        when(workspace.hasUncommittedChanges()).thenReturn(false);
         when(aiClient.supportsNativeTools()).thenReturn(true);
-        lenient().when(toolExecutionService.executeContextTool(eq(FAKE_WORKSPACE), eq("cat"), anyList()))
+        lenient().when(toolExecutionService.executeContextTool(eq(workspace), eq("cat"), anyList()))
                 .thenReturn(new ToolResult(true, 0, "version: '3'\nservices:\n  ollama:\n", ""));
     }
 

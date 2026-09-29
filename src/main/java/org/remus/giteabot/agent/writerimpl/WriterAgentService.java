@@ -14,7 +14,8 @@ import org.remus.giteabot.agent.shared.SystemPromptAssembler;
 import org.remus.giteabot.agent.tools.AgentToolRouter;
 import org.remus.giteabot.agent.tools.ToolCatalog;
 import org.remus.giteabot.agent.validation.ToolExecutionService;
-import org.remus.giteabot.agent.validation.WorkspaceResult;
+import org.remus.giteabot.agent.validation.Workspace;
+import org.remus.giteabot.agent.validation.WorkspaceException;
 import org.remus.giteabot.agent.validation.WorkspaceService;
 import org.remus.giteabot.ai.AiClient;
 import org.remus.giteabot.config.AgentConfigProperties;
@@ -26,7 +27,6 @@ import org.remus.giteabot.repository.RepositoryApiClient;
 import org.remus.giteabot.systemsettings.McpConfiguration;
 import org.springframework.dao.DataIntegrityViolationException;
 
-import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -125,7 +125,7 @@ public class WriterAgentService {
         AgentSession session = null;
         String baseBranch = issueRef != null && !issueRef.isBlank()
                 ? issueRef : repositoryClient.getDefaultBranch(owner, repo);
-        Path workspaceDir = null;
+        Workspace workspace = null;
         try {
             session = sessionService.createSession(owner, repo, issueNumber, issueTitle,
                     AgentSession.AgentSessionType.WRITER, issueAuthor);
@@ -134,19 +134,18 @@ public class WriterAgentService {
             repositoryClient.postIssueComment(owner, repo, issueNumber,
                     "🤖 **AI Technical Writer**: I've been assigned and will review this issue for completeness.");
 
-            WorkspaceResult wsResult = workspaceService.prepareWorkspace(
-                    repositoryClient, owner, repo, baseBranch, null);
-            if (!wsResult.success()) {
+            try {
+                workspace = workspaceService.openWorkspace(repositoryClient, owner, repo, baseBranch, null);
+            } catch (WorkspaceException e) {
                 sessionService.setStatus(session, AgentSession.AgentSessionStatus.FAILED);
                 repositoryClient.postIssueComment(owner, repo, issueNumber,
                         "⚠️ **AI Technical Writer**: Failed to prepare read-only repository context: "
-                                + wsResult.error());
+                                + e.getMessage());
                 return;
             }
-            workspaceDir = wsResult.workspacePath();
             String treeContext = promptBuilder.buildTreeContext(
                     repositoryClient.getRepositoryTree(owner, repo, baseBranch), maxInitialTreeFiles());
-            runWriterLoop(session, owner, repo, issueNumber, workspaceDir, baseBranch,
+            runWriterLoop(session, owner, repo, issueNumber, workspace, baseBranch,
                     promptBuilder.buildInitialPrompt(issueNumber, issueTitle, issueBody, treeContext));
         } catch (DataIntegrityViolationException e) {
             log.info("Writer session was created concurrently for issue #{} in {}/{}", issueNumber, owner, repo);
@@ -156,8 +155,8 @@ public class WriterAgentService {
             handleWriterFailure(session, owner, repo, issueNumber,
                     AgentSession.AgentSessionStatus.FAILED, e);
         } finally {
-            if (workspaceDir != null) {
-                workspaceService.cleanupWorkspace(workspaceDir);
+            if (workspace != null) {
+                workspace.close();
             }
         }
     }
@@ -208,20 +207,19 @@ public class WriterAgentService {
         // rows compaction deleted, which would break the loop with
         // ObjectNotFoundException.
         session = sessionService.compactContextWindow(session.getId());
-        Path workspaceDir = null;
+        Workspace workspace = null;
         try {
             String baseBranch = resolveBaseBranch(owner, repo, payload, session);
-            WorkspaceResult wsResult = workspaceService.prepareWorkspace(
-                    repositoryClient, owner, repo, baseBranch, null);
-            if (!wsResult.success()) {
+            try {
+                workspace = workspaceService.openWorkspace(repositoryClient, owner, repo, baseBranch, null);
+            } catch (WorkspaceException e) {
                 sessionService.setStatus(session, AgentSession.AgentSessionStatus.FAILED);
                 repositoryClient.postIssueComment(owner, repo, issueNumber,
                         "⚠️ **AI Technical Writer**: Failed to prepare read-only repository context: "
-                                + wsResult.error());
+                                + e.getMessage());
                 return;
             }
-            workspaceDir = wsResult.workspacePath();
-            runWriterLoop(session, owner, repo, issueNumber, workspaceDir, baseBranch,
+            runWriterLoop(session, owner, repo, issueNumber, workspace, baseBranch,
                     promptBuilder.buildContinuationPrompt(payload.getComment().getBody()));
         } catch (Exception e) {
             log.error("Writer failed while handling follow-up for issue #{} in {}/{}: {}",
@@ -229,14 +227,14 @@ public class WriterAgentService {
             handleWriterFailure(session, owner, repo, issueNumber,
                     AgentSession.AgentSessionStatus.IN_PROGRESS, e);
         } finally {
-            if (workspaceDir != null) {
-                workspaceService.cleanupWorkspace(workspaceDir);
+            if (workspace != null) {
+                workspace.close();
             }
         }
     }
 
     private void runWriterLoop(AgentSession session, String owner, String repo,
-                               Long issueNumber, Path workspaceDir, String baseBranch, String userMessage) {
+                               Long issueNumber, Workspace workspace, String baseBranch, String userMessage) {
         WriterAgentStrategy strategy = new WriterAgentStrategy(
                 resolveWriterSystemPrompt(),
                 promptBuilder,
@@ -259,7 +257,7 @@ public class WriterAgentService {
                 contextWindowTokens, agentConfig.getBudget().getProactiveCompactionThreshold());
         AgentLoop loop = new AgentLoop(aiClient, sessionService, budget);
         AgentRunContext ctx = new AgentRunContext(
-                session, owner, repo, issueNumber, workspaceDir, baseBranch);
+                session, owner, repo, issueNumber, workspace, baseBranch);
         loop.run(ctx, userMessage + "\n\n" + outputContract(), strategy);
     }
 

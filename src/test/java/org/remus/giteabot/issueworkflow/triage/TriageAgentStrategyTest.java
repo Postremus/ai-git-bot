@@ -14,6 +14,7 @@ import org.remus.giteabot.agent.shared.BranchSwitcher;
 import org.remus.giteabot.agent.session.AgentSession;
 import org.remus.giteabot.agent.tools.AgentToolRouter;
 import org.remus.giteabot.agent.tools.ToolCatalog;
+import org.remus.giteabot.agent.validation.TestWorkspaces;
 import org.remus.giteabot.agent.validation.ToolResult;
 import org.remus.giteabot.ai.ChatTurn;
 import org.remus.giteabot.ai.StopReason;
@@ -66,7 +67,7 @@ class TriageAgentStrategyTest {
                 new ToolCatalog(new AgentConfigProperties()), McpToolCatalog.empty(), null,
                 ALLOWED, "triage-bot", new AiResponseParser(), branchSwitcher, 2);
         ctx = new AgentRunContext(new AgentSession("owner", "repo", 42L, "Issue"),
-                "owner", "repo", 42L, Path.of("/tmp/ws"), "main");
+                "owner", "repo", 42L, TestWorkspaces.at(Path.of("/tmp/ws")), "main");
         lenient().when(branchSwitcher.apply(any(), anyString(), anyList(), any()))
                 .thenAnswer(inv -> new BranchSwitcher.Result("main", "main", inv.getArgument(2)));
     }

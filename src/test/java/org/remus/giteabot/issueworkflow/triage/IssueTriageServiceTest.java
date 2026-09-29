@@ -12,9 +12,11 @@ import org.remus.giteabot.admin.Bot;
 import org.remus.giteabot.admin.GiteaClientFactory;
 import org.remus.giteabot.agent.session.AgentSessionService;
 import org.remus.giteabot.agent.tools.ToolCatalog;
+import org.remus.giteabot.agent.validation.TestWorkspaces;
 import org.remus.giteabot.agent.validation.ToolExecutionService;
 import org.remus.giteabot.agent.validation.ToolResult;
-import org.remus.giteabot.agent.validation.WorkspaceResult;
+import org.remus.giteabot.agent.validation.Workspace;
+import org.remus.giteabot.agent.validation.WorkspaceException;
 import org.remus.giteabot.agent.validation.WorkspaceService;
 import org.remus.giteabot.ai.AiClient;
 import org.remus.giteabot.ai.AiMessage;
@@ -92,6 +94,7 @@ class IssueTriageServiceTest {
     private IssueTriageService service;
     private Bot bot;
     private WebhookPayload payload;
+    private Workspace workspace;
 
     @BeforeEach
     void setUp() {
@@ -101,9 +104,10 @@ class IssueTriageServiceTest {
                 new AgentConfigProperties());
         lenient().when(aiClientFactory.getClient(any())).thenReturn(aiClient);
         lenient().when(giteaClientFactory.getApiClient(any())).thenReturn(repoClient);
-        lenient().when(workspaceService.prepareWorkspace(eq(repoClient), anyString(), anyString(),
+        workspace = TestWorkspaces.at(Path.of("/tmp/triage-ws"));
+        lenient().when(workspaceService.openWorkspace(eq(repoClient), anyString(), anyString(),
                 anyString(), any()))
-                .thenReturn(WorkspaceResult.success(Path.of("/tmp/triage-ws")));
+                .thenReturn(workspace);
         lenient().when(repoClient.getDefaultBranch("owner", "repo")).thenReturn("main");
         lenient().when(repoClient.getRepositoryTree("owner", "repo", "main"))
                 .thenReturn(List.of(Map.of("type", "blob", "path", "src/App.java")));
@@ -181,12 +185,12 @@ class IssueTriageServiceTest {
         when(aiClient.chatWithTools(anyList(), anyString(), anyList(), anyString(), isNull(), anyInt()))
                 .thenReturn(toolTurn("rg", "{\"args\":[\"submit button\"]}"))
                 .thenReturn(toolTurn("assign_issue", "{\"name\":\"Alice\",\"reason\":\"Frontend fix\"}"));
-        when(toolExecutionService.executeContextTool(any(), eq("rg"), anyList()))
+        when(toolExecutionService.executeContextTool(any(Workspace.class), eq("rg"), anyList()))
                 .thenReturn(new ToolResult(true, 0, "src/ui/SubmitButton.java", ""));
 
         service.triage(bot, payload, PARAMS);
 
-        verify(toolExecutionService).executeContextTool(any(), eq("rg"), anyList());
+        verify(toolExecutionService).executeContextTool(any(Workspace.class), eq("rg"), anyList());
         ArgumentCaptor<List<AiMessage>> history = ArgumentCaptor.forClass(List.class);
         verify(aiClient, times(2)).chatWithTools(history.capture(), anyString(), anyList(),
                 anyString(), isNull(), anyInt());
@@ -229,7 +233,7 @@ class IssueTriageServiceTest {
         // The model keeps gathering context and never commits to a decision.
         when(aiClient.chatWithTools(anyList(), anyString(), anyList(), anyString(), isNull(), anyInt()))
                 .thenReturn(toolTurn("rg", "{\"args\":[\"button\"]}"));
-        when(toolExecutionService.executeContextTool(any(), eq("rg"), anyList()))
+        when(toolExecutionService.executeContextTool(any(Workspace.class), eq("rg"), anyList()))
                 .thenReturn(new ToolResult(true, 0, "hit", ""));
 
         assertThrows(TriageRoutingException.class, () -> service.triage(bot, payload, PARAMS));
@@ -247,13 +251,13 @@ class IssueTriageServiceTest {
         when(aiClient.chatWithTools(anyList(), anyString(), eq(List.of()), anyString(), isNull(), anyInt()))
                 .thenReturn(ChatTurn.text("{\"requestTools\":[{\"id\":\"1\",\"tool\":\"rg\",\"args\":[\"submit\"]}]}"))
                 .thenReturn(ChatTurn.text("{\"assignment\":\"Bob\",\"reason\":\"Backend API change\"}"));
-        when(toolExecutionService.executeContextTool(any(), eq("rg"), anyList()))
+        when(toolExecutionService.executeContextTool(any(Workspace.class), eq("rg"), anyList()))
                 .thenReturn(new ToolResult(true, 0, "src/api/SubmitEndpoint.java", ""));
 
         service.triage(bot, payload, PARAMS);
 
         verify(aiClient, times(2)).chatWithTools(anyList(), anyString(), eq(List.of()), anyString(), isNull(), anyInt());
-        verify(toolExecutionService).executeContextTool(any(), eq("rg"), anyList());
+        verify(toolExecutionService).executeContextTool(any(Workspace.class), eq("rg"), anyList());
         verify(repoClient).assignIssue("owner", "repo", 42L, "Bob");
     }
 
@@ -327,9 +331,9 @@ class IssueTriageServiceTest {
 
     @Test
     void workspacePreparationFails_postsErrorCommentAndFails() {
-        when(workspaceService.prepareWorkspace(eq(repoClient), anyString(), anyString(),
+        when(workspaceService.openWorkspace(eq(repoClient), anyString(), anyString(),
                 anyString(), any()))
-                .thenReturn(WorkspaceResult.failure("disk full"));
+                .thenThrow(new WorkspaceException("disk full"));
 
         assertThrows(TriageRoutingException.class, () -> service.triage(bot, payload, PARAMS));
 

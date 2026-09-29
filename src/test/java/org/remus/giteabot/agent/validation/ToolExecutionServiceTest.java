@@ -11,6 +11,8 @@ import java.nio.file.Path;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.verify;
 
 class ToolExecutionServiceTest {
 
@@ -23,8 +25,31 @@ class ToolExecutionServiceTest {
     void setUp() {
         AgentConfigProperties config = new AgentConfigProperties();
         service = new ToolExecutionService(config,
-                new org.remus.giteabot.agent.tools.ToolCatalog(config),
-                new WorkspaceService());
+                new org.remus.giteabot.agent.tools.ToolCatalog(config));
+    }
+
+    @Test
+    void executeContextTool_branchSwitcher_fetchesThroughWorkspaceHandle() {
+        Workspace workspace = TestWorkspaces.at(tempDir);
+        doThrow(new WorkspaceException("git fetch failed: couldn't find remote ref topic"))
+                .when(workspace).fetchBranch("topic");
+
+        ToolResult result = service.executeContextTool(workspace, "branch-switcher", List.of("topic"));
+
+        assertThat(result.success()).isFalse();
+        assertThat(result.error()).isEqualTo(
+                "Failed to fetch branch 'topic' from origin: git fetch failed: couldn't find remote ref topic");
+        verify(workspace).fetchBranch("topic");
+    }
+
+    @Test
+    void executeContextTool_branchSwitcher_withoutWorkspaceHandleIsRejected() throws Exception {
+        new ProcessBuilder("git", "init", "-q").directory(tempDir.toFile()).start().waitFor();
+
+        ToolResult result = service.executeContextTool(tempDir, "branch-switcher", List.of("topic"));
+
+        assertThat(result.success()).isFalse();
+        assertThat(result.error()).isEqualTo("branch-switcher requires an open workspace");
     }
 
     @Test

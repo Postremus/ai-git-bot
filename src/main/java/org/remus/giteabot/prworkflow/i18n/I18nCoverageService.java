@@ -3,7 +3,8 @@ package org.remus.giteabot.prworkflow.i18n;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.remus.giteabot.agent.shared.BranchRefs;
-import org.remus.giteabot.agent.validation.WorkspaceResult;
+import org.remus.giteabot.agent.validation.Workspace;
+import org.remus.giteabot.agent.validation.WorkspaceException;
 import org.remus.giteabot.agent.validation.WorkspaceService;
 import org.remus.giteabot.ai.AiClient;
 import org.remus.giteabot.gitea.model.WebhookPayload;
@@ -102,7 +103,8 @@ public class I18nCoverageService {
             return Result.skipped("Unresolved PR head branch");
         }
 
-        Path workspace = null;
+        Workspace ws = null;
+        Path workspace;
         try {
             if (request.lifecycleMode() == SuiteLifecycleMode.OFFER_AS_PR
                     && workspaceService.isAuthoritativePullRequestFromFork(
@@ -112,17 +114,18 @@ public class I18nCoverageService {
                 return Result.failed("offer-as-pr is not supported for fork pull requests");
             }
             context.requireActive("before preparing i18n-coverage workspace");
-            WorkspaceResult ws = request.lifecycleMode() == SuiteLifecycleMode.COMMIT_TO_PR
-                    ? workspaceService.prepareWritablePullRequestWorkspace(
-                            repositoryClient, owner, repo, headBranch, prNumber)
-                    : workspaceService.prepareWorkspace(
-                            repositoryClient, owner, repo, headBranch, prNumber);
-            if (!ws.success()) {
+            try {
+                ws = request.lifecycleMode() == SuiteLifecycleMode.COMMIT_TO_PR
+                        ? workspaceService.openWritablePullRequestWorkspace(
+                                repositoryClient, owner, repo, headBranch, prNumber)
+                        : workspaceService.openWorkspace(
+                                repositoryClient, owner, repo, headBranch, prNumber);
+            } catch (WorkspaceException e) {
                 postComment(owner, repo, prNumber, I18nCoverageSummaryRenderer.renderFailed(prNumber,
-                        "failed to prepare workspace: " + ws.error()));
+                        "failed to prepare workspace: " + e.getMessage()));
                 return Result.failed("Workspace preparation failed");
             }
-            workspace = ws.workspacePath();
+            workspace = ws.dir();
 
             postComment(owner, repo, prNumber, I18nCoverageSummaryRenderer.renderStarting(
                     prNumber, request.includePatterns(), request.baselineLocale(), request.lifecycleMode()));
@@ -168,7 +171,7 @@ public class I18nCoverageService {
 
             // Pre-commit guard (defence-in-depth behind the write-time guard):
             // re-verify every changed file is inside the configured i18n scope.
-            List<String> offending = workspaceService.listChangedFiles(workspace).stream()
+            List<String> offending = ws.listChangedFiles().stream()
                     .filter(p -> !I18nPathGuard.isAllowedI18nPath(request.includePatterns(), p))
                     .toList();
             if (!offending.isEmpty()) {
@@ -181,7 +184,7 @@ public class I18nCoverageService {
                 return Result.failed("Out-of-scope files changed");
             }
 
-            return applyLifecycle(context, owner, repo, prNumber, headBranch, workspace, request,
+            return applyLifecycle(context, owner, repo, prNumber, headBranch, ws, request,
                     toolContext, report);
         } catch (WorkflowCancelledException e) {
             throw e;
@@ -192,14 +195,14 @@ public class I18nCoverageService {
                     "unexpected error: " + e.getMessage()));
             return Result.failed(e.getMessage());
         } finally {
-            if (workspace != null) {
-                workspaceService.cleanupWorkspace(workspace);
+            if (ws != null) {
+                ws.close();
             }
         }
     }
 
     private Result applyLifecycle(PrWorkflowContext context, String owner, String repo, long prNumber,
-                                  String headBranch, Path workspace, Request request,
+                                  String headBranch, Workspace ws, Request request,
                                   I18nCoverageToolContext toolContext, I18nCoverageDetector.Report report) {
         SuiteLifecycleMode mode = request.lifecycleMode();
 
@@ -215,13 +218,14 @@ public class I18nCoverageService {
 
         if (mode == SuiteLifecycleMode.OFFER_AS_PR) {
             String workBranch = "ai-i18n/pr-" + prNumber + "-" + System.currentTimeMillis();
-            boolean pushed = workspaceService.commitAndPush(workspace, workBranch,
-                    "i18n: sync translation coverage for PR #" + prNumber,
-                    GIT_AUTHOR_NAME, GIT_AUTHOR_EMAIL, true);
-            if (!pushed) {
+            try {
+                ws.commitAndPush(workBranch, "i18n: sync translation coverage for PR #" + prNumber,
+                        GIT_AUTHOR_NAME, GIT_AUTHOR_EMAIL, true);
+            } catch (WorkspaceException e) {
                 postReviewComment(owner, repo, prNumber, I18nCoverageSummaryRenderer.renderCompletion(
                         prNumber, toolContext, report, false, null, null));
-                context.appendStep("i18n-coverage-commit", "commit/push failed for branch " + workBranch);
+                context.appendStep("i18n-coverage-commit",
+                        "commit/push failed for branch " + workBranch + ": " + e.getMessage());
                 return Result.failed("git commit/push failed");
             }
             String target = "(follow-up PR against `" + headBranch + "`)";
@@ -248,14 +252,22 @@ public class I18nCoverageService {
         }
 
         // COMMIT_TO_PR (default): commit straight onto the PR head branch.
-        boolean committed = workspaceService.commitAndPush(workspace, headBranch,
-                "i18n: sync translation coverage for PR #" + prNumber,
-                GIT_AUTHOR_NAME, GIT_AUTHOR_EMAIL, false);
+        boolean committed;
+        String commitFailure = null;
+        try {
+            ws.commitAndPush(headBranch, "i18n: sync translation coverage for PR #" + prNumber,
+                    GIT_AUTHOR_NAME, GIT_AUTHOR_EMAIL, false);
+            committed = true;
+        } catch (WorkspaceException e) {
+            committed = false;
+            commitFailure = e.getMessage();
+        }
         postReviewComment(owner, repo, prNumber, I18nCoverageSummaryRenderer.renderCompletion(
                 prNumber, toolContext, report, committed,
                 committed ? "and committed to `" + headBranch + "`" : null, null));
         context.appendStep("i18n-coverage-commit",
-                committed ? "Committed translation changes to " + headBranch : "Commit skipped / failed");
+                committed ? "Committed translation changes to " + headBranch
+                        : "Commit skipped / failed: " + commitFailure);
         return committed
                 ? Result.success(toolContext.changeCount() + " translation change(s) committed to PR")
                 : Result.failed("git commit/push failed");

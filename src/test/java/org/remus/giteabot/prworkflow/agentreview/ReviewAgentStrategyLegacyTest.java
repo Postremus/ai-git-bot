@@ -20,6 +20,7 @@ import org.remus.giteabot.agent.shared.AgentJackson;
 import org.remus.giteabot.agent.shared.BranchSwitcher;
 import org.remus.giteabot.agent.tools.AgentToolRouter;
 import org.remus.giteabot.agent.tools.ToolCatalog;
+import org.remus.giteabot.agent.validation.TestWorkspaces;
 import org.remus.giteabot.agent.validation.ToolExecutionService;
 import org.remus.giteabot.agent.validation.ToolResult;
 import org.remus.giteabot.ai.AiClient;
@@ -80,7 +81,7 @@ class ReviewAgentStrategyLegacyTest {
     }
 
     private AgentRunContext ctx() {
-        return new AgentRunContext(null, "octo", "repo", 1L, Path.of("/tmp/ws"), "main");
+        return new AgentRunContext(null, "octo", "repo", 1L, TestWorkspaces.at(Path.of("/tmp/ws")), "main");
     }
 
     @ParameterizedTest
@@ -104,7 +105,8 @@ class ReviewAgentStrategyLegacyTest {
                 new ToolCatalog(new AgentConfigProperties()), null, null, parser,
                 new BranchSwitcher(toolExecutionService), fetcher, 5);
         AgentSession session = new AgentSession("octo", "repo", 1L, "Review example");
-        AgentRunContext context = new AgentRunContext(session, "octo", "repo", 1L, Path.of("/tmp/ws"), "main");
+        AgentRunContext context = new AgentRunContext(session, "octo", "repo", 1L,
+                TestWorkspaces.at(Path.of("/tmp/ws")), "main");
         AgentLoop loop = new AgentLoop(client, new AgentSessionService(mock(AgentSessionRepository.class)),
                 new AgentBudget(3, 2, 2, 32, 8_000, 120_000, 200_000, 0.7));
 
@@ -126,7 +128,7 @@ class ReviewAgentStrategyLegacyTest {
                         new ChatTurn("The change correctly handles missing values.", List.of(), StopReason.END_TURN, 120, 20));
         AgentSession session = new AgentSession("octo", "repo", 1L, "Review example");
         AgentRunContext context = new AgentRunContext(session, "octo", "repo", 1L,
-                Path.of("/tmp/ws"), "main");
+                TestWorkspaces.at(Path.of("/tmp/ws")), "main");
         AgentLoop loop = new AgentLoop(client, new AgentSessionService(mock(AgentSessionRepository.class)),
                 new AgentBudget(3, 2, 2, 4000, 8_000, 120_000, 200_000, 0.7));
 

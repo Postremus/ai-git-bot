@@ -47,7 +47,6 @@ public class ToolExecutionService {
 
     private final AgentConfigProperties agentConfig;
     private final ToolCatalog catalog;
-    private final WorkspaceService workspaceService;
 
     /**
      * Executes a configured validation tool (mvn, gradle, …) in the given
@@ -78,9 +77,23 @@ public class ToolExecutionService {
     }
 
     /**
-     * Executes a read-only repository exploration tool in the given workspace.
+     * Executes a read-only repository exploration tool in the workspace, including
+     * {@code branch-switcher}, which fetches through the workspace's authentication.
+     */
+    public ToolResult executeContextTool(Workspace workspace, String tool, List<String> arguments) {
+        return executeContextTool(workspace.dir(), workspace, tool, arguments);
+    }
+
+    /**
+     * Executes a read-only repository exploration tool in a directory. {@code branch-switcher}
+     * needs the remote and is only available through {@link #executeContextTool(Workspace, String, List)}.
      */
     public ToolResult executeContextTool(Path workspaceDir, String tool, List<String> arguments) {
+        return executeContextTool(workspaceDir, null, tool, arguments);
+    }
+
+    private ToolResult executeContextTool(Path workspaceDir, Workspace workspace,
+                                          String tool, List<String> arguments) {
         String normalizedTool = tool != null ? tool.strip().toLowerCase() : "";
         if (!catalog.contextToolNames().contains(normalizedTool)) {
             return new ToolResult(false, -1, "",
@@ -96,7 +109,7 @@ public class ToolExecutionService {
             case "git-log" -> executeGitLogTool(workspaceDir, arguments);
             case "git-blame" -> executeGitBlameTool(workspaceDir, arguments);
             case "tree" -> executeTreeTool(workspaceDir, arguments);
-            case "branch-switcher" -> executeBranchSwitcherTool(workspaceDir, arguments);
+            case "branch-switcher" -> executeBranchSwitcherTool(workspaceDir, workspace, arguments);
             case "ctags-signatures" -> executeCtagsSignaturesTool(workspaceDir, arguments);
             case "ctags-deps"       -> executeCtagsDepsTool(workspaceDir, arguments);
             default -> new ToolResult(false, -1, "",
@@ -104,7 +117,7 @@ public class ToolExecutionService {
         };
     }
 
-    private ToolResult executeBranchSwitcherTool(Path workspaceDir, List<String> arguments) {
+    private ToolResult executeBranchSwitcherTool(Path workspaceDir, Workspace workspace, List<String> arguments) {
         if (arguments == null || arguments.isEmpty()) {
             return new ToolResult(false, -1, "", "branch-switcher requires a branch name argument");
         }
@@ -126,11 +139,15 @@ public class ToolExecutionService {
                     "Invalid branch name for git: " + branch);
         }
 
-        CommandResult fetch = workspaceService.fetchBranch(workspaceDir, branch);
-        if (!fetch.success()) {
+        if (workspace == null) {
+            return new ToolResult(false, -1, "", "branch-switcher requires an open workspace");
+        }
+        try {
+            workspace.fetchBranch(branch);
+        } catch (WorkspaceException e) {
             return new ToolResult(false, -1, "",
                     "Failed to fetch branch '" + branch + "' from origin: "
-                            + normalizeToolMessage(fetch.output()));
+                            + normalizeToolMessage(e.getMessage()));
         }
 
         ToolResult checkout = executeCommand(workspaceDir,

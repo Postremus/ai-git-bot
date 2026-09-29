@@ -4,7 +4,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.remus.giteabot.admin.Bot;
 import org.remus.giteabot.admin.GiteaClientFactory;
-import org.remus.giteabot.agent.validation.WorkspaceResult;
+import org.remus.giteabot.agent.validation.Workspace;
+import org.remus.giteabot.agent.validation.WorkspaceException;
 import org.remus.giteabot.agent.validation.WorkspaceService;
 import org.remus.giteabot.prworkflow.PrWorkflowRun;
 import org.remus.giteabot.prworkflow.PrWorkflowRunRepository;
@@ -136,17 +137,19 @@ public class SuitePromotionService {
             case EPHEMERAL        -> throw new IllegalStateException("EPHEMERAL rejected above");
         };
 
-        WorkspaceResult ws = mode == SuiteLifecycleMode.COMMIT_TO_PR
-                ? workspaceService.prepareWritablePullRequestWorkspace(
-                        client, repoOwner, repoName, baseBranch, prNumber)
-                : workspaceService.prepareWorkspace(
-                        client, repoOwner, repoName, baseBranch,
-                        mode == SuiteLifecycleMode.PROMOTE_ON_MERGE ? null : prNumber);
-        if (!ws.success()) {
-            return Outcome.failure("Workspace preparation failed: " + ws.error());
-        }
-        Path workspace = ws.workspacePath();
+        final Workspace ws;
         try {
+            ws = mode == SuiteLifecycleMode.COMMIT_TO_PR
+                    ? workspaceService.openWritablePullRequestWorkspace(
+                            client, repoOwner, repoName, baseBranch, prNumber)
+                    : workspaceService.openWorkspace(
+                            client, repoOwner, repoName, baseBranch,
+                            mode == SuiteLifecycleMode.PROMOTE_ON_MERGE ? null : prNumber);
+        } catch (WorkspaceException e) {
+            return Outcome.failure("Workspace preparation failed: " + e.getMessage());
+        }
+        try (ws) {
+            Path workspace = ws.dir();
             final List<String> writtenPaths;
             try {
                 writtenPaths = writeCases(workspace, targetDir, suite.getCases());
@@ -157,12 +160,12 @@ public class SuitePromotionService {
                 return Outcome.failure("Failed to write E2E test cases: no files were written.");
             }
 
-            boolean pushed = workspaceService.commitAndPush(workspace, workBranch,
-                    commitMessage(mode, prNumber),
-                    GIT_AUTHOR_NAME, GIT_AUTHOR_EMAIL,
-                    mode != SuiteLifecycleMode.COMMIT_TO_PR);
-            if (!pushed) {
-                return Outcome.failure("git commit/push failed for branch '" + workBranch + "'.");
+            try {
+                ws.commitAndPush(workBranch, commitMessage(mode, prNumber),
+                        GIT_AUTHOR_NAME, GIT_AUTHOR_EMAIL, mode != SuiteLifecycleMode.COMMIT_TO_PR);
+            } catch (WorkspaceException e) {
+                return Outcome.failure("git commit/push failed for branch '" + workBranch + "': "
+                        + e.getMessage());
             }
 
             if (mode == SuiteLifecycleMode.COMMIT_TO_PR) {
@@ -191,8 +194,6 @@ public class SuitePromotionService {
             log.info("M7 promotion: opened follow-up PR #{} on {}/{} (mode={}, branch={})",
                     followUpPr, repoOwner, repoName, mode, workBranch);
             return Outcome.promoted(followUpPr, workBranch, writtenPaths);
-        } finally {
-            workspaceService.cleanupWorkspace(workspace);
         }
     }
 

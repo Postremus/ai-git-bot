@@ -30,18 +30,12 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.TimeUnit;
 
 /**
- * Manages local workspace directories for the AI agent.
- * <p>
- * Responsibilities:
- * <ul>
- *     <li>Cloning a repository into a temporary directory</li>
- *     <li>Committing and pushing workspace changes back to the remote</li>
- *     <li>Cleaning up temporary workspace directories</li>
- * </ul>
+ * Opens temporary git workspaces for the AI agents. Each {@code open…} method returns a
+ * {@link Workspace} owned by the caller, who closes it to delete it; failures throw
+ * {@link WorkspaceException}.
  * <p>
  * File changes (write-file, patch-file, mkdir, delete-file) are now performed
  * directly via {@link org.remus.giteabot.agent.validation.ToolExecutionService}.
@@ -60,7 +54,7 @@ public class WorkspaceService {
             PosixFilePermission.OWNER_READ,
             PosixFilePermission.OWNER_WRITE);
     private final Path workspaceBaseDir;
-    private final ConcurrentMap<Path, WorkspaceSetup> setupsByWorkspace = new ConcurrentHashMap<>();
+    private final Set<WorkspaceSetup> setups = ConcurrentHashMap.newKeySet();
 
     /** Creates a service that places workspaces under the system temporary directory. */
     public WorkspaceService() {
@@ -84,9 +78,11 @@ public class WorkspaceService {
      * credentials once before any workspace is allocated. HTTP credentials use
      * a credential-store file outside the checkout; SSH credentials use private
      * key and {@code known_hosts} files in the same private temporary parent.</p>
+     *
+     * @throws WorkspaceException when the checkout cannot be resolved or cloned; no directory is left behind
      */
-    public WorkspaceResult prepareWorkspace(RepositoryApiClient repositoryClient,
-                                            String owner, String repo, String branch, Long prNumber) {
+    public Workspace openWorkspace(RepositoryApiClient repositoryClient,
+                                   String owner, String repo, String branch, Long prNumber) {
         final String repositoryRemote;
         final RepositoryCredentials credentials;
         final boolean usesAuthorizationHeader;
@@ -100,7 +96,7 @@ public class WorkspaceService {
         } catch (RuntimeException e) {
             String message = e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage();
             log.error("Failed to resolve repository checkout for {}/{}: {}", owner, repo, message, e);
-            return WorkspaceResult.failure("Failed to resolve repository checkout: " + message);
+            throw new WorkspaceException("Failed to resolve repository checkout: " + message, e);
         }
 
         WorkspaceSetup setup = null;
@@ -116,7 +112,7 @@ public class WorkspaceService {
 
             if (cloneResult.success()) {
                 registerWorkspace(setup);
-                return WorkspaceResult.success(workspaceDir);
+                return new Workspace(this, setup);
             }
 
             // Fork PR fallback: clone default branch → fetch PR head ref
@@ -125,7 +121,7 @@ public class WorkspaceService {
                         prNumber, cloneResult.output());
                 // Tear down the failed attempt before starting the retry.
                 if (!cleanupWorkspace(setup)) {
-                    return WorkspaceResult.failure("Failed to clean up the initial clone attempt");
+                    throw new WorkspaceException("Failed to clean up the initial clone attempt");
                 }
                 setup = createWorkspaceSetup();
                 workspaceDir = setup.workspaceDir();
@@ -139,7 +135,7 @@ public class WorkspaceService {
                     log.error("Fallback clone (default branch) also failed: {}",
                             defaultCloneResult.output());
                     cleanupWorkspace(setup);
-                    return WorkspaceResult.failure(
+                    throw new WorkspaceException(
                             "Failed to clone repository (branch: " + cloneResult.output()
                                     + "; default branch: " + defaultCloneResult.output() + ")");
                 }
@@ -153,7 +149,7 @@ public class WorkspaceService {
                     log.error("Failed to fetch PR head ref for PR #{}: {}", prNumber,
                             fetchResult.output());
                     cleanupWorkspace(setup);
-                    return WorkspaceResult.failure(
+                    throw new WorkspaceException(
                             "Failed to fetch PR head ref for PR #" + prNumber + ": "
                                     + fetchResult.output());
                 }
@@ -165,23 +161,23 @@ public class WorkspaceService {
                     log.error("Failed to checkout FETCH_HEAD for PR #{}: {}", prNumber,
                             checkoutResult.output());
                     cleanupWorkspace(setup);
-                    return WorkspaceResult.failure(
+                    throw new WorkspaceException(
                             "Failed to checkout FETCH_HEAD for PR #" + prNumber + ": "
                                     + checkoutResult.output());
                 }
 
-                return WorkspaceResult.success(workspaceDir);
+                return new Workspace(this, setup);
             }
 
             // No fallback — report the original clone error
             log.error("Failed to clone repository: {}", cloneResult.output());
             cleanupWorkspace(setup);
-            return WorkspaceResult.failure("Failed to clone repository: " + cloneResult.output());
+            throw new WorkspaceException("Failed to clone repository: " + cloneResult.output());
 
         } catch (IOException e) {
             log.error("Failed to prepare workspace: {}", e.getMessage());
             cleanupWorkspace(setup);
-            return WorkspaceResult.failure("Failed to prepare workspace: " + e.getMessage());
+            throw new WorkspaceException("Failed to prepare workspace: " + e.getMessage(), e);
         } catch (RuntimeException e) {
             cleanupWorkspace(setup);
             throw e;
@@ -194,11 +190,11 @@ public class WorkspaceService {
      * source repository and fail closed; other providers retain the legacy
      * target-repository and PR-ref fallback behaviour.
      */
-    public WorkspaceResult prepareWritablePullRequestWorkspace(RepositoryApiClient repositoryClient,
-                                                               String owner, String repo,
-                                                               String branch, Long prNumber) {
+    public Workspace openWritablePullRequestWorkspace(RepositoryApiClient repositoryClient,
+                                                       String owner, String repo,
+                                                       String branch, Long prNumber) {
         if (!repositoryClient.requiresAuthoritativePullRequestHead()) {
-            return prepareWorkspace(repositoryClient, owner, repo, branch, prNumber);
+            return openWorkspace(repositoryClient, owner, repo, branch, prNumber);
         }
         final PullRequestHead head;
         try {
@@ -212,9 +208,9 @@ public class WorkspaceService {
             String message = e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage();
             log.error("Failed to resolve writable pull-request head for {}/{}#{}: {}",
                     owner, repo, prNumber, message, e);
-            return WorkspaceResult.failure("Failed to resolve writable pull-request head: " + message);
+            throw new WorkspaceException("Failed to resolve writable pull-request head: " + message, e);
         }
-        return prepareWorkspace(repositoryClient, head.owner(), head.repository(), head.branch(), null);
+        return openWorkspace(repositoryClient, head.owner(), head.repository(), head.branch(), null);
     }
 
     /**
@@ -233,179 +229,6 @@ public class WorkspaceService {
     }
 
     /**
-     * Commits all changes in the workspace and pushes them to the remote.
-     * <p>
-     * If {@code createNewBranch} is {@code true} a new local branch is created first
-     * ({@code git checkout -b branchName}).  Otherwise the workspace is assumed to be
-     * already on the target branch (cloned with {@code --branch branchName}).
-     *
-     * @param workspaceDir    The workspace directory
-     * @param branchName      Name of the target branch (new or existing)
-     * @param commitMessage   Commit message
-     * @param authorName      Git author name
-     * @param authorEmail     Git author e-mail
-     * @param createNewBranch {@code true} to create the branch before committing
-     * @return {@code true} if commit and push succeeded
-     */
-    public boolean commitAndPush(Path workspaceDir, String branchName, String commitMessage,
-                                 String authorName, String authorEmail, boolean createNewBranch) {
-        WorkspaceSetup setup = setupsByWorkspace.get(workspaceKey(workspaceDir));
-        if (setup == null) {
-            log.error("Cannot commit workspace without authentication state: {}", workspaceDir);
-            return false;
-        }
-        synchronized (setup) {
-            if (setup.closed() || setup.repositoryCredentials() == null) {
-                log.error("Cannot commit a closed workspace: {}", workspaceDir);
-                return false;
-            }
-
-            // Configure git author
-            if (!runCommand(workspaceDir.toFile(),
-                    new String[]{"git", "config", "user.email", authorEmail}, 10).success()) {
-                log.warn("Could not set git user.email, continuing anyway");
-            }
-            if (!runCommand(workspaceDir.toFile(),
-                    new String[]{"git", "config", "user.name", authorName}, 10).success()) {
-                log.warn("Could not set git user.name, continuing anyway");
-            }
-
-            if (createNewBranch) {
-                CommandResult checkoutResult = runCommand(workspaceDir.toFile(),
-                        new String[]{"git", "checkout", "-b", branchName}, 15);
-                if (!checkoutResult.success()) {
-                    log.error("Failed to create branch '{}': {}", branchName, checkoutResult.output());
-                    return false;
-                }
-            }
-
-            CommandResult addResult = runCommand(workspaceDir.toFile(),
-                    new String[]{"git", "add", "-A"}, 15);
-            if (!addResult.success()) {
-                log.error("git add -A failed: {}", addResult.output());
-                return false;
-            }
-
-            CommandResult commitResult = runCommand(workspaceDir.toFile(),
-                    new String[]{"git", "commit", "-m", commitMessage}, 15);
-            if (!commitResult.success()) {
-                // "nothing to commit" is not a real error
-                if (commitResult.output().contains("nothing to commit")) {
-                    log.warn("Nothing to commit in workspace — no file changes were made");
-                    return false;
-                }
-                log.error("git commit failed: {}", commitResult.output());
-                return false;
-            }
-
-            CommandResult pushResult = runRemoteCommand(setup, workspaceDir.toFile(), 60,
-                    "push", "origin", branchName);
-            if (!pushResult.success()) {
-                log.error("git push failed: {}", pushResult.output());
-                return false;
-            }
-
-            log.info("Successfully committed and pushed to branch '{}'", branchName);
-            return true;
-        }
-    }
-
-    /**
-     * Returns whether the workspace contains changes that Git would commit.
-     * Empty directories are intentionally ignored by Git and therefore return {@code false}.
-     */
-    public boolean hasUncommittedChanges(Path workspaceDir) {
-        CommandResult statusResult = runCommand(workspaceDir.toFile(),
-                new String[]{"git", "status", "--porcelain"}, 10);
-        if (!statusResult.success()) {
-            log.warn("Could not inspect workspace git status: {}", statusResult.output());
-            return true;
-        }
-        return !statusResult.output().isBlank();
-    }
-
-    /**
-     * Returns the workspace-relative paths of every file Git currently sees as
-     * changed (added, modified, renamed or untracked) in {@code workspaceDir}.
-     * Parsed from {@code git status --porcelain}; rename entries surface their
-     * destination path. Used by callers that need to assert which files are
-     * about to be committed — e.g. the unit-test workflow's pre-commit guard.
-     *
-     * @return the changed paths (forward slashes), never {@code null}.
-     */
-    public List<String> listChangedFiles(Path workspaceDir) {
-        List<String> changed = new ArrayList<>();
-        if (workspaceDir == null) {
-            return changed;
-        }
-        CommandResult statusResult = runCommand(workspaceDir.toFile(),
-                new String[]{"git", "status", "--porcelain"}, 10);
-        if (!statusResult.success() || statusResult.output() == null) {
-            log.warn("Could not list changed files via git status: {}",
-                    statusResult.output());
-            return changed;
-        }
-        for (String line : statusResult.output().split("\\R")) {
-            if (line.isBlank()) {
-                continue;
-            }
-            // Porcelain v1 format: "XY <path>" or "XY <old> -> <new>".
-            String entry = line.length() > 3 ? line.substring(3).trim() : line.trim();
-            int arrow = entry.indexOf(" -> ");
-            if (arrow >= 0) {
-                entry = entry.substring(arrow + 4).trim();
-            }
-            // Drop surrounding quotes Git adds for paths with special chars.
-            if (entry.length() >= 2 && entry.startsWith("\"") && entry.endsWith("\"")) {
-                entry = entry.substring(1, entry.length() - 1);
-            }
-            if (!entry.isBlank()) {
-                changed.add(entry.replace('\\', '/'));
-            }
-        }
-        return changed;
-    }
-
-    /**
-     * Step 7.3 — returns a {@code git diff --stat} style summary of the
-     * uncommitted changes in {@code workspaceDir}. Used by the optional
-     * Critic / Reflection step to give the LLM a compact view of what is
-     * about to be committed without paying for the full diff.
-     *
-     * @return a textual summary, possibly empty; never {@code null}.
-     */
-    public String diffStat(Path workspaceDir) {
-        if (workspaceDir == null) {
-            return "";
-        }
-        CommandResult result = runCommand(workspaceDir.toFile(),
-                new String[]{"git", "diff", "--stat", "HEAD"}, 15);
-        if (!result.success()) {
-            log.debug("git diff --stat failed: {}", result.output());
-            return "";
-        }
-        String out = result.output();
-        return out == null ? "" : out.strip();
-    }
-
-
-    /**
-     * Cleans up a workspace directory, its private temporary parent, and any
-     * in-flight Git authentication files.
-     */
-    public void cleanupWorkspace(Path workspaceDir) {
-        if (workspaceDir == null) {
-            return;
-        }
-        Path workspaceRoot = workspaceRootFor(workspaceDir);
-        WorkspaceSetup setup = setupsByWorkspace.get(workspaceKey(workspaceDir));
-        if (setup == null) {
-            setup = new WorkspaceSetup(workspaceRoot != null ? workspaceRoot : workspaceDir);
-        }
-        cleanupWorkspace(setup);
-    }
-
-    /**
      * Cleans up a whole {@link WorkspaceSetup}, including any authentication
      * files left by an interrupted remote Git command.
      */
@@ -418,7 +241,7 @@ public class WorkspaceService {
             clearAuthenticationFiles(setup);
             try {
                 deleteDirectory(setup.workspaceRoot());
-                setupsByWorkspace.remove(workspaceKey(setup.workspaceDir()), setup);
+                setups.remove(setup);
                 log.debug("Cleaned up workspace: {}", setup.workspaceDir());
                 return true;
             } catch (IOException | RuntimeException e) {
@@ -553,7 +376,7 @@ public class WorkspaceService {
     }
 
     private void retryFailedCleanups() {
-        for (WorkspaceSetup setup : setupsByWorkspace.values()) {
+        for (WorkspaceSetup setup : setups) {
             if (setup.closed()) {
                 cleanupWorkspace(setup);
             }
@@ -668,19 +491,13 @@ public class WorkspaceService {
     void registerWorkspace(WorkspaceSetup setup) {
         synchronized (setup) {
             if (!setup.closed()) {
-                setupsByWorkspace.put(workspaceKey(setup.workspaceDir()), setup);
+                setups.add(setup);
             }
         }
     }
 
-    CommandResult fetchBranch(Path workspaceDir, String branch) {
-        return runRemoteCommand(setupsByWorkspace.get(workspaceKey(workspaceDir)),
-                workspaceDir.toFile(), 60,
-                "fetch", "origin", "refs/heads/" + branch + ":refs/remotes/origin/" + branch);
-    }
-
-    private CommandResult runRemoteCommand(WorkspaceSetup setup, File workDir, int timeoutSeconds,
-                                           String... gitArgs) {
+    CommandResult runRemoteCommand(WorkspaceSetup setup, File workDir, int timeoutSeconds,
+                                   String... gitArgs) {
         if (setup == null) {
             return new CommandResult(false, "Workspace authentication is unavailable");
         }
@@ -729,10 +546,6 @@ public class WorkspaceService {
                 || setup.sshKnownHostsFile() != null;
     }
 
-    private Path workspaceKey(Path workspaceDir) {
-        return workspaceDir.toAbsolutePath().normalize();
-    }
-
     /** Deletes an authentication file after a failed or completed workspace. */
     private boolean deleteSecretFile(Path file) {
         if (file == null) {
@@ -747,7 +560,7 @@ public class WorkspaceService {
         }
     }
 
-    private CommandResult runCommand(File workDir, String[] command, int timeoutSeconds) {
+    CommandResult runCommand(File workDir, String[] command, int timeoutSeconds) {
         return runCommand(workDir, command, timeoutSeconds, Map.of());
     }
 

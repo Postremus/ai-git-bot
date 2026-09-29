@@ -6,7 +6,9 @@ import org.junit.jupiter.api.io.TempDir;
 import org.remus.giteabot.admin.Bot;
 import org.remus.giteabot.admin.GitIntegration;
 import org.remus.giteabot.admin.GiteaClientFactory;
-import org.remus.giteabot.agent.validation.WorkspaceResult;
+import org.remus.giteabot.agent.validation.TestWorkspaces;
+import org.remus.giteabot.agent.validation.Workspace;
+import org.remus.giteabot.agent.validation.WorkspaceException;
 import org.remus.giteabot.agent.validation.WorkspaceService;
 import org.remus.giteabot.prworkflow.PrWorkflowRun;
 import org.remus.giteabot.prworkflow.PrWorkflowRunRepository;
@@ -27,6 +29,7 @@ import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -46,10 +49,12 @@ class SuitePromotionServiceTest {
     private SuitePromotionService service;
 
     private Path workspace;
+    private Workspace ws;
 
     @BeforeEach
     void setUp(@TempDir Path tmp) throws IOException {
         workspace = Files.createDirectories(tmp.resolve("ws"));
+        ws = TestWorkspaces.at(workspace);
         workspaceService = mock(WorkspaceService.class);
         GiteaClientFactory giteaClientFactory = mock(GiteaClientFactory.class);
         PrWorkflowRunRepository runRepository = mock(PrWorkflowRunRepository.class);
@@ -57,15 +62,12 @@ class SuitePromotionServiceTest {
 
         when(giteaClientFactory.getApiClient(any())).thenReturn(repoClient);
         when(repoClient.getDefaultBranch(anyString(), anyString())).thenReturn("main");
-        when(workspaceService.prepareWorkspace(any(RepositoryApiClient.class),
+        when(workspaceService.openWorkspace(any(RepositoryApiClient.class),
                 anyString(), anyString(), anyString(), any()))
-                .thenReturn(WorkspaceResult.success(workspace));
-        when(workspaceService.prepareWritablePullRequestWorkspace(any(RepositoryApiClient.class),
+                .thenReturn(ws);
+        when(workspaceService.openWritablePullRequestWorkspace(any(RepositoryApiClient.class),
                 anyString(), anyString(), anyString(), any()))
-                .thenReturn(WorkspaceResult.success(workspace));
-        lenient().when(workspaceService.commitAndPush(any(), anyString(), anyString(),
-                anyString(), anyString(), anyBoolean()))
-                .thenReturn(true);
+                .thenReturn(ws);
         lenient().when(runRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         service = new SuitePromotionService(workspaceService, giteaClientFactory, runRepository);
@@ -81,7 +83,7 @@ class SuitePromotionServiceTest {
                 "acme", "web", "feature/login");
 
         assertThat(out.kind()).isEqualTo(SuitePromotionService.Outcome.Kind.SKIPPED);
-        verify(workspaceService, never()).prepareWorkspace(any(), any(), any(), any(), any());
+        verify(workspaceService, never()).openWorkspace(any(), any(), any(), any(), any());
     }
 
     @Test
@@ -103,9 +105,9 @@ class SuitePromotionServiceTest {
         assertThat(run.getFollowUpPrNumber()).isEqualTo(4242L);
         // File actually written.
         assertThat(workspace.resolve("tests/e2e/pr-7/login.spec.ts")).exists();
-        verify(workspaceService).prepareWorkspace(
+        verify(workspaceService).openWorkspace(
                 repoClient, "acme", "web", "feature/login", 7L);
-        verify(workspaceService).commitAndPush(eq(workspace), eq(expectedBranch),
+        verify(ws).commitAndPush(eq(expectedBranch),
                 anyString(), anyString(), anyString(), eq(true));
     }
 
@@ -124,7 +126,7 @@ class SuitePromotionServiceTest {
         assertThat(out.writtenPaths()).containsExactly("tests/e2e/checkout.spec.ts");
         assertThat(workspace.resolve("tests/e2e/checkout.spec.ts")).exists();
         assertThat(run.getFollowUpPrNumber()).isEqualTo(5050L);
-        verify(workspaceService).prepareWorkspace(
+        verify(workspaceService).openWorkspace(
                 eq(repoClient), eq("acme"), eq("web"), eq("main"), isNull());
     }
 
@@ -167,9 +169,9 @@ class SuitePromotionServiceTest {
         assertThat(out.kind()).isEqualTo(SuitePromotionService.Outcome.Kind.COMMITTED);
         assertThat(out.branch()).isEqualTo("feature/x");
         assertThat(workspace.resolve("tests/e2e/pr-3/smoke.spec.ts")).exists();
-        verify(workspaceService).prepareWritablePullRequestWorkspace(
+        verify(workspaceService).openWritablePullRequestWorkspace(
                 repoClient, "acme", "web", "feature/x", 3L);
-        verify(workspaceService).commitAndPush(eq(workspace), eq("feature/x"),
+        verify(ws).commitAndPush(eq("feature/x"),
                 anyString(), anyString(), anyString(), eq(false));
         verify(repoClient, never()).createPullRequest(any(), any(), any(), any(), any(), any());
         // Idempotency: COMMIT_TO_PR records parent prNumber so a re-run no-ops.
@@ -188,7 +190,7 @@ class SuitePromotionServiceTest {
 
         assertThat(out.kind()).isEqualTo(SuitePromotionService.Outcome.Kind.ALREADY_PROMOTED);
         assertThat(out.followUpPrNumber()).isEqualTo(123L);
-        verify(workspaceService, never()).prepareWorkspace(any(), any(), any(), any(), any());
+        verify(workspaceService, never()).openWorkspace(any(), any(), any(), any(), any());
         verify(repoClient, never()).createPullRequest(any(), any(), any(), any(), any(), any());
     }
 
@@ -203,9 +205,8 @@ class SuitePromotionServiceTest {
                 bot(), run(99L), suite, "acme", "web", "main");
 
         assertThat(out.kind()).isEqualTo(SuitePromotionService.Outcome.Kind.FAILED);
-        verify(workspaceService, never()).prepareWorkspace(any(), any(), any(), any(), any());
-        verify(workspaceService, never()).commitAndPush(
-                any(), anyString(), anyString(), anyString(), anyString(), anyBoolean());
+        verify(workspaceService, never()).openWorkspace(any(), any(), any(), any(), any());
+        verify(ws, never()).commitAndPush(any(), any(), any(), any(), anyBoolean());
     }
 
     @Test
@@ -247,8 +248,8 @@ class SuitePromotionServiceTest {
 
     @Test
     void workspaceFailure_surfacesAsOutcomeFailure() {
-        when(workspaceService.prepareWorkspace(any(), any(), any(), any(), any()))
-                .thenReturn(WorkspaceResult.failure("network down"));
+        when(workspaceService.openWorkspace(any(), any(), any(), any(), any()))
+                .thenThrow(new WorkspaceException("network down"));
 
         PrTestSuite suite = suite(SuiteLifecycleMode.OFFER_AS_PR, 7L,
                 caseAt("login.spec.ts", "// hi"));
@@ -262,8 +263,8 @@ class SuitePromotionServiceTest {
 
     @Test
     void pushFailure_surfacesAsOutcomeFailure_andDoesNotOpenPr() {
-        when(workspaceService.commitAndPush(any(), anyString(), anyString(),
-                anyString(), anyString(), anyBoolean())).thenReturn(false);
+        doThrow(new WorkspaceException("git push failed: rejected"))
+                .when(ws).commitAndPush(any(), any(), any(), any(), anyBoolean());
 
         PrTestSuite suite = suite(SuiteLifecycleMode.OFFER_AS_PR, 7L,
                 caseAt("login.spec.ts", "// hi"));
@@ -271,6 +272,7 @@ class SuitePromotionServiceTest {
                 "acme", "web", "feature/x");
 
         assertThat(out.kind()).isEqualTo(SuitePromotionService.Outcome.Kind.FAILED);
+        assertThat(out.message()).contains("git push failed: rejected");
         verify(repoClient, never()).createPullRequest(any(), any(), any(), any(), any(), any());
     }
 
@@ -285,8 +287,7 @@ class SuitePromotionServiceTest {
 
         assertThat(out.kind()).isEqualTo(SuitePromotionService.Outcome.Kind.FAILED);
         assertThat(out.message()).contains("write");
-        verify(workspaceService, never()).commitAndPush(
-                any(), anyString(), anyString(), anyString(), anyString(), anyBoolean());
+        verify(ws, never()).commitAndPush(any(), any(), any(), any(), anyBoolean());
     }
 
     @Test
@@ -302,8 +303,7 @@ class SuitePromotionServiceTest {
 
         assertThat(out.kind()).isEqualTo(SuitePromotionService.Outcome.Kind.FAILED);
         assertThat(out.message()).contains("write");
-        verify(workspaceService, never()).commitAndPush(
-                any(), anyString(), anyString(), anyString(), anyString(), anyBoolean());
+        verify(ws, never()).commitAndPush(any(), any(), any(), any(), anyBoolean());
     }
 
     @Test

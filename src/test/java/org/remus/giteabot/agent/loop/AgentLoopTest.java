@@ -8,6 +8,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.remus.giteabot.agent.session.AgentSession;
 import org.remus.giteabot.agent.session.AgentSessionService;
 import org.remus.giteabot.agent.session.PendingMessage;
+import org.remus.giteabot.agent.validation.TestWorkspaces;
 import org.remus.giteabot.ai.AiClient;
 import org.remus.giteabot.ai.AiMessage;
 import org.remus.giteabot.ai.ChatTurn;
@@ -40,7 +41,7 @@ class AgentLoopTest {
     void setUp() {
         AgentSession session = new AgentSession("owner", "repo", 42L, "title");
         session.setId(1L); // persisted session — the loop flushes id-bearing sessions
-        ctx = new AgentRunContext(session, "owner", "repo", 42L, Path.of("/tmp/ws"), "main");
+        ctx = new AgentRunContext(session, "owner", "repo", 42L, TestWorkspaces.at(Path.of("/tmp/ws")), "main");
         // lenient: the transient-session test below uses its own id-less session.
         lenient().when(sessionService.toAiMessages(session)).thenReturn(List.of());
     }
@@ -84,7 +85,7 @@ class AgentLoopTest {
         // written to the database; the loop is purely an in-memory conversation.
         AgentSession transientSession = new AgentSession("owner", "repo", 42L, "title");
         AgentRunContext transientCtx = new AgentRunContext(
-                transientSession, "owner", "repo", 42L, Path.of("/tmp/ws"), "main");
+                transientSession, "owner", "repo", 42L, TestWorkspaces.at(Path.of("/tmp/ws")), "main");
         when(sessionService.toAiMessages(transientSession)).thenReturn(List.of());
 
         AgentLoop loop = new AgentLoop(aiClient, sessionService,
