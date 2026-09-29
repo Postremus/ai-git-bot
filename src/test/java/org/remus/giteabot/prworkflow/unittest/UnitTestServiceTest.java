@@ -7,7 +7,9 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.remus.giteabot.admin.Bot;
-import org.remus.giteabot.agent.validation.WorkspaceResult;
+import org.remus.giteabot.agent.validation.TestWorkspaces;
+import org.remus.giteabot.agent.validation.Workspace;
+import org.remus.giteabot.agent.validation.WorkspaceException;
 import org.remus.giteabot.agent.validation.WorkspaceService;
 import org.remus.giteabot.ai.AiClient;
 import org.remus.giteabot.gitea.model.WebhookPayload;
@@ -26,8 +28,11 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -52,14 +57,14 @@ class UnitTestServiceTest {
         UnitTestService.Request request = new UnitTestService.Request(
                 context, null, 1, 1, SuiteLifecycleMode.EPHEMERAL);
         when(repositoryClient.getPullRequestDiff("acme", "repo", 42L)).thenReturn("diff");
-        when(workspaceService.prepareWorkspace(
+        when(workspaceService.openWorkspace(
                 repositoryClient, "acme", "repo", "feature/test", 42L))
-                .thenReturn(WorkspaceResult.failure("stop"));
+                .thenThrow(new WorkspaceException("stop"));
 
         UnitTestService.Result result = service.generate(request);
 
         assertThat(result.status()).isEqualTo(UnitTestService.Result.Status.FAILED);
-        verify(workspaceService).prepareWorkspace(
+        verify(workspaceService).openWorkspace(
                 repositoryClient, "acme", "repo", "feature/test", 42L);
     }
 
@@ -71,14 +76,14 @@ class UnitTestServiceTest {
         UnitTestService.Request request = new UnitTestService.Request(
                 context, null, 1, 1, SuiteLifecycleMode.COMMIT_TO_PR);
         when(repositoryClient.getPullRequestDiff("acme", "repo", 42L)).thenReturn("diff");
-        when(workspaceService.prepareWritablePullRequestWorkspace(
+        when(workspaceService.openWritablePullRequestWorkspace(
                 repositoryClient, "acme", "repo", "feature/test", 42L))
-                .thenReturn(WorkspaceResult.failure("stop"));
+                .thenThrow(new WorkspaceException("stop"));
 
         UnitTestService.Result result = service.generate(request);
 
         assertThat(result.status()).isEqualTo(UnitTestService.Result.Status.FAILED);
-        verify(workspaceService).prepareWritablePullRequestWorkspace(
+        verify(workspaceService).openWritablePullRequestWorkspace(
                 repositoryClient, "acme", "repo", "feature/test", 42L);
     }
 
@@ -90,9 +95,10 @@ class UnitTestServiceTest {
         UnitTestService.Request request = new UnitTestService.Request(
                 context, UnitTestFramework.MAVEN, 1, 1, SuiteLifecycleMode.COMMIT_TO_PR);
         when(repositoryClient.getPullRequestDiff("acme", "repo", 42L)).thenReturn("diff");
-        when(workspaceService.prepareWritablePullRequestWorkspace(
+        Workspace ws = TestWorkspaces.at(workspace);
+        when(workspaceService.openWritablePullRequestWorkspace(
                 repositoryClient, "acme", "repo", "feature/test", 42L))
-                .thenReturn(WorkspaceResult.success(workspace));
+                .thenReturn(ws);
         when(suiteRepository.save(any(UnitTestSuite.class))).thenAnswer(invocation -> {
             UnitTestSuite suite = invocation.getArgument(0);
             suite.setId(10L);
@@ -100,11 +106,11 @@ class UnitTestServiceTest {
         });
         when(authorAgent.write(any(), any(), anyString(), any(), eq(1)))
                 .thenReturn(new UnitTestAuthorAgent.Result(1, "written", false));
-        when(workspaceService.hasUncommittedChanges(workspace)).thenReturn(true);
-        when(workspaceService.listChangedFiles(workspace))
+        when(ws.hasUncommittedChanges()).thenReturn(true);
+        when(ws.listChangedFiles())
                 .thenReturn(List.of("src/test/java/GeneratedTest.java"));
-        when(workspaceService.commitAndPush(eq(workspace), eq("feature/test"), anyString(),
-                anyString(), anyString(), eq(false))).thenReturn(false);
+        doThrow(new WorkspaceException("git push failed: rejected"))
+                .when(ws).commitAndPush(eq("feature/test"), anyString(), anyString(), anyString(), eq(false));
         when(runner.run(any())).thenReturn(UnitTestOutcome.passed(
                 "all tests passed", 1, CoverageResult.unknown(), null));
         when(suiteRepository.findByIdWithCases(10L)).thenReturn(Optional.empty());
@@ -113,6 +119,34 @@ class UnitTestServiceTest {
 
         assertThat(result.status()).isEqualTo(UnitTestService.Result.Status.FAILED);
         assertThat(result.summary()).contains("could not be committed");
+    }
+
+    @Test
+    void generate_gitStatusFailureDuringScopeCheckCommitsNothing(@TempDir Path workspace) {
+        WebhookPayload payload = payload();
+        PrWorkflowContext context = new PrWorkflowContext(
+                new Bot(), payload, 1L, (name, log) -> { }, () -> false);
+        UnitTestService.Request request = new UnitTestService.Request(
+                context, UnitTestFramework.MAVEN, 1, 1, SuiteLifecycleMode.COMMIT_TO_PR);
+        when(repositoryClient.getPullRequestDiff("acme", "repo", 42L)).thenReturn("diff");
+        Workspace ws = TestWorkspaces.at(workspace);
+        when(workspaceService.openWritablePullRequestWorkspace(
+                repositoryClient, "acme", "repo", "feature/test", 42L)).thenReturn(ws);
+        when(suiteRepository.save(any(UnitTestSuite.class))).thenAnswer(invocation -> {
+            UnitTestSuite suite = invocation.getArgument(0);
+            suite.setId(10L);
+            return suite;
+        });
+        when(authorAgent.write(any(), any(), anyString(), any(), eq(1)))
+                .thenReturn(new UnitTestAuthorAgent.Result(1, "written", false));
+        when(ws.hasUncommittedChanges()).thenReturn(true);
+        when(ws.listChangedFiles()).thenThrow(new WorkspaceException("git status failed: fatal"));
+
+        UnitTestService.Result result = service.generate(request);
+
+        assertThat(result.status()).isEqualTo(UnitTestService.Result.Status.FAILED);
+        verify(ws, never()).commitAndPush(any(), any(), any(), any(), anyBoolean());
+        verify(ws).close();
     }
 
     private static WebhookPayload payload() {

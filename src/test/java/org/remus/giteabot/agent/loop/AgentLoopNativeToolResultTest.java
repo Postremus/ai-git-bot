@@ -9,6 +9,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.remus.giteabot.agent.session.AgentSession;
 import org.remus.giteabot.agent.session.AgentSessionService;
 import org.remus.giteabot.agent.session.PendingMessage;
+import org.remus.giteabot.agent.validation.TestWorkspaces;
 import org.remus.giteabot.ai.AiClient;
 import org.remus.giteabot.ai.AiMessage;
 import org.remus.giteabot.ai.ChatTurn;
@@ -58,7 +59,7 @@ class AgentLoopNativeToolResultTest {
     void setUp() {
         session = new AgentSession("owner", "repo", 11L, "issue title");
         session.setId(1L); // persisted session — the loop flushes id-bearing sessions
-        ctx = new AgentRunContext(session, "owner", "repo", 11L, Path.of("/tmp/ws"), "main");
+        ctx = new AgentRunContext(session, "owner", "repo", 11L, TestWorkspaces.at(Path.of("/tmp/ws")), "main");
         when(sessionService.toAiMessages(session)).thenReturn(List.of());
     }
 

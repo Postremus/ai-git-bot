@@ -19,7 +19,8 @@ import org.remus.giteabot.agent.shared.SystemPromptAssembler;
 import org.remus.giteabot.agent.tools.AgentToolRouter;
 import org.remus.giteabot.agent.tools.ToolCatalog;
 import org.remus.giteabot.agent.validation.ToolExecutionService;
-import org.remus.giteabot.agent.validation.WorkspaceResult;
+import org.remus.giteabot.agent.validation.Workspace;
+import org.remus.giteabot.agent.validation.WorkspaceException;
 import org.remus.giteabot.agent.validation.WorkspaceService;
 import org.remus.giteabot.agent.writerimpl.WriterPromptBuilder;
 import org.remus.giteabot.ai.AiClient;
@@ -33,7 +34,6 @@ import org.remus.giteabot.systemsettings.McpToolSelectionService;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClientResponseException;
 
-import java.nio.file.Path;
 import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
@@ -154,29 +154,23 @@ public class IssueTriageService {
         String baseBranch = issueRef != null && !issueRef.isBlank()
                 ? issueRef : repoClient.getDefaultBranch(owner, repo);
 
-        Path workspaceDir = null;
+        Workspace workspace;
         try {
-            WorkspaceResult wsResult = workspaceService.prepareWorkspace(
-                    repoClient, owner, repo, baseBranch, null);
-            if (!wsResult.success()) {
-                postErrorComment(repoClient, owner, repo, issue.getNumber(),
-                        "Issue triage failed: could not prepare the read-only repository context ("
-                                + wsResult.error() + "). No assignment was made.");
-                throw new TriageRoutingException(
-                        "Issue triage could not prepare the workspace: " + wsResult.error());
-            }
-            workspaceDir = wsResult.workspacePath();
-
+            workspace = workspaceService.openWorkspace(repoClient, owner, repo, baseBranch, null);
+        } catch (WorkspaceException e) {
+            postErrorComment(repoClient, owner, repo, issue.getNumber(),
+                    "Issue triage failed: could not prepare the read-only repository context ("
+                            + e.getMessage() + "). No assignment was made.");
+            throw new TriageRoutingException(
+                    "Issue triage could not prepare the workspace: " + e.getMessage());
+        }
+        try (workspace) {
             RoutingDecision decision = runTriageLoop(bot, issue, owner, repo, baseBranch,
-                    workspaceDir, aiClient, repoClient, configuredPrompt, allowed);
+                    workspace, aiClient, repoClient, configuredPrompt, allowed);
 
             log.info("[Bot '{}'] Triage routed issue #{} to '{}': {}", bot.getName(), issue.getNumber(),
                     decision.assignee(), decision.reason());
             executeDecision(repoClient, owner, repo, issue.getNumber(), decision);
-        } finally {
-            if (workspaceDir != null) {
-                workspaceService.cleanupWorkspace(workspaceDir);
-            }
         }
     }
 
@@ -186,7 +180,7 @@ public class IssueTriageService {
      * plus {@link TriageRoutingException}.
      */
     private RoutingDecision runTriageLoop(Bot bot, WebhookPayload.Issue issue, String owner, String repo,
-                                          String baseBranch, Path workspaceDir,
+                                          String baseBranch, Workspace workspace,
                                           AiClient aiClient, RepositoryApiClient repoClient,
                                           String configuredPrompt, Set<String> allowed) {
         Set<String> allowedBuiltinTools = botToolSelectionService.allowedBuiltinTools(bot.getToolConfiguration());
@@ -221,7 +215,7 @@ public class IssueTriageService {
         AgentSession session = new AgentSession(owner, repo, issue.getNumber(), issue.getTitle());
         AgentLoop loop = new AgentLoop(aiClient, sessionService, budget);
         AgentRunContext ctx = new AgentRunContext(session, owner, repo, issue.getNumber(),
-                workspaceDir, baseBranch);
+                workspace, baseBranch);
         LoopOutcome outcome = loop.run(ctx, userMessage, strategy);
 
         if (outcome.success() && outcome.payload() instanceof RoutingDecision decision) {

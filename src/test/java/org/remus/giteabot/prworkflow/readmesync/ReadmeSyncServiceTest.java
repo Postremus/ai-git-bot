@@ -4,7 +4,9 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.mockito.ArgumentCaptor;
-import org.remus.giteabot.agent.validation.WorkspaceResult;
+import org.remus.giteabot.agent.validation.TestWorkspaces;
+import org.remus.giteabot.agent.validation.Workspace;
+import org.remus.giteabot.agent.validation.WorkspaceException;
 import org.remus.giteabot.agent.validation.WorkspaceService;
 import org.remus.giteabot.ai.AiClient;
 import org.remus.giteabot.gitea.model.WebhookPayload;
@@ -86,12 +88,10 @@ class ReadmeSyncServiceTest {
 
         assertThat(result.status()).isEqualTo(ReadmeSyncService.Result.Status.SKIPPED);
         // The critical guarantee: no clone and no push to any (default) branch.
-        verify(workspaceService, never()).prepareWorkspace(
+        verify(workspaceService, never()).openWorkspace(
                 any(RepositoryApiClient.class), anyString(), anyString(), anyString(), anyLong());
-        verify(workspaceService, never()).prepareWritablePullRequestWorkspace(
+        verify(workspaceService, never()).openWritablePullRequestWorkspace(
                 any(RepositoryApiClient.class), anyString(), anyString(), anyString(), anyLong());
-        verify(workspaceService, never()).commitAndPush(
-                any(), anyString(), anyString(), anyString(), anyString(), anyBoolean());
         // And it must never substitute the default branch.
         verify(repoClient, never()).getDefaultBranch(anyString(), anyString());
     }
@@ -102,14 +102,14 @@ class ReadmeSyncServiceTest {
                 .thenReturn(Map.of("head", Map.of("ref", "feature/login")));
         // Fail the workspace prep so the run stops right after resolution — we only
         // assert which branch it tried to clone.
-        when(workspaceService.prepareWritablePullRequestWorkspace(
+        when(workspaceService.openWritablePullRequestWorkspace(
                 eq(repoClient), anyString(), anyString(), anyString(), anyLong()))
-                .thenReturn(WorkspaceResult.failure("stop here"));
+                .thenThrow(new WorkspaceException("stop here"));
 
         service.run(request(payloadWithoutHeadRef(), SuiteLifecycleMode.COMMIT_TO_PR));
 
         ArgumentCaptor<String> branch = ArgumentCaptor.forClass(String.class);
-        verify(workspaceService).prepareWritablePullRequestWorkspace(
+        verify(workspaceService).openWritablePullRequestWorkspace(
                 eq(repoClient), eq("acme"), eq("my-repo"), branch.capture(), eq(42L));
         assertThat(branch.getValue()).isEqualTo("feature/login");
         verify(repoClient, never()).getDefaultBranch(anyString(), anyString());
@@ -121,14 +121,14 @@ class ReadmeSyncServiceTest {
         WebhookPayload.Head head = new WebhookPayload.Head();
         head.setRef("feature/from-payload");
         payload.getPullRequest().setHead(head);
-        when(workspaceService.prepareWritablePullRequestWorkspace(
+        when(workspaceService.openWritablePullRequestWorkspace(
                 eq(repoClient), anyString(), anyString(), anyString(), anyLong()))
-                .thenReturn(WorkspaceResult.failure("stop here"));
+                .thenThrow(new WorkspaceException("stop here"));
 
         service.run(request(payload, SuiteLifecycleMode.COMMIT_TO_PR));
 
         ArgumentCaptor<String> branch = ArgumentCaptor.forClass(String.class);
-        verify(workspaceService).prepareWritablePullRequestWorkspace(
+        verify(workspaceService).openWritablePullRequestWorkspace(
                 eq(repoClient), eq("acme"), eq("my-repo"), branch.capture(), eq(42L));
         assertThat(branch.getValue()).isEqualTo("feature/from-payload");
         verify(repoClient, never()).getPullRequestDetails(anyString(), anyString(), anyLong());
@@ -147,9 +147,7 @@ class ReadmeSyncServiceTest {
                 request(payload, SuiteLifecycleMode.OFFER_AS_PR));
 
         assertThat(result.status()).isEqualTo(ReadmeSyncService.Result.Status.FAILED);
-        verify(workspaceService, never()).prepareWorkspace(any(), anyString(), anyString(), anyString(), anyLong());
-        verify(workspaceService, never()).commitAndPush(
-                any(), anyString(), anyString(), anyString(), anyString(), anyBoolean());
+        verify(workspaceService, never()).openWorkspace(any(), anyString(), anyString(), anyString(), anyLong());
     }
 
     @Test
@@ -159,9 +157,10 @@ class ReadmeSyncServiceTest {
         WebhookPayload.Head head = new WebhookPayload.Head();
         head.setRef("feature/docs");
         payload.getPullRequest().setHead(head);
-        when(workspaceService.prepareWorkspace(
+        Workspace ws = TestWorkspaces.at(workspace);
+        when(workspaceService.openWorkspace(
                 repoClient, "acme", "my-repo", "feature/docs", 42L))
-                .thenReturn(WorkspaceResult.success(workspace));
+                .thenReturn(ws);
         when(agent.write(any(), any(), anyString(), any(), org.mockito.ArgumentMatchers.anyInt()))
                 .thenAnswer(invocation -> {
                     ReadmeSyncToolContext toolContext = invocation.getArgument(1);
@@ -169,9 +168,7 @@ class ReadmeSyncServiceTest {
                     toolContext.recordUpdated("README.md");
                     return new ReadmeSyncAgent.Result(1, "updated", false);
                 });
-        when(workspaceService.listChangedFiles(workspace)).thenReturn(List.of("README.md"));
-        when(workspaceService.commitAndPush(eq(workspace), anyString(), anyString(),
-                anyString(), anyString(), eq(true))).thenReturn(true);
+        when(ws.listChangedFiles()).thenReturn(List.of("README.md"));
         when(repoClient.createPullRequest(eq("acme"), eq("my-repo"), anyString(), anyString(),
                 anyString(), eq("feature/docs"))).thenReturn(null);
 
@@ -180,5 +177,30 @@ class ReadmeSyncServiceTest {
 
         assertThat(result.status()).isEqualTo(ReadmeSyncService.Result.Status.FAILED);
         assertThat(result.summary()).contains("follow-up PR creation failed");
+    }
+
+    @Test
+    void run_gitStatusFailureDuringScopeCheckCommitsNothing(@TempDir Path workspace) throws Exception {
+        Files.writeString(workspace.resolve("README.md"), "before");
+        WebhookPayload payload = payloadWithoutHeadRef();
+        WebhookPayload.Head head = new WebhookPayload.Head();
+        head.setRef("feature/docs");
+        payload.getPullRequest().setHead(head);
+        Workspace ws = TestWorkspaces.at(workspace);
+        when(workspaceService.openWorkspace(repoClient, "acme", "my-repo", "feature/docs", 42L)).thenReturn(ws);
+        when(agent.write(any(), any(), anyString(), any(), org.mockito.ArgumentMatchers.anyInt()))
+                .thenAnswer(invocation -> {
+                    ReadmeSyncToolContext toolContext = invocation.getArgument(1);
+                    Files.writeString(workspace.resolve("README.md"), "after");
+                    toolContext.recordUpdated("README.md");
+                    return new ReadmeSyncAgent.Result(1, "updated", false);
+                });
+        when(ws.listChangedFiles()).thenThrow(new WorkspaceException("git status failed: fatal"));
+
+        ReadmeSyncService.Result result = service.run(request(payload, SuiteLifecycleMode.OFFER_AS_PR));
+
+        assertThat(result.status()).isEqualTo(ReadmeSyncService.Result.Status.FAILED);
+        verify(ws, never()).commitAndPush(any(), any(), any(), any(), anyBoolean());
+        verify(ws).close();
     }
 }

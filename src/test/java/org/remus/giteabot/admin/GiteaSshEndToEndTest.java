@@ -4,7 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
-import org.remus.giteabot.agent.validation.WorkspaceResult;
+import org.remus.giteabot.agent.validation.Workspace;
 import org.remus.giteabot.agent.validation.WorkspaceService;
 import org.remus.giteabot.gitea.GiteaApiClient;
 import org.remus.giteabot.repository.GitTransport;
@@ -85,13 +85,9 @@ class GiteaSshEndToEndTest {
             assertTrue(gitea.getSshKeyIdsByTitle(configured.getSshRemoteKeyTitle())
                     .contains(configured.getSshRemoteKeyId()), "managed key visible via Gitea API");
 
-            WorkspaceResult ws = workspaceService.prepareWorkspace(client, owner, repo, "main", null);
-            assertTrue(ws.success(), "SSH clone via bot workspace: " + ws.error());
-            try {
-                assertTrue(Files.exists(ws.workspacePath().resolve("README.md")),
+            try (Workspace ws = workspaceService.openWorkspace(client, owner, repo, "main", null)) {
+                assertTrue(Files.exists(ws.dir().resolve("README.md")),
                         "expected auto_init README in SSH clone");
-            } finally {
-                workspaceService.cleanupWorkspace(ws.workspacePath());
             }
 
             GitIntegration pending = gitIntegrationService.prepareManagedSshKeyRemoval(

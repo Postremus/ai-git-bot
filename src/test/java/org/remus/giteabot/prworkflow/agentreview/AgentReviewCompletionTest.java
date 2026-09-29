@@ -14,8 +14,9 @@ import org.remus.giteabot.agent.session.AgentSessionRepository;
 import org.remus.giteabot.agent.session.AgentSessionService;
 import org.remus.giteabot.agent.shared.AgentJackson;
 import org.remus.giteabot.agent.tools.ToolCatalog;
+import org.remus.giteabot.agent.validation.TestWorkspaces;
 import org.remus.giteabot.agent.validation.ToolExecutionService;
-import org.remus.giteabot.agent.validation.WorkspaceResult;
+import org.remus.giteabot.agent.validation.Workspace;
 import org.remus.giteabot.agent.validation.WorkspaceService;
 import org.remus.giteabot.ai.AiClient;
 import org.remus.giteabot.ai.ChatTurn;
@@ -68,6 +69,7 @@ class AgentReviewCompletionTest {
 
     private AgentReviewService service;
     private WebhookPayload payload;
+    private Workspace workspace;
 
     @BeforeEach
     void setUp() throws Exception {
@@ -82,12 +84,13 @@ class AgentReviewCompletionTest {
                 new AgentReviewContext(repositoryClient, aiClient, "Review the change.", "bot",
                         null, null, Set.of("pr-diff"), 200_000),
                 new AgentSessionService(mock(AgentSessionRepository.class)),
-                new ToolExecutionService(config, catalog, workspaceService), catalog, workspaceService,
+                new ToolExecutionService(config, catalog), catalog, workspaceService,
                 config, null, new Bot(), eventHooks);
         lenient().when(aiClient.supportsNativeTools()).thenReturn(true);
         when(repositoryClient.getPullRequestDiff("owner", "repo", 1L)).thenReturn(DIFF);
-        lenient().when(workspaceService.prepareWorkspace(repositoryClient, "owner", "repo", "feature", 1L))
-                .thenReturn(WorkspaceResult.success(WORKSPACE));
+        workspace = TestWorkspaces.at(WORKSPACE);
+        lenient().when(workspaceService.openWorkspace(repositoryClient, "owner", "repo", "feature", 1L))
+                .thenReturn(workspace);
     }
 
     @ParameterizedTest
@@ -120,7 +123,7 @@ class AgentReviewCompletionTest {
         verify(repositoryClient, never()).postReviewComment(anyString(), anyString(), anyLong(), anyString());
         verify(repositoryClient, never()).postPullRequestComment(anyString(), anyString(), anyLong(), anyString());
         verifyNoInteractions(eventHooks);
-        verify(workspaceService).cleanupWorkspace(WORKSPACE);
+        verify(workspace).close();
     }
 
     @ParameterizedTest
@@ -181,7 +184,7 @@ class AgentReviewCompletionTest {
         verify(repositoryClient).postReview(eq("owner"), eq("repo"), eq(1L),
                 argThat(body -> body.contains("No correctness issues found.") && !body.contains("Let me check")),
                 eq(PostReviewAction.NONE));
-        verify(workspaceService).cleanupWorkspace(WORKSPACE);
+        verify(workspace).close();
     }
 
     @ParameterizedTest

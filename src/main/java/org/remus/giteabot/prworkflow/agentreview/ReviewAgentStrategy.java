@@ -178,7 +178,7 @@ public final class ReviewAgentStrategy implements AgentStrategy {
                     ctx.issueNumber(), contextRounds, maxContextRounds);
 
             BranchSwitcher.Result branchResult = branchSwitcher.apply(
-                    ctx.workspaceDir(), ctx.baseBranch(), toolRequests, ctx.issueNumber());
+                    ctx.workspace(), ctx.baseBranch(), toolRequests, ctx.issueNumber());
             ctx.setBaseBranch(branchResult.selectedBranch());
 
             String context = gatherContext(ctx, requestFiles, branchResult.remainingToolRequests());
@@ -273,7 +273,7 @@ public final class ReviewAgentStrategy implements AgentStrategy {
         for (ImplementationPlan.ToolRequest req : requests) {
             results.add(toolRouter.execute(AgentToolRouter.Mode.WRITER,
                     new ToolCallContext(ctx.owner(), ctx.repo(), ctx.issueNumber(),
-                            ctx.workspaceDir(), req, ctx.diffSummary())));
+                            ctx.workspace(), req, ctx.diffSummary())));
         }
         return results;
     }

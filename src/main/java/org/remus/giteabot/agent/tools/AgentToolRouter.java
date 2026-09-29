@@ -129,7 +129,7 @@ public class AgentToolRouter {
             return mcpOrchestrationService.executeTool(mcpConfiguration, mcpToolCatalog, tool, args);
         }
         if (catalog.isContext(tool)) {
-            return toolExecutionService.executeContextTool(ctx.workspaceDir(), tool, args);
+            return toolExecutionService.executeContextTool(ctx.workspace(), tool, args);
         }
         return toolExecutionService.executeTool(ctx.workspaceDir(), tool, args);
     }
@@ -161,7 +161,7 @@ public class AgentToolRouter {
             return mcpOrchestrationService.executeTool(mcpConfiguration, mcpToolCatalog, original, args);
         }
         if (catalog.isContext(lower)) {
-            return toolExecutionService.executeContextTool(ctx.workspaceDir(), lower, args);
+            return toolExecutionService.executeContextTool(ctx.workspace(), lower, args);
         }
         return new ToolResult(false, -1, "",
                 "Writer tool '" + original + "' is not available. Available tools: get-issue, "

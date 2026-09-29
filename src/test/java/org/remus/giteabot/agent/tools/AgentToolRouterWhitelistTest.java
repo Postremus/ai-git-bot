@@ -2,8 +2,10 @@ package org.remus.giteabot.agent.tools;
 
 import org.junit.jupiter.api.Test;
 import org.remus.giteabot.agent.model.ImplementationPlan;
+import org.remus.giteabot.agent.validation.TestWorkspaces;
 import org.remus.giteabot.agent.validation.ToolExecutionService;
 import org.remus.giteabot.agent.validation.ToolResult;
+import org.remus.giteabot.agent.validation.Workspace;
 import org.remus.giteabot.config.AgentConfigProperties;
 import org.remus.giteabot.mcp.McpOrchestrationService;
 import org.remus.giteabot.mcp.McpToolCatalog;
@@ -40,14 +42,14 @@ class AgentToolRouterWhitelistTest {
     }
 
     private static ToolCallContext ctx(String tool, List<String> args) {
-        return new ToolCallContext(null, null, null, Path.of("/tmp/ws"),
+        return new ToolCallContext(null, null, null, TestWorkspaces.at(Path.of("/tmp/ws")),
                 ImplementationPlan.ToolRequest.builder().id("id-1").tool(tool).args(args).build());
     }
 
     @Test
     void execute_allowedBuiltin_passesThroughToExecutor() {
         ToolExecutionService tes = mock(ToolExecutionService.class);
-        when(tes.executeContextTool(any(), any(), any()))
+        when(tes.executeContextTool(any(Workspace.class), any(), any()))
                 .thenReturn(new ToolResult(true, 0, "ok", ""));
         AgentToolRouter router = newRouter(tes, Set.of("cat"), McpToolCatalog.empty(), null);
 
@@ -55,7 +57,7 @@ class AgentToolRouterWhitelistTest {
                 ctx("cat", List.of("README.md")));
 
         assertThat(res.success()).isTrue();
-        verify(tes).executeContextTool(any(), eqStr("cat"), eqArgs("README.md"));
+        verify(tes).executeContextTool(any(Workspace.class), eqStr("cat"), eqArgs("README.md"));
     }
 
     @Test

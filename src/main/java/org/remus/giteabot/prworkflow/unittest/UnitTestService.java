@@ -2,7 +2,8 @@ package org.remus.giteabot.prworkflow.unittest;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.remus.giteabot.agent.validation.WorkspaceResult;
+import org.remus.giteabot.agent.validation.Workspace;
+import org.remus.giteabot.agent.validation.WorkspaceException;
 import org.remus.giteabot.agent.validation.WorkspaceService;
 import org.remus.giteabot.ai.AiClient;
 import org.remus.giteabot.gitea.model.WebhookPayload;
@@ -103,21 +104,23 @@ public class UnitTestService {
         }
         String headRef = headSha(payload) != null ? headSha(payload) : headBranch;
 
-        Path workspace = null;
+        Workspace ws = null;
+        Path workspace;
         try {
             context.requireActive("before preparing unit-test workspace");
-            WorkspaceResult ws = request.lifecycleMode() == SuiteLifecycleMode.COMMIT_TO_PR
-                    ? workspaceService.prepareWritablePullRequestWorkspace(
-                            repositoryClient, owner, repo, headBranch, prNumber)
-                    : workspaceService.prepareWorkspace(
-                            repositoryClient, owner, repo, headBranch, prNumber);
-            if (!ws.success()) {
+            try {
+                ws = request.lifecycleMode() == SuiteLifecycleMode.COMMIT_TO_PR
+                        ? workspaceService.openWritablePullRequestWorkspace(
+                                repositoryClient, owner, repo, headBranch, prNumber)
+                        : workspaceService.openWorkspace(
+                                repositoryClient, owner, repo, headBranch, prNumber);
+            } catch (WorkspaceException e) {
                 postComment(owner, repo, prNumber,
                         UnitTestSummaryRenderer.renderFailed(prNumber,
-                                "failed to prepare workspace: " + ws.error()));
+                                "failed to prepare workspace: " + e.getMessage()));
                 return Result.failed("Workspace preparation failed");
             }
-            workspace = ws.workspacePath();
+            workspace = ws.dir();
 
             UnitTestFramework framework = resolveFramework(request, workspace);
             if (framework == null) {
@@ -167,7 +170,7 @@ public class UnitTestService {
             boolean committed = false;
             boolean commitFailed = false;
             if (request.lifecycleMode() == SuiteLifecycleMode.COMMIT_TO_PR) {
-                if (!workspaceService.hasUncommittedChanges(workspace)) {
+                if (!ws.hasUncommittedChanges()) {
                     context.appendStep("unit-test-commit", "Commit failed — no workspace changes found");
                     commitFailed = true;
                 } else {
@@ -177,7 +180,7 @@ public class UnitTestService {
                     // framework. If anything outside a test location was touched we
                     // must not push it — the workflow's "production code is never
                     // touched" guarantee takes precedence over committing the tests.
-                    java.util.List<String> offending = workspaceService.listChangedFiles(workspace).stream()
+                    java.util.List<String> offending = ws.listChangedFiles().stream()
                             .filter(p -> !UnitTestPathGuard.isAllowedTestPath(framework, p))
                             .toList();
                     if (!offending.isEmpty()) {
@@ -187,12 +190,14 @@ public class UnitTestService {
                                 "Commit aborted — non-test files changed: " + offending);
                         commitFailed = true;
                     } else {
-                        committed = workspaceService.commitAndPush(workspace, headBranch,
-                                "test: add AI-generated unit tests for PR #" + prNumber,
-                                GIT_AUTHOR_NAME, GIT_AUTHOR_EMAIL, false);
-                        context.appendStep("unit-test-commit",
-                                committed ? "Committed generated tests to " + headBranch
-                                        : "Commit skipped / failed");
+                        try {
+                            ws.commitAndPush(headBranch, "test: add AI-generated unit tests for PR #" + prNumber,
+                                    GIT_AUTHOR_NAME, GIT_AUTHOR_EMAIL, false);
+                            committed = true;
+                            context.appendStep("unit-test-commit", "Committed generated tests to " + headBranch);
+                        } catch (WorkspaceException e) {
+                            context.appendStep("unit-test-commit", "Commit skipped / failed: " + e.getMessage());
+                        }
                         commitFailed = !committed;
                     }
                 }
@@ -231,8 +236,8 @@ public class UnitTestService {
                             "unexpected error: " + e.getMessage()));
             return Result.failed(e.getMessage());
         } finally {
-            if (workspace != null) {
-                workspaceService.cleanupWorkspace(workspace);
+            if (ws != null) {
+                ws.close();
             }
         }
     }

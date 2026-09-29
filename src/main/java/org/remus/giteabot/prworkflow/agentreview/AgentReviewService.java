@@ -18,7 +18,8 @@ import org.remus.giteabot.agent.shared.SystemPromptAssembler;
 import org.remus.giteabot.agent.tools.AgentToolRouter;
 import org.remus.giteabot.agent.tools.ToolCatalog;
 import org.remus.giteabot.agent.validation.ToolExecutionService;
-import org.remus.giteabot.agent.validation.WorkspaceResult;
+import org.remus.giteabot.agent.validation.Workspace;
+import org.remus.giteabot.agent.validation.WorkspaceException;
 import org.remus.giteabot.agent.validation.WorkspaceService;
 import org.remus.giteabot.ai.AiClient;
 import org.remus.giteabot.config.AgentConfigProperties;
@@ -29,7 +30,6 @@ import org.remus.giteabot.mcp.McpOrchestrationService;
 import org.remus.giteabot.repository.PostReviewAction;
 import org.remus.giteabot.repository.RepositoryApiClient;
 
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -200,18 +200,17 @@ public class AgentReviewService {
             return ReviewResult.FAILED;
         }
 
-        Path workspaceDir = null;
+        Workspace workspace = null;
         try {
-            WorkspaceResult wsResult = workspaceService.prepareWorkspace(
-                    repositoryClient, owner, repo, headBranch, prNumber);
-            if (!wsResult.success()) {
+            try {
+                workspace = workspaceService.openWorkspace(repositoryClient, owner, repo, headBranch, prNumber);
+            } catch (WorkspaceException e) {
                 log.warn("Failed to prepare workspace for agentic review of PR #{}: {}",
-                        prNumber, wsResult.error());
+                        prNumber, e.getMessage());
                 repositoryClient.postPullRequestComment(owner, repo, prNumber,
-                        "⚠️ **AI Agent (Review)**: Failed to prepare workspace: " + wsResult.error());
+                        "⚠️ **AI Agent (Review)**: Failed to prepare workspace: " + e.getMessage());
                 return ReviewResult.FAILED;
             }
-            workspaceDir = wsResult.workspacePath();
 
             String systemPrompt = resolveSystemPrompt(enableFormalDecision, decisionPrompt);
             String userMessage = buildKickoffMessage(prTitle, prBody, diffSummary);
@@ -219,7 +218,7 @@ public class AgentReviewService {
             AgentSession session = new AgentSession(owner, repo, prNumber, prTitle);
 
             LoopOutcome outcome = runReviewLoop(session, owner, repo, prNumber,
-                    workspaceDir, headBranch, systemPrompt, userMessage, maxToolRounds, diffSummary,
+                    workspace, headBranch, systemPrompt, userMessage, maxToolRounds, diffSummary,
                     runId, toolCallConsumer);
 
             if (!outcome.success()) {
@@ -267,8 +266,8 @@ public class AgentReviewService {
                             + "Please try again later.", e);
             return ReviewResult.FAILED;
         } finally {
-            if (workspaceDir != null) {
-                workspaceService.cleanupWorkspace(workspaceDir);
+            if (workspace != null) {
+                workspace.close();
             }
         }
     }
@@ -303,18 +302,17 @@ public class AgentReviewService {
             return ReviewResult.FAILED;
         }
 
-        Path workspaceDir = null;
+        Workspace workspace = null;
         try {
-            WorkspaceResult wsResult = workspaceService.prepareWorkspace(
-                    repositoryClient, owner, repo, headBranch, prNumber);
-            if (!wsResult.success()) {
+            try {
+                workspace = workspaceService.openWorkspace(repositoryClient, owner, repo, headBranch, prNumber);
+            } catch (WorkspaceException e) {
                 log.warn("Failed to prepare workspace for clarification on PR #{}: {}",
-                        prNumber, wsResult.error());
+                        prNumber, e.getMessage());
                 repositoryClient.postPullRequestComment(owner, repo, prNumber,
-                        "⚠️ **AI Agent**: Failed to prepare workspace: " + wsResult.error());
+                        "⚠️ **AI Agent**: Failed to prepare workspace: " + e.getMessage());
                 return ReviewResult.FAILED;
             }
-            workspaceDir = wsResult.workspacePath();
 
             String systemPrompt = resolveSystemPrompt(false, null);
             String userMessage = buildClarificationMessage(prTitle, prBody, diffSummary, userQuestion);
@@ -323,7 +321,7 @@ public class AgentReviewService {
             AgentSession session = new AgentSession(owner, repo, prNumber, prTitle);
 
             LoopOutcome outcome = runReviewLoop(session, owner, repo, prNumber,
-                    workspaceDir, headBranch, systemPrompt, userMessage,
+                    workspace, headBranch, systemPrompt, userMessage,
                     maxToolRounds, diffSummary, null, null);
 
             if (!outcome.success()) {
@@ -348,8 +346,8 @@ public class AgentReviewService {
                             + "Please try again later.", e);
             return ReviewResult.FAILED;
         } finally {
-            if (workspaceDir != null) {
-                workspaceService.cleanupWorkspace(workspaceDir);
+            if (workspace != null) {
+                workspace.close();
             }
         }
     }
@@ -606,7 +604,7 @@ public class AgentReviewService {
     }
 
     private LoopOutcome runReviewLoop(AgentSession session, String owner, String repo, Long prNumber,
-                                      Path workspaceDir, String headBranch,
+                                      Workspace workspace, String headBranch,
                                       String systemPrompt, String userMessage, int maxToolRounds,
                                       DiffSummary diffSummary, Long runId,
                                       Consumer<AgentRunContext.ToolCallRecord> toolCallConsumer) {
@@ -625,7 +623,7 @@ public class AgentReviewService {
                 context.contextWindowTokens(), budgetCfg.getProactiveCompactionThreshold());
 
         AgentLoop loop = new AgentLoop(aiClient, sessionService, budget);
-        AgentRunContext ctx = new AgentRunContext(session, owner, repo, prNumber, workspaceDir, headBranch);
+        AgentRunContext ctx = new AgentRunContext(session, owner, repo, prNumber, workspace, headBranch);
         ctx.setDiffSummary(diffSummary);
         ctx.setAuditToolCallConsumer(toolCallConsumer);
         return loop.run(ctx, userMessage, strategy);

@@ -24,7 +24,8 @@ import org.remus.giteabot.agent.tools.AgentToolRouter;
 import org.remus.giteabot.agent.tools.ToolCatalog;
 import org.remus.giteabot.agent.validation.ToolExecutionService;
 import org.remus.giteabot.agent.validation.ToolResult;
-import org.remus.giteabot.agent.validation.WorkspaceResult;
+import org.remus.giteabot.agent.validation.Workspace;
+import org.remus.giteabot.agent.validation.WorkspaceException;
 import org.remus.giteabot.agent.validation.WorkspaceService;
 import org.remus.giteabot.ai.AiClient;
 import org.remus.giteabot.config.AgentConfigProperties;
@@ -143,7 +144,7 @@ public class IssueImplementationService {
         }
 
         AgentSession session = sessionService.createSession(owner, repo, issueNumber, issueTitle);
-        Path workspaceDir = null;
+        Workspace workspace = null;
 
         try {
             String issueCommentsContext = fetchIssueCommentsContext(owner, repo, issueNumber);
@@ -162,15 +163,15 @@ public class IssueImplementationService {
             }
 
             // Clone repository once — all operations happen in this workspace
-            WorkspaceResult wsResult = workspaceService.prepareWorkspace(
-                    repositoryClient, owner, repo, baseBranch, null);
-            if (!wsResult.success()) {
+            try {
+                workspace = workspaceService.openWorkspace(repositoryClient, owner, repo, baseBranch, null);
+            } catch (WorkspaceException e) {
                 sessionService.setStatus(session, AgentSession.AgentSessionStatus.FAILED);
                 repositoryClient.postIssueComment(owner, repo, issueNumber,
-                        "⚠️ **AI Agent**: Failed to prepare workspace: " + wsResult.error());
+                        "⚠️ **AI Agent**: Failed to prepare workspace: " + e.getMessage());
                 return;
             }
-            workspaceDir = wsResult.workspacePath();
+            Path workspaceDir = workspace.dir();
 
             // Fetch repository tree for context
             List<Map<String, Object>> tree = repositoryClient.getRepositoryTree(owner, repo, baseBranch);
@@ -193,7 +194,7 @@ public class IssueImplementationService {
             // API in NATIVE mode), so the implementation prompt no longer duplicates them.
             log.info("Starting implementation loop for issue #{}", issueNumber);
             ToolImplementationLoopResult implementationResult = runToolImplementationLoop(
-                    session, implementationPrompt, systemPrompt, workspaceDir, owner, repo, issueNumber, baseBranch);
+                    session, implementationPrompt, systemPrompt, workspace, owner, repo, issueNumber, baseBranch);
             boolean implementationSucceeded = implementationResult.success();
             baseBranch = implementationResult.selectedBranch();
 
@@ -229,7 +230,7 @@ public class IssueImplementationService {
             ReflectionResult reflection = criticAgent.review(
                     issueTitle, issueBody,
                     plannedPlan != null ? plannedPlan.getSummary() : null,
-                    workspaceService.diffStat(workspaceDir),
+                    diffStatOrEmpty(workspace),
                     aiClient);
             if (reflection.outcome() == ReflectionResult.Outcome.ABORT) {
                 log.warn("Critic aborted implementation for issue #{}: {}",
@@ -251,13 +252,12 @@ public class IssueImplementationService {
             }
 
             String commitMessage = String.format("agent: implement #%d - %s", issueNumber, issueTitle);
-            boolean pushed = workspaceService.commitAndPush(workspaceDir, branchName, commitMessage,
-                    GIT_AUTHOR_NAME, GIT_AUTHOR_EMAIL, true);
-
-            if (!pushed) {
+            try {
+                workspace.commitAndPush(branchName, commitMessage, GIT_AUTHOR_NAME, GIT_AUTHOR_EMAIL, true);
+            } catch (WorkspaceException e) {
                 sessionService.setStatus(session, AgentSession.AgentSessionStatus.FAILED);
                 repositoryClient.postIssueComment(owner, repo, issueNumber,
-                        "🤖 **AI Agent**: Implementation succeeded but pushing the branch failed. Please check the logs.");
+                        "🤖 **AI Agent**: Implementation succeeded but pushing the branch failed: " + e.getMessage());
                 return;
             }
 
@@ -280,9 +280,19 @@ public class IssueImplementationService {
                     "AI Agent",
                     "Please try again or mention me again with more details.", e);
         } finally {
-            if (workspaceDir != null) {
-                workspaceService.cleanupWorkspace(workspaceDir);
+            if (workspace != null) {
+                workspace.close();
             }
+        }
+    }
+
+    /** The critic only uses the stat as extra context, so a failing git diff must not stop the run. */
+    private static String diffStatOrEmpty(Workspace workspace) {
+        try {
+            return workspace.diffStat();
+        } catch (WorkspaceException e) {
+            log.debug("git diff --stat failed: {}", e.getMessage());
+            return "";
         }
     }
 
@@ -297,7 +307,7 @@ public class IssueImplementationService {
      */
     private ToolImplementationLoopResult runToolImplementationLoop(
             AgentSession session, String userMessage, String systemPrompt,
-            Path workspaceDir, String owner, String repo, Long issueNumber,
+            Workspace workspace, String owner, String repo, Long issueNumber,
             String initialContextBranch) {
 
         CodingAgentStrategy strategy = new CodingAgentStrategy(
@@ -309,7 +319,6 @@ public class IssueImplementationService {
                 branchSwitcher,
                 toolRouter,
                 toolCatalog,
-                workspaceService,
                 agentConfig,
                 mcpOrchestrationService,
                 mcpToolCatalog,
@@ -330,7 +339,7 @@ public class IssueImplementationService {
                 contextWindowTokens, budgetCfg.getProactiveCompactionThreshold());
         AgentLoop loop = new AgentLoop(aiClient, sessionService, budget);
         AgentRunContext ctx = new AgentRunContext(
-                session, owner, repo, issueNumber, workspaceDir, initialContextBranch);
+                session, owner, repo, issueNumber, workspace, initialContextBranch);
         LoopOutcome outcome = loop.run(ctx, userMessage, strategy);
         // The strategy returns the final ImplementationPlan as the outcome payload.
         // Read it from here rather than from the (detached) session object, whose
@@ -372,7 +381,7 @@ public class IssueImplementationService {
                             + "Please clone the issue if you want the coding agent to implement it separately.");
             return;
         }
-        Path workspaceDir = null;
+        Workspace workspace = null;
 
         try {
             // The 👀 acknowledgment is owned by the webhook entry points
@@ -392,14 +401,14 @@ public class IssueImplementationService {
             String workingBranch = branchName != null ? branchName : defaultBranch;
 
             // Clone working branch into fresh workspace
-            WorkspaceResult wsResult = workspaceService.prepareWorkspace(
-                    repositoryClient, owner, repo, workingBranch, null);
-            if (!wsResult.success()) {
+            try {
+                workspace = workspaceService.openWorkspace(repositoryClient, owner, repo, workingBranch, null);
+            } catch (WorkspaceException e) {
                 repositoryClient.postIssueComment(owner, repo, issueNumber,
-                        "⚠️ **AI Agent**: Failed to prepare workspace: " + wsResult.error());
+                        "⚠️ **AI Agent**: Failed to prepare workspace: " + e.getMessage());
                 return;
             }
-            workspaceDir = wsResult.workspacePath();
+            Path workspaceDir = workspace.dir();
 
             String systemPrompt = resolveAgentSystemPrompt();
             String issueCommentsContext = fetchIssueCommentsContext(owner, repo, issueNumber);
@@ -408,7 +417,7 @@ public class IssueImplementationService {
             log.info("Requesting AI to continue implementation for issue #{}", issueNumber);
             // runToolImplementationLoop handles: AI call, context rounds, tool execution, retries
             ToolImplementationLoopResult implementationResult = runToolImplementationLoop(
-                    session, userMessage, systemPrompt, workspaceDir, owner, repo, issueNumber, workingBranch);
+                    session, userMessage, systemPrompt, workspace, owner, repo, issueNumber, workingBranch);
             boolean success = implementationResult.success();
             String selectedContextBranch = implementationResult.selectedBranch();
 
@@ -439,11 +448,11 @@ public class IssueImplementationService {
                 sessionService.setBranchName(session, branchName);
             }
             String commitMessage = String.format("agent: follow-up for #%d", issueNumber);
-            boolean pushed = workspaceService.commitAndPush(workspaceDir, branchName, commitMessage,
-                    GIT_AUTHOR_NAME, GIT_AUTHOR_EMAIL, createNew);
-            if (!pushed) {
+            try {
+                workspace.commitAndPush(branchName, commitMessage, GIT_AUTHOR_NAME, GIT_AUTHOR_EMAIL, createNew);
+            } catch (WorkspaceException e) {
                 repositoryClient.postIssueComment(owner, repo, issueNumber,
-                        "🤖 **AI Agent**: Tool execution succeeded but pushing changes failed.");
+                        "🤖 **AI Agent**: Tool execution succeeded but pushing changes failed: " + e.getMessage());
                 return;
             }
 
@@ -477,8 +486,8 @@ public class IssueImplementationService {
                                                       : AgentSession.AgentSessionStatus.FAILED);
             }
         } finally {
-            if (workspaceDir != null) {
-                workspaceService.cleanupWorkspace(workspaceDir);
+            if (workspace != null) {
+                workspace.close();
             }
         }
     }
