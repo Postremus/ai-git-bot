@@ -264,6 +264,7 @@ Git Integrations define connections to Git providers. Navigate to **Git Integrat
      - For Bitbucket: `https://bitbucket.org`
     - **Username**: The username of the Git account the bot acts as (e.g. `ai_bot`) — not an e-mail address or display name. It is used to detect and ignore the bot's own actions, to recognise the bot as reviewer or assignee, and as the mention alias (e.g. `@ai_bot`). It applies to every bot that uses this integration. For Bitbucket Cloud, enter the **Atlassian account email** instead (see below).
     - **Token**: Your Git API token (encrypted at rest when `APP_ENCRYPTION_KEY` is configured)
+    - **Git Author Name / Git Author E-Mail**: Author identity for commits that bots using this integration push (issue implementations, README sync, i18n coverage, unit tests, E2E suite promotion). New integrations (and integrations created before this setting existed) start with `AI Agent <ai-agent@bot.local>`. Both fields are required and limited to 255 characters; a longer value is rejected on save instead of being truncated. Git platforms attribute a commit to an account by its author e-mail, so to have the bot's commits linked to the bot user, enter an e-mail address of that account — e.g. its no-reply address (`123+my-bot@users.noreply.github.com` on GitHub).
     - **Post-review Action**: defaults to **None**. Currently GitLab can use it to approve the merge request or post a request-changes note after each bot review.
 3. Click **Save**
 
