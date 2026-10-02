@@ -4,6 +4,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.mockito.ArgumentCaptor;
+import org.remus.giteabot.admin.Bot;
+import org.remus.giteabot.repository.model.GitAuthor;
 import org.remus.giteabot.agent.validation.WorkspaceResult;
 import org.remus.giteabot.agent.validation.WorkspaceService;
 import org.remus.giteabot.ai.AiClient;
@@ -57,7 +59,11 @@ class ReadmeSyncServiceTest {
     }
 
     private ReadmeSyncService.Request request(WebhookPayload payload, SuiteLifecycleMode mode) {
-        PrWorkflowContext ctx = new PrWorkflowContext(new org.remus.giteabot.admin.Bot(),
+        return request(new Bot(), payload, mode);
+    }
+
+    private ReadmeSyncService.Request request(Bot bot, WebhookPayload payload, SuiteLifecycleMode mode) {
+        PrWorkflowContext ctx = new PrWorkflowContext(bot,
                 payload, 1L, (n, l) -> { }, () -> false);
         return new ReadmeSyncService.Request(ctx, List.of("README.md"), 12, mode, null);
     }
@@ -91,7 +97,7 @@ class ReadmeSyncServiceTest {
         verify(workspaceService, never()).prepareWritablePullRequestWorkspace(
                 any(RepositoryApiClient.class), anyString(), anyString(), anyString(), anyLong());
         verify(workspaceService, never()).commitAndPush(
-                any(), anyString(), anyString(), anyString(), anyString(), anyBoolean());
+                any(), anyString(), anyString(), any(), anyBoolean());
         // And it must never substitute the default branch.
         verify(repoClient, never()).getDefaultBranch(anyString(), anyString());
     }
@@ -149,7 +155,7 @@ class ReadmeSyncServiceTest {
         assertThat(result.status()).isEqualTo(ReadmeSyncService.Result.Status.FAILED);
         verify(workspaceService, never()).prepareWorkspace(any(), anyString(), anyString(), anyString(), anyLong());
         verify(workspaceService, never()).commitAndPush(
-                any(), anyString(), anyString(), anyString(), anyString(), anyBoolean());
+                any(), anyString(), anyString(), any(), anyBoolean());
     }
 
     @Test
@@ -172,7 +178,7 @@ class ReadmeSyncServiceTest {
                 });
         when(workspaceService.listChangedFiles(workspace)).thenReturn(List.of("README.md"));
         when(workspaceService.commitAndPush(eq(workspace), anyString(), anyString(),
-                anyString(), anyString(), eq(true), any(Runnable.class))).thenReturn(true);
+                any(), eq(true), any(Runnable.class))).thenReturn(true);
         when(repoClient.createPullRequest(eq("acme"), eq("my-repo"), anyString(), anyString(),
                 anyString(), eq("feature/docs"))).thenReturn(null);
 
@@ -181,5 +187,33 @@ class ReadmeSyncServiceTest {
 
         assertThat(result.status()).isEqualTo(ReadmeSyncService.Result.Status.FAILED);
         assertThat(result.summary()).contains("follow-up PR creation failed");
+    }
+
+    @Test
+    void commitToPr_commitsAsBotGitAuthor(@TempDir Path workspace) throws Exception {
+        Files.writeString(workspace.resolve("README.md"), "before");
+        WebhookPayload payload = payloadWithoutHeadRef();
+        WebhookPayload.Head head = new WebhookPayload.Head();
+        head.setRef("feature/docs");
+        payload.getPullRequest().setHead(head);
+        when(workspaceService.prepareWritablePullRequestWorkspace(
+                repoClient, "acme", "my-repo", "feature/docs", 42L))
+                .thenReturn(WorkspaceResult.success(workspace));
+        when(agent.write(any(), any(), anyString(), any(), org.mockito.ArgumentMatchers.anyInt()))
+                .thenAnswer(invocation -> {
+                    ReadmeSyncToolContext toolContext = invocation.getArgument(1);
+                    Files.writeString(workspace.resolve("README.md"), "after");
+                    toolContext.recordUpdated("README.md");
+                    return new ReadmeSyncAgent.Result(1, "updated", false);
+                });
+        when(workspaceService.listChangedFiles(workspace)).thenReturn(List.of("README.md"));
+        Bot bot = new Bot();
+        bot.setGitAuthorName("Docs Bot");
+        bot.setGitAuthorEmail("docs-bot@example.com");
+
+        service.run(request(bot, payload, SuiteLifecycleMode.COMMIT_TO_PR));
+
+        verify(workspaceService).commitAndPush(eq(workspace), eq("feature/docs"), anyString(),
+                eq(new GitAuthor("Docs Bot", "docs-bot@example.com")), eq(false), any(Runnable.class));
     }
 }

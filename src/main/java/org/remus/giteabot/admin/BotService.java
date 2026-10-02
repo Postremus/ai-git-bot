@@ -23,6 +23,9 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class BotService {
 
+    /** Column length of {@code bots.git_author_name} / {@code bots.git_author_email}. */
+    static final int MAX_GIT_AUTHOR_LENGTH = 255;
+
     private final BotRepository botRepository;
     private final BotToolConfigurationRepository botToolConfigurationRepository;
     private final EncryptionService encryptionService;
@@ -55,8 +58,14 @@ public class BotService {
      * back into the form. A blank field therefore means "keep the stored
      * value", while {@code clearSigningSecret} requests explicit removal (the
      * Clear button in the UI).</p>
+     *
+     * <p>The Git author name and e-mail are trimmed and must be non-blank and
+     * at most {@value #MAX_GIT_AUTHOR_LENGTH} characters; otherwise the save is
+     * rejected rather than storing a blank or truncated identity.</p>
      */
     public Bot save(Bot bot, boolean clearSigningSecret) {
+        bot.setGitAuthorName(requireGitAuthorPart(bot.getGitAuthorName(), "Git author name"));
+        bot.setGitAuthorEmail(requireGitAuthorPart(bot.getGitAuthorEmail(), "Git author e-mail"));
         if (bot.getGitIntegration() != null) {
             GitIntegration integration = gitIntegrationRepository.findByIdForUpdate(bot.getGitIntegration().getId())
                     .orElseThrow(() -> new IllegalArgumentException("Git Integration not found"));
@@ -214,5 +223,17 @@ public class BotService {
             return false;
         }
         return allowed.contains(username.trim().toLowerCase(Locale.ROOT));
+    }
+
+    private static String requireGitAuthorPart(String value, String label) {
+        if (value == null || value.isBlank()) {
+            throw new IllegalArgumentException(label + " must not be blank");
+        }
+        String trimmed = value.trim();
+        if (trimmed.length() > MAX_GIT_AUTHOR_LENGTH) {
+            throw new IllegalArgumentException(
+                    label + " must be at most " + MAX_GIT_AUTHOR_LENGTH + " characters");
+        }
+        return trimmed;
     }
 }

@@ -37,6 +37,22 @@
                                    th:placeholder="#{placeholder.botUsername}" placeholder="Bot username on the Git platform" required/>
                         </div>
 
+                        <div class="col-md-6">
+                            <label for="gitAuthorName" class="form-label" th:text="#{label.gitAuthorName}">Git Author Name</label>
+                            <input type="text" class="form-control" id="gitAuthorName" th:field="*{gitAuthorName}"
+                                   required/>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="gitAuthorEmail" class="form-label" th:text="#{label.gitAuthorEmail}">Git Author E-Mail</label>
+                            <input type="email" class="form-control" id="gitAuthorEmail" th:field="*{gitAuthorEmail}"
+                                   required/>
+                        </div>
+                        <div class="col-12 mt-1">
+                            <div class="form-text" th:text="#{help.bot.gitAuthor}">
+                                Author identity for commits this bot pushes (issue implementations, README sync, i18n coverage, unit tests, E2E suites). To link the commits to the bot's account on the Git platform, use an e-mail address of that account, e.g. its no-reply address (123+my-bot@users.noreply.github.com on GitHub).
+                            </div>
+                        </div>
+
                         <div class="col-12">
                             <label for="systemPromptId" class="form-label" th:text="#{label.systemPrompt}">System Prompt</label>
                             <div class="input-group">

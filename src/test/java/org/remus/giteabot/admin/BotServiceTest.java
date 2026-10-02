@@ -174,6 +174,79 @@ class BotServiceTest {
     }
 
     @Test
+    void save_rejectsBlankGitAuthorName() {
+        Bot bot = newBotWithDefaultToolConfig();
+        bot.setGitAuthorName("  ");
+
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+                () -> botService.save(bot));
+        assertEquals("Git author name must not be blank", ex.getMessage());
+        verify(botRepository, never()).save(any(Bot.class));
+    }
+
+    @Test
+    void save_rejectsMissingGitAuthorEmail() {
+        Bot bot = newBotWithDefaultToolConfig();
+        bot.setGitAuthorEmail(null);
+
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+                () -> botService.save(bot));
+        assertEquals("Git author e-mail must not be blank", ex.getMessage());
+        verify(botRepository, never()).save(any(Bot.class));
+    }
+
+    @Test
+    void save_rejectsTooLongGitAuthorNameInsteadOfTruncating() {
+        Bot bot = newBotWithDefaultToolConfig();
+        String tooLong = "a".repeat(BotService.MAX_GIT_AUTHOR_LENGTH + 1);
+        bot.setGitAuthorName(tooLong);
+
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+                () -> botService.save(bot));
+        assertEquals("Git author name must be at most 255 characters", ex.getMessage());
+        // The form re-renders with the full value so the user can shorten it.
+        assertEquals(tooLong, bot.getGitAuthorName());
+        verify(botRepository, never()).save(any(Bot.class));
+    }
+
+    @Test
+    void save_rejectsTooLongGitAuthorEmail() {
+        Bot bot = newBotWithDefaultToolConfig();
+        bot.setGitAuthorEmail("a".repeat(BotService.MAX_GIT_AUTHOR_LENGTH - "@example.com".length() + 1)
+                + "@example.com");
+
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+                () -> botService.save(bot));
+        assertEquals("Git author e-mail must be at most 255 characters", ex.getMessage());
+        verify(botRepository, never()).save(any(Bot.class));
+    }
+
+    @Test
+    void save_acceptsGitAuthorAtMaxLengthAfterTrimming() {
+        Bot bot = newBotWithDefaultToolConfig();
+        String maxName = "a".repeat(BotService.MAX_GIT_AUTHOR_LENGTH);
+        bot.setGitAuthorName("  " + maxName + "  ");
+        when(botRepository.save(any(Bot.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        Bot result = botService.save(bot);
+
+        assertEquals(maxName, result.getGitAuthorName());
+    }
+
+    @Test
+    void save_trimsGitAuthor() {
+        Bot bot = newBotWithDefaultToolConfig();
+        bot.setGitAuthorName("  Docs Bot ");
+        bot.setGitAuthorEmail(" docs-bot@example.com  ");
+        when(botRepository.save(any(Bot.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        Bot result = botService.save(bot);
+
+        assertEquals("Docs Bot", result.getGitAuthorName());
+        assertEquals("docs-bot@example.com", result.getGitAuthorEmail());
+    }
+
+    @Test
     void incrementWebhookCallCount_incrementsAndSetsTimestamp() {
         Bot bot = new Bot();
         bot.setId(42L);

@@ -6,6 +6,7 @@ import org.junit.jupiter.api.io.TempDir;
 import org.remus.giteabot.admin.Bot;
 import org.remus.giteabot.admin.GitIntegration;
 import org.remus.giteabot.admin.GiteaClientFactory;
+import org.remus.giteabot.repository.model.GitAuthor;
 import org.remus.giteabot.agent.validation.WorkspaceResult;
 import org.remus.giteabot.agent.validation.WorkspaceService;
 import org.remus.giteabot.prworkflow.PrWorkflowRun;
@@ -64,7 +65,7 @@ class SuitePromotionServiceTest {
                 anyString(), anyString(), anyString(), any()))
                 .thenReturn(WorkspaceResult.success(workspace));
         lenient().when(workspaceService.commitAndPush(any(), anyString(), anyString(),
-                anyString(), anyString(), anyBoolean()))
+                any(), anyBoolean()))
                 .thenReturn(true);
         lenient().when(runRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
@@ -106,7 +107,7 @@ class SuitePromotionServiceTest {
         verify(workspaceService).prepareWorkspace(
                 repoClient, "acme", "web", "feature/login", 7L);
         verify(workspaceService).commitAndPush(eq(workspace), eq(expectedBranch),
-                anyString(), anyString(), anyString(), eq(true));
+                anyString(), any(), eq(true));
     }
 
     @Test
@@ -170,10 +171,24 @@ class SuitePromotionServiceTest {
         verify(workspaceService).prepareWritablePullRequestWorkspace(
                 repoClient, "acme", "web", "feature/x", 3L);
         verify(workspaceService).commitAndPush(eq(workspace), eq("feature/x"),
-                anyString(), anyString(), anyString(), eq(false));
+                anyString(), any(), eq(false));
         verify(repoClient, never()).createPullRequest(any(), any(), any(), any(), any(), any());
         // Idempotency: COMMIT_TO_PR records parent prNumber so a re-run no-ops.
         assertThat(run.getFollowUpPrNumber()).isEqualTo(3L);
+    }
+
+    @Test
+    void promotion_commitsAsBotGitAuthor() {
+        Bot bot = bot();
+        bot.setGitAuthorName("E2E Bot");
+        bot.setGitAuthorEmail("e2e-bot@example.com");
+        PrTestSuite suite = suite(SuiteLifecycleMode.COMMIT_TO_PR, 3L,
+                caseAt("smoke.spec.ts", "// inline"));
+
+        service.promote(bot, run(8L), suite, "acme", "web", "feature/x");
+
+        verify(workspaceService).commitAndPush(eq(workspace), eq("feature/x"), anyString(),
+                eq(new GitAuthor("E2E Bot", "e2e-bot@example.com")), eq(false));
     }
 
     @Test
@@ -205,7 +220,7 @@ class SuitePromotionServiceTest {
         assertThat(out.kind()).isEqualTo(SuitePromotionService.Outcome.Kind.FAILED);
         verify(workspaceService, never()).prepareWorkspace(any(), any(), any(), any(), any());
         verify(workspaceService, never()).commitAndPush(
-                any(), anyString(), anyString(), anyString(), anyString(), anyBoolean());
+                any(), anyString(), anyString(), any(), anyBoolean());
     }
 
     @Test
@@ -263,7 +278,7 @@ class SuitePromotionServiceTest {
     @Test
     void pushFailure_surfacesAsOutcomeFailure_andDoesNotOpenPr() {
         when(workspaceService.commitAndPush(any(), anyString(), anyString(),
-                anyString(), anyString(), anyBoolean())).thenReturn(false);
+                any(), anyBoolean())).thenReturn(false);
 
         PrTestSuite suite = suite(SuiteLifecycleMode.OFFER_AS_PR, 7L,
                 caseAt("login.spec.ts", "// hi"));
@@ -286,7 +301,7 @@ class SuitePromotionServiceTest {
         assertThat(out.kind()).isEqualTo(SuitePromotionService.Outcome.Kind.FAILED);
         assertThat(out.message()).contains("write");
         verify(workspaceService, never()).commitAndPush(
-                any(), anyString(), anyString(), anyString(), anyString(), anyBoolean());
+                any(), anyString(), anyString(), any(), anyBoolean());
     }
 
     @Test
@@ -303,7 +318,7 @@ class SuitePromotionServiceTest {
         assertThat(out.kind()).isEqualTo(SuitePromotionService.Outcome.Kind.FAILED);
         assertThat(out.message()).contains("write");
         verify(workspaceService, never()).commitAndPush(
-                any(), anyString(), anyString(), anyString(), anyString(), anyBoolean());
+                any(), anyString(), anyString(), any(), anyBoolean());
     }
 
     @Test

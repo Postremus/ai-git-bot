@@ -14,6 +14,7 @@ import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import org.remus.giteabot.repository.model.GitAuthor;
 import org.remus.giteabot.prworkflow.config.DeploymentTarget;
 import org.remus.giteabot.prworkflow.config.WorkflowConfiguration;
 import org.remus.giteabot.systemsettings.BotToolConfiguration;
@@ -114,6 +115,20 @@ public class Bot {
     private String branchFilter = "";
 
     /**
+     * Git author name for commits this bot pushes. New bots start with
+     * {@link GitAuthor#DEFAULT_NAME}.
+     */
+    @Column(name = "git_author_name", nullable = false)
+    private String gitAuthorName = GitAuthor.DEFAULT_NAME;
+
+    /**
+     * Git author e-mail for commits this bot pushes. New bots start with
+     * {@link GitAuthor#DEFAULT_EMAIL}.
+     */
+    @Column(name = "git_author_email", nullable = false)
+    private String gitAuthorEmail = GitAuthor.DEFAULT_EMAIL;
+
+    /**
      * @deprecated Issue behaviour is no longer dispatched via the bot type.
      * It is resolved from {@link #getIssueWorkflowConfiguration()} (see the
      * {@code issueworkflow} package); PR behaviour from
@@ -161,6 +176,11 @@ public class Bot {
     @PreUpdate
     void preUpdate() {
         updatedAt = Instant.now();
+    }
+
+    /** Resolves the Git author identity for commits this bot pushes. */
+    public GitAuthor gitAuthor() {
+        return new GitAuthor(gitAuthorName, gitAuthorEmail);
     }
 
     public String getWebhookPath() {

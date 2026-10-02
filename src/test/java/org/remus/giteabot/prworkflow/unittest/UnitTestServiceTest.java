@@ -7,6 +7,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.remus.giteabot.admin.Bot;
+import org.remus.giteabot.repository.model.GitAuthor;
 import org.remus.giteabot.agent.validation.WorkspaceResult;
 import org.remus.giteabot.agent.validation.WorkspaceService;
 import org.remus.giteabot.ai.AiClient;
@@ -85,8 +86,11 @@ class UnitTestServiceTest {
     @Test
     void commitToPr_pushFailure_isWorkflowFailureEvenWhenTestsPass(@TempDir Path workspace) {
         WebhookPayload payload = payload();
+        Bot bot = new Bot();
+        bot.setGitAuthorName("Test Bot");
+        bot.setGitAuthorEmail("test-bot@example.com");
         PrWorkflowContext context = new PrWorkflowContext(
-                new Bot(), payload, 1L, (name, log) -> { }, () -> false);
+                bot, payload, 1L, (name, log) -> { }, () -> false);
         UnitTestService.Request request = new UnitTestService.Request(
                 context, UnitTestFramework.MAVEN, 1, 1, SuiteLifecycleMode.COMMIT_TO_PR);
         when(repositoryClient.getPullRequestDiff("acme", "repo", 42L)).thenReturn("diff");
@@ -104,7 +108,7 @@ class UnitTestServiceTest {
         when(workspaceService.listChangedFiles(workspace))
                 .thenReturn(List.of("src/test/java/GeneratedTest.java"));
         when(workspaceService.commitAndPush(eq(workspace), eq("feature/test"), anyString(),
-                anyString(), anyString(), eq(false))).thenReturn(false);
+                any(), eq(false))).thenReturn(false);
         when(runner.run(any())).thenReturn(UnitTestOutcome.passed(
                 "all tests passed", 1, CoverageResult.unknown(), null));
         when(suiteRepository.findByIdWithCases(10L)).thenReturn(Optional.empty());
@@ -113,6 +117,8 @@ class UnitTestServiceTest {
 
         assertThat(result.status()).isEqualTo(UnitTestService.Result.Status.FAILED);
         assertThat(result.summary()).contains("could not be committed");
+        verify(workspaceService).commitAndPush(eq(workspace), eq("feature/test"), anyString(),
+                eq(new GitAuthor("Test Bot", "test-bot@example.com")), eq(false));
     }
 
     private static WebhookPayload payload() {

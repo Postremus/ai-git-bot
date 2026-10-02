@@ -1,6 +1,7 @@
 package org.remus.giteabot.admin;
 
 import org.junit.jupiter.api.Test;
+import org.remus.giteabot.repository.model.GitAuthor;
 import org.remus.giteabot.prworkflow.config.WorkflowConfigurationService;
 import org.remus.giteabot.systemsettings.BotToolConfiguration;
 import org.remus.giteabot.systemsettings.BotToolConfigurationService;
@@ -164,6 +165,20 @@ class BotControllerTest {
         org.junit.jupiter.api.Assertions.assertSame(issueConfiguration,
                 bot.getIssueWorkflowConfiguration());
         org.mockito.Mockito.verify(botService).save(bot, false);
+    }
+
+    @Test
+    void newForm_prefillsDefaultGitAuthor() {
+        BotController controller = newController(mock(BotService.class), mock(McpConfigurationService.class),
+                mock(McpToolSelectionService.class), mock(BotToolConfigurationService.class),
+                mock(BotToolSelectionService.class));
+
+        org.springframework.ui.Model model = new org.springframework.ui.ExtendedModelMap();
+        controller.newForm(model);
+
+        Bot formBot = (Bot) model.getAttribute("bot");
+        assertEquals(GitAuthor.DEFAULT_NAME, formBot.getGitAuthorName());
+        assertEquals(GitAuthor.DEFAULT_EMAIL, formBot.getGitAuthorEmail());
     }
 
     @Test
