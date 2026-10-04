@@ -2,10 +2,15 @@ package org.remus.giteabot.systemsettings;
 
 import org.junit.jupiter.api.Test;
 import org.remus.giteabot.prworkflow.config.WorkflowConfigurationService;
+import org.remus.giteabot.secret.UnresolvableSecretReferencesException;
+import org.springframework.context.MessageSourceResolvable;
+import org.springframework.context.i18n.LocaleContextHolder;
+import org.springframework.context.support.DefaultMessageSourceResolvable;
 import org.springframework.ui.ConcurrentModel;
 import org.springframework.web.servlet.mvc.support.RedirectAttributesModelMap;
 
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -34,6 +39,9 @@ class SystemSettingsControllerTest {
                 new org.springframework.context.support.ResourceBundleMessageSource();
         ms.setBasename("messages");
         ms.setDefaultEncoding("UTF-8");
+        // A locale without its own bundle (like ENGLISH) resolves to messages.properties,
+        // not to the bundle of the machine's locale
+        ms.setFallbackToSystemLocale(false);
         return ms;
     }
 
@@ -64,6 +72,43 @@ class SystemSettingsControllerTest {
         String view = controller.saveMcp(config, new ConcurrentModel(), new RedirectAttributesModelMap());
 
         assertEquals("redirect:/system-settings/mcp-configurations/5/tools", view);
+    }
+
+    @Test
+    void saveMcp_unresolvableSecretReferences_rendersFormWithEachProblem() {
+        McpConfigurationService mcpConfigurationService = mock(McpConfigurationService.class);
+        SystemSettingsController controller = newController(mock(SystemPromptService.class),
+                mcpConfigurationService, mock(McpToolSelectionService.class),
+                mock(BotToolConfigurationService.class), mock(BotToolSelectionService.class));
+        McpConfiguration config = new McpConfiguration();
+        // Defaults differ from the expected texts, so the assertions prove the keys resolve from messages.properties
+        List<MessageSourceResolvable> problems = List.of(
+                resolvable("secret.error.inToken", "github",
+                        resolvable("secret.error.notResolvable", "${env:MISSING}", "MISSING")),
+                resolvable("secret.error.inHeader", "github", "X-Api-Key",
+                        resolvable("secret.error.sourceNotFound", "${vault:TOKEN}", "vault")));
+        when(mcpConfigurationService.save(config)).thenThrow(new UnresolvableSecretReferencesException(problems));
+        ConcurrentModel model = new ConcurrentModel();
+
+        String view;
+        LocaleContextHolder.setLocale(Locale.ENGLISH);
+        try {
+            view = controller.saveMcp(config, model, new RedirectAttributesModelMap());
+        } finally {
+            LocaleContextHolder.resetLocaleContext();
+        }
+
+        assertEquals("system-settings/mcp-form", view);
+        assertEquals("Failed to save: some secret references cannot be resolved:", model.getAttribute("error"));
+        assertEquals(List.of(
+                        "Server 'github', authorization token: ${env:MISSING}: Key MISSING is not resolvable",
+                        "Server 'github', header 'X-Api-Key': ${vault:TOKEN}: Could not find secret source for type vault"),
+                model.getAttribute("errorDetails"));
+        assertEquals(config, model.getAttribute("mcpConfiguration"));
+    }
+
+    private static MessageSourceResolvable resolvable(String code, Object... arguments) {
+        return new DefaultMessageSourceResolvable(new String[]{code}, arguments, "unresolved " + code);
     }
 
     @Test

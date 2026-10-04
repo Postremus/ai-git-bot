@@ -13,6 +13,11 @@ import java.util.regex.Pattern;
  * <p>
  * Only the names configured via {@code giteabot.secret.env.whitelist} are readable, so a
  * bot configuration cannot exfiltrate arbitrary environment variables of the host.
+ * <p>
+ * Keeps the default {@link SecretSource#resolvable(String)}: the first {@link System#getenv()}
+ * call - which Spring already makes at startup - caches the whole environment in
+ * {@code java.lang.ProcessEnvironment}, so checking a key via {@link #resolve(String)} loads
+ * no value into memory that is not there already.
  */
 @Slf4j
 @Component

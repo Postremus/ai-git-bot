@@ -6,9 +6,15 @@ import lombok.RequiredArgsConstructor;
 import org.remus.giteabot.admin.Bot;
 import org.remus.giteabot.admin.BotRepository;
 import org.remus.giteabot.admin.EncryptionService;
+import org.remus.giteabot.mcp.McpConfigurationParser;
+import org.remus.giteabot.mcp.McpServerDefinition;
+import org.remus.giteabot.secret.UnresolvableSecretReferencesException;
+import org.springframework.context.MessageSourceResolvable;
+import org.springframework.context.support.DefaultMessageSourceResolvable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
@@ -22,6 +28,7 @@ public class McpConfigurationService {
     private final McpConfigurationRepository mcpConfigurationRepository;
     private final BotRepository botRepository;
     private final EncryptionService encryptionService;
+    private final McpConfigurationParser mcpConfigurationParser;
 
     @Transactional(readOnly = true)
     public List<McpConfiguration> findAll() {
@@ -54,6 +61,7 @@ public class McpConfigurationService {
         if (duplicateName) {
             throw new IllegalArgumentException("An MCP configuration with this name already exists");
         }
+        validateSecretReferences(mcpConfiguration.getJsonContent());
         mcpConfiguration.setJsonContent(encryptionService.encrypt(mcpConfiguration.getJsonContent()));
         return mcpConfigurationRepository.save(mcpConfiguration);
     }
@@ -102,6 +110,33 @@ public class McpConfigurationService {
         if (!containsRemoteEndpoint(root)) {
             throw new IllegalArgumentException("MCP configuration must contain a remote HTTP, HTTPS, WS, WSS, or SSE endpoint");
         }
+    }
+
+    /**
+     * Checks the {@code ${type:key}} references of exactly the values that are resolved when
+     * calling a server - the authorization token and the custom headers - so the admin learns
+     * about a typo or a missing whitelist entry on save, not on the first tool call.
+     */
+    void validateSecretReferences(String jsonContent) {
+        List<MessageSourceResolvable> problems = new ArrayList<>();
+        for (McpServerDefinition server : mcpConfigurationParser.parse(jsonContent)) {
+            if (server.authorizationToken() != null) {
+                server.authorizationToken().validate().forEach(problem -> problems.add(located("secret.error.inToken",
+                        "Server '%s', authorization token: %s".formatted(server.name(), problem.getDefaultMessage()),
+                        server.name(), problem)));
+            }
+            server.headers().forEach((name, template) -> template.validate().forEach(problem -> problems.add(located("secret.error.inHeader",
+                    "Server '%s', header '%s': %s".formatted(server.name(), name, problem.getDefaultMessage()),
+                    server.name(), name, problem))));
+        }
+        if (!problems.isEmpty()) {
+            throw new UnresolvableSecretReferencesException(problems);
+        }
+    }
+
+    /** Prefixes a problem with where it occurred; the problem itself is resolved as the last argument. */
+    private static MessageSourceResolvable located(String code, String defaultMessage, Object... arguments) {
+        return new DefaultMessageSourceResolvable(new String[]{code}, arguments, defaultMessage);
     }
 
     private boolean containsStdioTransport(JsonNode node) {
