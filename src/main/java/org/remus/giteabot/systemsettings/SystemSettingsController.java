@@ -1,5 +1,6 @@
 package org.remus.giteabot.systemsettings;
 
+import org.remus.giteabot.web.FormErrors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.remus.giteabot.prworkflow.config.DeploymentTargetService;
@@ -36,6 +37,7 @@ public class SystemSettingsController {
     private final WorkflowConfigurationService workflowConfigurationService;
     private final DeploymentTargetService deploymentTargetService;
     private final MessageSource messageSource;
+    private final FormErrors formErrors;
 
     @GetMapping
     public String list(Model model) {
@@ -83,7 +85,7 @@ public class SystemSettingsController {
             return "redirect:/system-settings/mcp-configurations/" + saved.getId() + "/tools";
         } catch (Exception e) {
             log.error("Failed to save MCP configuration", e);
-            model.addAttribute("error", messageSource.getMessage("flash.saveFailed", new Object[]{e.getMessage()}, LocaleContextHolder.getLocale()));
+            formErrors.addTo(model, "flash.saveFailed", e);
             model.addAttribute("mcpConfiguration", mcpConfiguration);
             model.addAttribute("activeNav", "system-settings");
             return "system-settings/mcp-form";
@@ -117,7 +119,7 @@ public class SystemSettingsController {
             return "redirect:/system-settings";
         } catch (Exception e) {
             log.error("Failed to save MCP tool selection", e);
-            redirectAttributes.addFlashAttribute("error", messageSource.getMessage("flash.saveFailed", new Object[]{e.getMessage()}, LocaleContextHolder.getLocale()));
+            formErrors.flashTo(redirectAttributes, "flash.saveFailed", e);
             return "redirect:/system-settings/mcp-configurations/" + id + "/tools";
         }
     }
@@ -129,7 +131,7 @@ public class SystemSettingsController {
             redirectAttributes.addFlashAttribute("success", messageSource.getMessage("flash.mcpDeleted", null, LocaleContextHolder.getLocale()));
         } catch (Exception e) {
             log.error("Failed to delete MCP configuration", e);
-            redirectAttributes.addFlashAttribute("error", messageSource.getMessage("flash.deleteFailed", new Object[]{e.getMessage()}, LocaleContextHolder.getLocale()));
+            formErrors.flashTo(redirectAttributes, "flash.deleteFailed", e);
         }
         return "redirect:/system-settings";
     }
@@ -193,7 +195,7 @@ public class SystemSettingsController {
             redirectAttributes.addFlashAttribute("success", messageSource.getMessage("flash.systemPromptSaved", null, LocaleContextHolder.getLocale()));
         } catch (Exception e) {
             log.error("Failed to save system prompt", e);
-            model.addAttribute("error", messageSource.getMessage("flash.saveFailed", new Object[]{e.getMessage()}, LocaleContextHolder.getLocale()));
+            formErrors.addTo(model, "flash.saveFailed", e);
             model.addAttribute("systemPrompt", systemPrompt);
             model.addAttribute("activeNav", "system-settings");
             return "system-settings/form";
@@ -227,7 +229,7 @@ public class SystemSettingsController {
             redirectAttributes.addFlashAttribute("success", messageSource.getMessage("flash.systemPromptDeleted", null, LocaleContextHolder.getLocale()));
         } catch (Exception e) {
             log.error("Failed to delete system prompt", e);
-            redirectAttributes.addFlashAttribute("error", messageSource.getMessage("flash.deleteFailed", new Object[]{e.getMessage()}, LocaleContextHolder.getLocale()));
+            formErrors.flashTo(redirectAttributes, "flash.deleteFailed", e);
         }
         return "redirect:/system-settings";
     }
@@ -280,7 +282,7 @@ public class SystemSettingsController {
             return "redirect:/system-settings/bot-tools/" + saved.getId() + "/tools";
         } catch (Exception e) {
             log.error("Failed to save tool configuration", e);
-            model.addAttribute("error", messageSource.getMessage("flash.saveFailed", new Object[]{e.getMessage()}, LocaleContextHolder.getLocale()));
+            formErrors.addTo(model, "flash.saveFailed", e);
             model.addAttribute("botToolConfiguration", botToolConfiguration);
             model.addAttribute("activeNav", "system-settings");
             return "system-settings/bot-tools-form";
@@ -314,7 +316,7 @@ public class SystemSettingsController {
             return "redirect:/system-settings";
         } catch (Exception e) {
             log.error("Failed to save tool selection", e);
-            redirectAttributes.addFlashAttribute("error", messageSource.getMessage("flash.saveFailed", new Object[]{e.getMessage()}, LocaleContextHolder.getLocale()));
+            formErrors.flashTo(redirectAttributes, "flash.saveFailed", e);
             return "redirect:/system-settings/bot-tools/" + id + "/tools";
         }
     }
@@ -326,7 +328,7 @@ public class SystemSettingsController {
             redirectAttributes.addFlashAttribute("success", messageSource.getMessage("flash.toolConfigDeleted", null, LocaleContextHolder.getLocale()));
         } catch (Exception e) {
             log.error("Failed to delete tool configuration", e);
-            redirectAttributes.addFlashAttribute("error", messageSource.getMessage("flash.deleteFailed", new Object[]{e.getMessage()}, LocaleContextHolder.getLocale()));
+            formErrors.flashTo(redirectAttributes, "flash.deleteFailed", e);
         }
         return "redirect:/system-settings";
     }

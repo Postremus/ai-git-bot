@@ -1,5 +1,6 @@
 package org.remus.giteabot.admin;
 
+import org.remus.giteabot.web.FormErrors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.remus.giteabot.prworkflow.config.DeploymentTarget;
@@ -49,6 +50,7 @@ public class BotController {
     private final WorkflowConfigurationService workflowConfigurationService;
     private final DeploymentTargetService deploymentTargetService;
     private final MessageSource messageSource;
+    private final FormErrors formErrors;
 
     @GetMapping
     public String list(Model model) {
@@ -147,7 +149,7 @@ public class BotController {
             redirectAttributes.addFlashAttribute("success", messageSource.getMessage("flash.botSaved", null, LocaleContextHolder.getLocale()));
         } catch (Exception e) {
             log.error("Failed to save Bot", e);
-            model.addAttribute("error", messageSource.getMessage("flash.saveFailed", new Object[]{e.getMessage()}, LocaleContextHolder.getLocale()));
+            formErrors.addTo(model, "flash.saveFailed", e);
             addFormAttributes(model);
             return "bots/form";
         }
@@ -180,7 +182,7 @@ public class BotController {
             redirectAttributes.addFlashAttribute("success", messageSource.getMessage("flash.botDeleted", null, LocaleContextHolder.getLocale()));
         } catch (Exception e) {
             log.error("Failed to delete Bot", e);
-            redirectAttributes.addFlashAttribute("error", messageSource.getMessage("flash.deleteFailed", new Object[]{e.getMessage()}, LocaleContextHolder.getLocale()));
+            formErrors.flashTo(redirectAttributes, "flash.deleteFailed", e);
         }
         return "redirect:/bots";
     }

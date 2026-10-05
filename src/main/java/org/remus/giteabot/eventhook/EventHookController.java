@@ -1,7 +1,9 @@
 package org.remus.giteabot.eventhook;
 
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.remus.giteabot.admin.BotService;
+import org.remus.giteabot.web.FormErrors;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.WebDataBinder;
@@ -34,6 +36,7 @@ import org.springframework.context.i18n.LocaleContextHolder;
 @Slf4j
 @Controller
 @RequestMapping("/admin/event-hooks")
+@RequiredArgsConstructor
 public class EventHookController {
 
     private static final String VIEW_LIST = "event-hooks/list";
@@ -47,20 +50,7 @@ public class EventHookController {
     private final BotService botService;
     private final ObjectMapper objectMapper;
     private final MessageSource messageSource;
-
-    public EventHookController(EventHookEndpointService endpointService,
-                               EventHookDeliveryRepository deliveryRepository,
-                               EventHookDeliveryWorker deliveryWorker,
-                               BotService botService,
-                               ObjectMapper objectMapper,
-                               MessageSource messageSource) {
-        this.endpointService = endpointService;
-        this.deliveryRepository = deliveryRepository;
-        this.deliveryWorker = deliveryWorker;
-        this.botService = botService;
-        this.objectMapper = objectMapper;
-        this.messageSource = messageSource;
-    }
+    private final FormErrors formErrors;
 
     @InitBinder("endpoint")
     void disallowEncryptedFieldBinding(WebDataBinder binder) {
@@ -130,10 +120,11 @@ public class EventHookController {
                 return REDIRECT_LIST;
             } catch (Exception e) {
                 log.error("Failed to save event hook endpoint", e);
-                error = messageSource.getMessage("flash.saveFailed", new Object[]{e.getMessage()}, LocaleContextHolder.getLocale());
+                formErrors.addTo(model, "flash.saveFailed", e);
             }
+        } else {
+            model.addAttribute("error", error);
         }
-        model.addAttribute("error", error);
         populateForm(model, endpoint);
         return VIEW_FORM;
     }
@@ -157,7 +148,7 @@ public class EventHookController {
             redirectAttributes.addFlashAttribute("success", messageSource.getMessage("flash.hookDeleted", null, LocaleContextHolder.getLocale()));
         } catch (Exception e) {
             log.error("Failed to delete event hook endpoint", e);
-            redirectAttributes.addFlashAttribute("error", messageSource.getMessage("flash.deleteFailed", new Object[]{e.getMessage()}, LocaleContextHolder.getLocale()));
+            formErrors.flashTo(redirectAttributes, "flash.deleteFailed", e);
         }
         return REDIRECT_LIST;
     }

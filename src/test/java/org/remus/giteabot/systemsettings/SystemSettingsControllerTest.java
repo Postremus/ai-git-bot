@@ -25,7 +25,8 @@ class SystemSettingsControllerTest {
         return new SystemSettingsController(systemPromptService, mcpConfigurationService,
                 mcpToolSelectionService, botToolConfigurationService, botToolSelectionService,
                 mock(WorkflowConfigurationService.class),
-                mock(org.remus.giteabot.prworkflow.config.DeploymentTargetService.class), messageSource());
+                mock(org.remus.giteabot.prworkflow.config.DeploymentTargetService.class), messageSource(),
+                new org.remus.giteabot.web.FormErrors(messageSource()));
     }
 
     private static org.springframework.context.MessageSource messageSource() {

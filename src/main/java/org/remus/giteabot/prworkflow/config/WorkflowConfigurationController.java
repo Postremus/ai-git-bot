@@ -1,5 +1,6 @@
 package org.remus.giteabot.prworkflow.config;
 
+import org.remus.giteabot.web.FormErrors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
@@ -47,6 +48,7 @@ public class WorkflowConfigurationController {
     private final WorkflowConfigurationService configurationService;
     private final WorkflowSelectionService selectionService;
     private final MessageSource messageSource;
+    private final FormErrors formErrors;
 
     /**
      * Exposes the shared-template contract: which base URL the form actions
@@ -112,7 +114,7 @@ public class WorkflowConfigurationController {
             return "redirect:/system-settings/workflow-configurations/" + saved.getId() + "/workflows";
         } catch (Exception e) {
             log.error("Failed to save workflow configuration", e);
-            model.addAttribute("error", messageSource.getMessage("flash.saveFailed", new Object[]{e.getMessage()}, LocaleContextHolder.getLocale()));
+            formErrors.addTo(model, "flash.saveFailed", e);
             model.addAttribute("workflowConfiguration", workflowConfiguration);
             model.addAttribute("activeNav", "system-settings");
             addTemplateAttributes(model);
@@ -156,7 +158,7 @@ public class WorkflowConfigurationController {
             return "redirect:/system-settings";
         } catch (Exception e) {
             log.error("Failed to save workflow selection", e);
-            redirectAttributes.addFlashAttribute("error", messageSource.getMessage("flash.saveFailed", new Object[]{e.getMessage()}, LocaleContextHolder.getLocale()));
+            formErrors.flashTo(redirectAttributes, "flash.saveFailed", e);
             return "redirect:/system-settings/workflow-configurations/" + id + "/workflows";
         }
     }
@@ -171,7 +173,7 @@ public class WorkflowConfigurationController {
             redirectAttributes.addFlashAttribute("success", messageSource.getMessage("flash.workflowConfigDeleted", null, LocaleContextHolder.getLocale()));
         } catch (Exception e) {
             log.error("Failed to delete workflow configuration", e);
-            redirectAttributes.addFlashAttribute("error", messageSource.getMessage("flash.deleteFailed", new Object[]{e.getMessage()}, LocaleContextHolder.getLocale()));
+            formErrors.flashTo(redirectAttributes, "flash.deleteFailed", e);
         }
         return "redirect:/system-settings";
     }

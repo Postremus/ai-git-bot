@@ -2,6 +2,7 @@ package org.remus.giteabot.prworkflow.config;
 
 import lombok.extern.slf4j.Slf4j;
 import org.remus.giteabot.prworkflow.deployment.DeploymentStrategyType;
+import org.remus.giteabot.web.FormErrors;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -36,13 +37,16 @@ public class DeploymentTargetController {
     private final DeploymentTargetService service;
     private final String publicBaseUrl;
     private final MessageSource messageSource;
+    private final FormErrors formErrors;
 
     public DeploymentTargetController(DeploymentTargetService service,
                                       @Value("${ai-git-bot.public-base-url:}") String publicBaseUrl,
-                                  MessageSource messageSource) {
+                                      MessageSource messageSource,
+                                      FormErrors formErrors) {
         this.service = service;
         this.publicBaseUrl = publicBaseUrl == null ? "" : publicBaseUrl.trim();
         this.messageSource = messageSource;
+        this.formErrors = formErrors;
     }
 
     @GetMapping
@@ -86,7 +90,7 @@ public class DeploymentTargetController {
             return "redirect:/system-settings/deployment-targets";
         } catch (Exception e) {
             log.error("Failed to save deployment target", e);
-            model.addAttribute("error", messageSource.getMessage("flash.saveFailed", new Object[]{e.getMessage()}, LocaleContextHolder.getLocale()));
+            formErrors.addTo(model, "flash.saveFailed", e);
             populateForm(model, target);
             return VIEW_FORM;
         }
@@ -99,7 +103,7 @@ public class DeploymentTargetController {
             redirectAttributes.addFlashAttribute("success", messageSource.getMessage("flash.deploymentTargetDeleted", null, LocaleContextHolder.getLocale()));
         } catch (Exception e) {
             log.error("Failed to delete deployment target", e);
-            redirectAttributes.addFlashAttribute("error", messageSource.getMessage("flash.deleteFailed", new Object[]{e.getMessage()}, LocaleContextHolder.getLocale()));
+            formErrors.flashTo(redirectAttributes, "flash.deleteFailed", e);
         }
         return "redirect:/system-settings/deployment-targets";
     }

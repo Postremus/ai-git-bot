@@ -8,6 +8,7 @@ import org.remus.giteabot.systemsettings.BotToolSelectionService;
 import org.remus.giteabot.systemsettings.McpConfigurationService;
 import org.remus.giteabot.systemsettings.McpToolSelectionService;
 import org.remus.giteabot.systemsettings.SystemPromptService;
+import org.remus.giteabot.web.FormErrors;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.ImportAutoConfiguration;
 import org.springframework.boot.security.autoconfigure.SecurityAutoConfiguration;
@@ -36,7 +37,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * 404 for an issue configuration (and for ids that do not exist over there).</p>
  */
 @WebMvcTest(BotController.class)
-@Import(SecurityConfig.class)
+@Import({SecurityConfig.class, FormErrors.class})
 @ImportAutoConfiguration({
         SecurityAutoConfiguration.class,
         ServletWebSecurityAutoConfiguration.class,

@@ -2,6 +2,7 @@ package org.remus.giteabot.admin;
 
 import org.junit.jupiter.api.Test;
 import org.remus.giteabot.ai.AiProviderRegistry;
+import org.remus.giteabot.web.FormErrors;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.ImportAutoConfiguration;
 import org.springframework.boot.security.autoconfigure.SecurityAutoConfiguration;
@@ -37,7 +38,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.view;
 
 @WebMvcTest(AiIntegrationController.class)
-@Import(SecurityConfig.class)
+@Import({SecurityConfig.class, FormErrors.class})
 @ImportAutoConfiguration({
         SecurityAutoConfiguration.class,
         ServletWebSecurityAutoConfiguration.class,

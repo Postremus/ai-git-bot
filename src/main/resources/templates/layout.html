@@ -107,6 +107,9 @@
         </div>
         <div th:if="${error}" class="alert alert-danger alert-dismissible fade show" role="alert">
             <i class="bi bi-exclamation-triangle"></i> <span th:text="${error}"></span>
+            <ul th:if="${errorDetails}" class="mb-0 mt-2">
+                <li th:each="detail : ${errorDetails}" th:text="${detail}"></li>
+            </ul>
             <button type="button" class="btn-close" data-bs-dismiss="alert" th:aria-label="#{button.close}"></button>
         </div>
 

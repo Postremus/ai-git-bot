@@ -26,7 +26,8 @@ class WorkflowConfigurationControllerTest {
     private static WorkflowConfigurationController newController(
             WorkflowConfigurationService configurationService,
             WorkflowSelectionService selectionService) {
-        return new WorkflowConfigurationController(configurationService, selectionService, messageSource());
+        return new WorkflowConfigurationController(configurationService, selectionService, messageSource(),
+                new org.remus.giteabot.web.FormErrors(messageSource()));
     }
 
     private static org.springframework.context.MessageSource messageSource() {

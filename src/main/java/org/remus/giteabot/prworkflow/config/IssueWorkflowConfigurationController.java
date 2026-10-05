@@ -1,5 +1,6 @@
 package org.remus.giteabot.prworkflow.config;
 
+import org.remus.giteabot.web.FormErrors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
@@ -49,6 +50,7 @@ public class IssueWorkflowConfigurationController {
     private final WorkflowConfigurationService configurationService;
     private final WorkflowSelectionService selectionService;
     private final MessageSource messageSource;
+    private final FormErrors formErrors;
 
     private static void addTemplateAttributes(Model model) {
         model.addAttribute("workflowConfigBaseUrl", BASE_URL);
@@ -109,7 +111,7 @@ public class IssueWorkflowConfigurationController {
             return "redirect:" + BASE_URL + "/" + saved.getId() + "/workflows";
         } catch (Exception e) {
             log.error("Failed to save issue-assigned workflow configuration", e);
-            model.addAttribute("error", messageSource.getMessage("flash.saveFailed", new Object[]{e.getMessage()}, LocaleContextHolder.getLocale()));
+            formErrors.addTo(model, "flash.saveFailed", e);
             model.addAttribute("workflowConfiguration", workflowConfiguration);
             model.addAttribute("activeNav", "system-settings");
             addTemplateAttributes(model);
@@ -148,7 +150,7 @@ public class IssueWorkflowConfigurationController {
             return "redirect:/system-settings";
         } catch (Exception e) {
             log.error("Failed to save workflow selection", e);
-            redirectAttributes.addFlashAttribute("error", messageSource.getMessage("flash.saveFailed", new Object[]{e.getMessage()}, LocaleContextHolder.getLocale()));
+            formErrors.flashTo(redirectAttributes, "flash.saveFailed", e);
             return "redirect:" + BASE_URL + "/" + id + "/workflows";
         }
     }
@@ -164,7 +166,7 @@ public class IssueWorkflowConfigurationController {
                     messageSource.getMessage("flash.issueWorkflowConfigDeleted", null, LocaleContextHolder.getLocale()));
         } catch (Exception e) {
             log.error("Failed to delete issue-assigned workflow configuration", e);
-            redirectAttributes.addFlashAttribute("error", messageSource.getMessage("flash.deleteFailed", new Object[]{e.getMessage()}, LocaleContextHolder.getLocale()));
+            formErrors.flashTo(redirectAttributes, "flash.deleteFailed", e);
         }
         return "redirect:/system-settings";
     }

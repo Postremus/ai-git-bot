@@ -1,5 +1,6 @@
 package org.remus.giteabot.admin;
 
+import org.remus.giteabot.web.FormErrors;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -23,6 +24,7 @@ public class AiIntegrationController {
     private final AiIntegrationService aiIntegrationService;
     private final AiProviderRegistry providerRegistry;
     private final MessageSource messageSource;
+    private final FormErrors formErrors;
 
     @GetMapping
     public String list(Model model) {
@@ -89,7 +91,7 @@ public class AiIntegrationController {
             redirectAttributes.addFlashAttribute("success", messageSource.getMessage("flash.aiSaved", null, LocaleContextHolder.getLocale()));
         } catch (Exception e) {
             log.error("Failed to save AI Integration", e);
-            redirectAttributes.addFlashAttribute("error", messageSource.getMessage("flash.saveFailed", new Object[]{e.getMessage()}, LocaleContextHolder.getLocale()));
+            formErrors.flashTo(redirectAttributes, "flash.saveFailed", e);
         }
         return "redirect:/ai-integrations";
     }
@@ -101,7 +103,7 @@ public class AiIntegrationController {
             redirectAttributes.addFlashAttribute("success", messageSource.getMessage("flash.aiDeleted", null, LocaleContextHolder.getLocale()));
         } catch (Exception e) {
             log.error("Failed to delete AI Integration", e);
-            redirectAttributes.addFlashAttribute("error", messageSource.getMessage("flash.deleteFailed", new Object[]{e.getMessage()}, LocaleContextHolder.getLocale()));
+            formErrors.flashTo(redirectAttributes, "flash.deleteFailed", e);
         }
         return "redirect:/ai-integrations";
     }
