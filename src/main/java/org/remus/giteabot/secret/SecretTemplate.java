@@ -69,9 +69,9 @@ public class SecretTemplate {
                                 "%s: Key %s is not resolvable".formatted(raw, key), raw, key);
                     }
                 } catch (KeyResolveException e) {
-                    // The source builds this message itself, so only the surrounding text is translated
+                    // The exception is itself translatable; the MessageSource resolves it as an argument
                     return problem("secret.error.invalidKey",
-                            "%s: %s".formatted(raw, e.getMessage()), raw, e.getMessage());
+                            "%s: %s".formatted(raw, e.getMessage()), raw, e);
                 }
             }
             return null;

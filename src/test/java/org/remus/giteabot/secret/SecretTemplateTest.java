@@ -1,9 +1,13 @@
 package org.remus.giteabot.secret;
 
 import org.junit.jupiter.api.Test;
+import org.springframework.context.MessageSource;
+import org.springframework.context.MessageSourceResolvable;
+import org.springframework.context.support.ResourceBundleMessageSource;
 
 import java.util.Arrays;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -109,6 +113,39 @@ class SecretTemplateTest {
         SecretTemplate template = template(List.of(), literal("  literal  "));
 
         assertThat(template.expose()).isEqualTo("  literal  ");
+    }
+
+    @Test
+    void testValidateTranslatesTheReasonOfAnInvalidKey() {
+        SecretTemplate template = template(List.of(new EnvSecretSource(new SecretProperties())),
+                new Segment.SecretReference("env", "1BAD", "${env:1BAD}"));
+
+        List<MessageSourceResolvable> problems = template.validate();
+
+        assertThat(problems).hasSize(1);
+        assertThat(messages().getMessage(problems.getFirst(), Locale.GERMAN)).isEqualTo(
+                "${env:1BAD}: Der Name einer Umgebungsvariable muss mit einem Buchstaben (a-z) oder Unterstrich (_) "
+                        + "beginnen und darf Ziffern (0-9) und Unterstriche (_) enthalten. Erhalten: \"1BAD\".");
+        // logs keep the English text, independent of any locale
+        assertThat(problems.getFirst().getDefaultMessage()).startsWith(
+                "${env:1BAD}: The name of an environment variable must start with a letter");
+    }
+
+    @Test
+    void testValidateKeepsTheReasonOfAnUntranslatedKeyResolveException() {
+        SecretTemplate template = template(List.of(FakeSecretSource.failing("env")), TOKEN);
+
+        List<MessageSourceResolvable> problems = template.validate();
+
+        assertThat(messages().getMessage(problems.getFirst(), Locale.GERMAN)).isEqualTo("${env:TOKEN}: boom: TOKEN");
+    }
+
+    private static MessageSource messages() {
+        ResourceBundleMessageSource messageSource = new ResourceBundleMessageSource();
+        messageSource.setBasename("messages");
+        messageSource.setDefaultEncoding("UTF-8");
+        messageSource.setFallbackToSystemLocale(false);
+        return messageSource;
     }
 
     private static SecretTemplate template(List<SecretSource> sources, Segment... segments) {

@@ -400,7 +400,7 @@ public class McpOrchestrationService {
         try {
             request.header(name, value);
         } catch (IllegalArgumentException e) {
-            throw new KeyResolveException(("""
+            throw new KeyResolveException("secret.error.header.invalid", new Object[]{name}, ("""
                     Header '%s' cannot be sent: the configured name, or the value a
                     secret reference resolved to, is not valid in an HTTP header. Check it for line breaks
                     or control characters.""").formatted(name));

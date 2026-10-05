@@ -63,15 +63,17 @@ public class EnvSecretSource implements SecretSource {
     public Optional<SecretValue> resolve(String key) {
 
         if (key == null) {
-            throw new KeyResolveException("Key should not be empty.");
+            throw new KeyResolveException("secret.error.env.emptyKey", null, "Key should not be empty.");
         }
 
         if (!ENV_VALIDATION_PATTERN.matcher(key).matches()) {
-            throw new KeyResolveException("The name of an environment variable must start with a letter (a-z) or underscore (_), and may contain numbers (0-9) and underscores (_). Got \"%s\" instead.".formatted(key));
+            throw new KeyResolveException("secret.error.env.invalidName", new Object[]{key},
+                    "The name of an environment variable must start with a letter (a-z) or underscore (_), and may contain numbers (0-9) and underscores (_). Got \"%s\" instead.".formatted(key));
         }
 
         if (isBlacklisted(key)) {
-            throw new KeyResolveException("\"%s\" can not be used as a key, since the application itself already uses it.".formatted(key));
+            throw new KeyResolveException("secret.error.env.reserved", new Object[]{key},
+                    "\"%s\" can not be used as a key, since the application itself already uses it.".formatted(key));
         }
 
         if (!envVarWhitelist.contains(key)) {
