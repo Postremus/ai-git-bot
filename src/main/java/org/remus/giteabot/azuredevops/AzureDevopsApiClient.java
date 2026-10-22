@@ -345,9 +345,12 @@ public class AzureDevopsApiClient implements RepositoryApiClient {
      * visible without counting as unresolved discussions.
      */
     @Override
-    public void postPullRequestComment(String owner, String repo, Long pullNumber,
+    public Long postPullRequestComment(String owner, String repo, Long pullNumber,
                                        String body) {
         postThread(owner, repo, pullNumber, body, THREAD_STATUS_CLOSED);
+
+        // azure uses uids for the pull request comment id, so not supported for now.
+        return -1L;
     }
 
     /** A review summary is left active, like the inline findings it accompanies. */
