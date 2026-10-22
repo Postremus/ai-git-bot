@@ -4,12 +4,20 @@ import lombok.extern.slf4j.Slf4j;
 import org.remus.giteabot.agent.validation.GitDiffService;
 import org.remus.giteabot.azuredevops.model.AzureDevopsReview;
 import org.remus.giteabot.azuredevops.model.AzureDevopsReviewComment;
+import org.remus.giteabot.azuredevops.model.Comment;
+import org.remus.giteabot.azuredevops.model.CommentPosition;
+import org.remus.giteabot.azuredevops.model.CommentThreadContext;
+import org.remus.giteabot.azuredevops.model.GitCommitRef;
+import org.remus.giteabot.azuredevops.model.GitPullRequestCommentThread;
+import org.remus.giteabot.azuredevops.model.GitPullRequestIteration;
+import org.remus.giteabot.azuredevops.model.IterationList;
 import org.remus.giteabot.repository.PostReviewAction;
 import org.remus.giteabot.repository.RepositoryApiClient;
 import org.remus.giteabot.repository.model.RepositoryCredentials;
 import org.remus.giteabot.repository.model.Review;
 import org.remus.giteabot.repository.model.ReviewComment;
 import org.springframework.core.ParameterizedTypeReference;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.client.RestClient;
 
 import java.net.URI;
@@ -45,14 +53,12 @@ public class AzureDevopsApiClient implements RepositoryApiClient {
     /** {@code connectionData} exists only as a preview API and rejects a release version. */
     static final String API_VERSION_CONNECTION_DATA = "6.0-preview.1";
 
+    /** Azure DevOps numbers comments per thread, so the opening comment is always 1. */
+    private static final long FIRST_COMMENT_ID = 1L;
+
     private static final int VOTE_APPROVE = 10;
     /** "Waiting for author": the closest match to "request changes"; -10 would hard-reject. */
     private static final int VOTE_WAITING_FOR_AUTHOR = -5;
-
-    /** Thread status an author has to resolve; counts against the comment-resolution policy. */
-    private static final int THREAD_STATUS_ACTIVE = 1;
-    /** Thread status for informational comments that should never block completing the PR. */
-    private static final int THREAD_STATUS_CLOSED = 4;
 
     /** A full Git object id. Anything else in a {@code ref} position is a branch name. */
     private static final Pattern COMMIT_SHA = Pattern.compile("[0-9a-fA-F]{40}");
@@ -259,21 +265,6 @@ public class AzureDevopsApiClient implements RepositoryApiClient {
      */
     private DiffRange diffRange(AzureDevopsAddress addr, Long pullNumber) {
 
-        // Non-exhaustive model class
-        record GitCommitRef(String commitId) {
-
-        }
-
-        // Non-exhaustive model class
-        record GitPullRequestIteration(Long id, String description, GitCommitRef commonRefCommit, GitCommitRef sourceRefCommit, GitCommitRef targetRefCommit) {
-
-        }
-
-        // Non-exhaustive model class
-        record IterationList(List<GitPullRequestIteration> value) {
-
-        }
-
         Scope scope = repositoryScope(addr);
         IterationList result = restClient.get()
                 .uri(builder -> builder
@@ -285,16 +276,16 @@ public class AzureDevopsApiClient implements RepositoryApiClient {
 
         GitCommitRef mergeBase;
         GitCommitRef headSha;
-        if (result != null && !result.value.isEmpty()) {
-            GitPullRequestIteration latest = result.value().stream()
-                                                   .max(Comparator.comparingLong(GitPullRequestIteration::id))
+        if (result != null && !result.getValue().isEmpty()) {
+            GitPullRequestIteration latest = result.getValue().stream()
+                                                   .max(Comparator.comparingLong(GitPullRequestIteration::getId))
                                                    .orElseThrow();
-            headSha = latest.sourceRefCommit();
-            mergeBase = latest.commonRefCommit();
+            headSha = latest.getSourceRefCommit();
+            mergeBase = latest.getSourceRefCommit();
             if (mergeBase == null) {
-                mergeBase = latest.targetRefCommit();
+                mergeBase = latest.getTargetRefCommit();
             }
-            return new DiffRange(mergeBase.commitId(), headSha.commitId());
+            return new DiffRange(mergeBase.getCommitId(), headSha.getCommitId());
         }
         return null;
     }
@@ -347,36 +338,72 @@ public class AzureDevopsApiClient implements RepositoryApiClient {
     @Override
     public Long postPullRequestComment(String owner, String repo, Long pullNumber,
                                        String body) {
-        postThread(owner, repo, pullNumber, body, THREAD_STATUS_CLOSED);
+        ResponseEntity<GitPullRequestCommentThread> response = postThread(owner, repo, pullNumber, body, GitPullRequestCommentThread.CommentThreadStatus.ACTIVE);
 
-        // azure uses uids for the pull request comment id, so not supported for now.
-        return -1L;
+        if (response != null && response.getBody() != null) {
+            return response.getBody().getComments().getFirst().getId();
+        }
+
+        return null;
+    }
+
+    /**
+     * {@code commentId} is the thread id returned by {@link #postPullRequestComment}; the
+     * text lives in the thread's opening comment, which Azure DevOps always numbers 1.
+     */
+    @Override
+    public void updatePullRequestComment(String owner, String repo, Long pullNumber, long commentId, String body) {
+        // see: https://learn.microsoft.com/en-us/rest/api/azure/devops/git/pull-request-threads/update?view=azure-devops-rest-6.0&tabs=HTTP
+        Comment comment = new Comment();
+        comment.setId(FIRST_COMMENT_ID);
+        comment.setContent(body);
+
+        GitPullRequestCommentThread thread = new GitPullRequestCommentThread();
+        thread.setComments(List.of(comment));
+
+        AzureDevopsAddress addr = AzureDevopsAddress.parse(owner, repo);
+        Scope scope = repositoryScope(addr);
+        run(() -> restClient.patch()
+                        .uri(builder -> builder
+                                .path(scope.path() + "/pullRequests/{prId}/threads/{threadId}")
+                                .queryParam("api-version", API_VERSION)
+                                .build(vars(scope, pullNumber, commentId)))
+                        .body(thread)
+                        .retrieve()
+                        .toBodilessEntity(),
+                "update comment thread #{} on PR #{} in {}", commentId, pullNumber, repo);
     }
 
     /** A review summary is left active, like the inline findings it accompanies. */
     @Override
     public void postReviewComment(String owner, String repo, Long pullNumber, String body) {
-        postThread(owner, repo, pullNumber, body, THREAD_STATUS_ACTIVE);
+        postThread(owner, repo, pullNumber, body, GitPullRequestCommentThread.CommentThreadStatus.ACTIVE);
     }
 
-    private void postThread(String owner, String repo, Long pullNumber, String body,
-                            int status) {
+    private ResponseEntity<GitPullRequestCommentThread> postThread(String owner, String repo, Long pullNumber, String body,
+                                                   GitPullRequestCommentThread.CommentThreadStatus status) {
+        // see: https://learn.microsoft.com/en-us/rest/api/azure/devops/git/pull-request-threads/create?view=azure-devops-rest-6.0&tabs=HTTP
+
+        Comment comment = new Comment();
+        comment.setParentCommentId(0L);
+        comment.setContent(body);
+        comment.setCommentType(Comment.CommentType.TEXT);
+
+        GitPullRequestCommentThread thread = new GitPullRequestCommentThread();
+        thread.setComments(List.of(comment));
+        thread.setStatus(status);
+
         AzureDevopsAddress addr = AzureDevopsAddress.parse(owner, repo);
         Scope scope = repositoryScope(addr);
-        run(() -> restClient.post()
-                .uri(builder -> builder
-                        .path(scope.path() + "/pullRequests/{prId}/threads")
-                        .queryParam("api-version", API_VERSION)
-                        .build(vars(scope, pullNumber)))
-                .body(Map.of(
-                        "comments", List.of(Map.of(
-                                "parentCommentId", 0,
-                                "content", body,
-                                "commentType", 1)),
-                        "status", status))
-                .retrieve()
-                .toBodilessEntity(),
-                "post comment on PR #{} in {}", pullNumber, repo);
+        return call(() -> restClient.post()
+                        .uri(builder -> builder
+                                .path(scope.path() + "/pullRequests/{prId}/threads")
+                                .queryParam("api-version", API_VERSION)
+                                .build(vars(scope, pullNumber)))
+                        .body(thread)
+                        .retrieve()
+                        .toEntity(GitPullRequestCommentThread.class),
+                null, "post comment on PR #{} in {}", pullNumber, repo);
     }
 
     @Override
@@ -388,24 +415,30 @@ public class AzureDevopsApiClient implements RepositoryApiClient {
     @Override
     public void postInlineReviewComment(String owner, String repo, Long pullNumber,
                                         String filePath, int line, String body) {
+
+        Comment comment = new Comment();
+        comment.setParentCommentId(0L);
+        comment.setContent(body);
+        comment.setCommentType(Comment.CommentType.TEXT);
+
+        CommentThreadContext context = new CommentThreadContext();
+        context.setFilePath(itemPath(filePath));
+        context.setRightFileStart(new CommentPosition(line, 1));
+        context.setRightFileEnd(new CommentPosition(line, 1));
+
+        GitPullRequestCommentThread thread = new GitPullRequestCommentThread();
+        thread.setComments(List.of(comment));
+        thread.setStatus(GitPullRequestCommentThread.CommentThreadStatus.ACTIVE);
+        thread.setThreadContext(context);
+
         AzureDevopsAddress addr = AzureDevopsAddress.parse(owner, repo);
-        String path = itemPath(filePath);
         Scope scope = repositoryScope(addr);
         run(() -> restClient.post()
                 .uri(builder -> builder
                         .path(scope.path() + "/pullRequests/{prId}/threads")
                         .queryParam("api-version", API_VERSION)
                         .build(vars(scope, pullNumber)))
-                .body(Map.of(
-                        "comments", List.of(Map.of(
-                                "parentCommentId", 0,
-                                "content", body,
-                                "commentType", 1)),
-                        "status", THREAD_STATUS_ACTIVE,
-                        "threadContext", Map.of(
-                                "filePath", path,
-                                "rightFileStart", Map.of("line", line, "offset", 1),
-                                "rightFileEnd", Map.of("line", line, "offset", 1))))
+                .body(thread)
                 .retrieve()
                 .toBodilessEntity(),
                 "post inline comment on PR #{} in {} at {}:{}", pullNumber, repo, filePath, line);
