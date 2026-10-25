@@ -275,6 +275,14 @@ class GitLabApiClientTest {
     }
 
     @Test
+    void getPullRequestHeadRef_isTheMergeRequestHeadRef() {
+        // GitLab publishes the head commit under its own ref namespace; the
+        // inherited refs/pull/<n>/head does not exist there.
+        assertEquals("refs/merge-requests/7/head",
+                new GitLabApiClient(null, CREDS).getPullRequestHeadRef(7L));
+    }
+
+    @Test
     void getPullRequestHead_resolvesForkedProjectPath() {
         RestClient.Builder builder = RestClient.builder().baseUrl("https://gitlab.example.com");
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();

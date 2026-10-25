@@ -29,8 +29,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 /**
  * GitLab-specific implementation of {@link RepositoryApiClient}.
@@ -71,6 +69,11 @@ public class GitLabApiClient implements RepositoryApiClient {
         return true;
     }
 
+    @Override
+    public String getPullRequestHeadRef(Long pullNumber) {
+        return "refs/merge-requests/" + pullNumber + "/head";
+    }
+
     /**
      * Resolves the head from {@code GET /projects/:id/merge_requests/:iid}.
      * Unlike Gitea and GitHub, whose pull request payload nests the head
@@ -90,8 +93,8 @@ public class GitLabApiClient implements RepositoryApiClient {
         if (mr == null) {
             throw new IllegalStateException("GitLab did not return merge request !" + pullNumber);
         }
-        String branch = requiredString((String) mr.get(SOURCE_BRANCH),
-                "GitLab merge request source branch is missing");
+        String branch = requiredString((String) mr.get(SOURCE_BRANCH)
+        );
         String expected = normalizeBranch(expectedBranch);
         String actual = normalizeBranch(branch);
         if (expected == null || !Objects.equals(actual, expected)) {
@@ -129,10 +132,10 @@ public class GitLabApiClient implements RepositoryApiClient {
         return path instanceof String resolved && !resolved.isBlank() ? resolved : targetProjectPath;
     }
 
-    private String requiredString(String value, String message) {
+    private String requiredString(String value) {
         String resolved = nonBlank(value);
         if (resolved == null) {
-            throw new IllegalStateException(message);
+            throw new IllegalStateException("GitLab merge request source branch is missing");
         }
         return resolved;
     }

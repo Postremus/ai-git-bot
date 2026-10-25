@@ -342,6 +342,17 @@ public interface RepositoryApiClient {
                 "Authoritative pull-request head resolution is not supported by this provider");
     }
 
+    /**
+     * Returns the ref under which the <em>target</em> repository publishes a pull
+     * request's head commit. Gitea and GitHub use {@code refs/pull/<n>/head};
+     * GitLab keeps the same commit under {@code refs/merge-requests/<n>/head}.
+     * Providers that publish no such ref (Bitbucket Cloud, Azure DevOps) keep the
+     * default — it is only a fallback and fails on its own terms there.
+     */
+    default String getPullRequestHeadRef(Long pullNumber) {
+        return "refs/pull/" + pullNumber + "/head";
+    }
+
     // ---- Repository operations ----
 
     String getDefaultBranch(String owner, String repo);
