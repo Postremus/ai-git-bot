@@ -38,9 +38,9 @@ import java.util.Objects;
 @Slf4j
 public class GitLabApiClient implements RepositoryApiClient {
 
-    public static final String MERGE_PATH = "/api/v4/projects/{projectPath}/merge_requests/{iid}";
-    public static final String SOURCE_BRANCH = "source_branch";
-    public static final String DISCUSSION_PATH = "/api/v4/projects/{projectPath}/merge_requests/{iid}/discussions";
+    private static final String MERGE_PATH = "/api/v4/projects/{projectPath}/merge_requests/{iid}";
+    private static final String SOURCE_BRANCH = "source_branch";
+    private static final String DISCUSSION_PATH = "/api/v4/projects/{projectPath}/merge_requests/{iid}/discussions";
     private final RestClient gitlabRestClient;
     private final RepositoryCredentials credentials;
 
@@ -102,7 +102,7 @@ public class GitLabApiClient implements RepositoryApiClient {
             throw new IllegalStateException("GitLab merge request source branch '" + actual
                     + "' does not match expected branch '" + expected + "'");
         }
-        String sourcePath = sourceProjectPath(mr, projectPath);
+        String sourcePath = sourceProjectPath(mr, projectPath, pullNumber);
         int separator = sourcePath.lastIndexOf('/');
         if (separator <= 0 || separator == sourcePath.length() - 1) {
             throw new IllegalStateException("GitLab source project path '" + sourcePath
@@ -115,12 +115,22 @@ public class GitLabApiClient implements RepositoryApiClient {
 
     /**
      * Returns the {@code path_with_namespace} of the merge request's source
-     * project. A merge request inside the target project carries identical
-     * source and target ids, so only a fork costs the extra request.
+     * project.
+     *
+     * <p>Identical source and target ids mean the merge request does not come
+     * from a fork, and the target path <em>is</em> the source path. Every other
+     * case is looked up, and an unresolved lookup fails instead of reporting the
+     * target: the caller treats the result as the repository that owns the head
+     * branch, so answering "target" would make a fork look like a
+     * same-repository pull request — a {@code PUSH_BACK} workspace would then
+     * commit to a target branch that merely shares the contributor's branch
+     * name, and the fork guards of {@code OFFER_AS_PR} would be skipped.</p>
      */
-    private String sourceProjectPath(Map<String, Object> mr, String targetProjectPath) {
+    private String sourceProjectPath(Map<String, Object> mr, String targetProjectPath,
+                                     Long pullNumber) {
         if (!(mr.get("source_project_id") instanceof Number sourceId)) {
-            return targetProjectPath;
+            throw new IllegalStateException("GitLab merge request !" + pullNumber
+                    + " did not report a source project id");
         }
         if (mr.get("target_project_id") instanceof Number targetId
                 && targetId.longValue() == sourceId.longValue()) {
@@ -131,7 +141,11 @@ public class GitLabApiClient implements RepositoryApiClient {
                 .retrieve()
                 .body(new ParameterizedTypeReference<>() {});
         Object path = project == null ? null : project.get("path_with_namespace");
-        return path instanceof String resolved && !resolved.isBlank() ? resolved : targetProjectPath;
+        if (!(path instanceof String resolved) || resolved.isBlank()) {
+            throw new IllegalStateException("GitLab did not report the project path of source "
+                    + "project " + sourceId.longValue() + " of merge request !" + pullNumber);
+        }
+        return resolved;
     }
 
     @Override
