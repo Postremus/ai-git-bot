@@ -12,6 +12,7 @@ import org.remus.giteabot.repository.RepositoryApiClient;
 import org.remus.giteabot.repository.WorkflowDispatchRequest;
 import org.remus.giteabot.repository.WorkflowRunStatus;
 import org.remus.giteabot.repository.model.PullRequestCommit;
+import org.remus.giteabot.repository.model.PullRequestHead;
 import org.remus.giteabot.repository.model.RepositoryCredentials;
 import org.remus.giteabot.repository.model.RepositoryTreeEntry;
 import org.remus.giteabot.repository.model.Review;
@@ -27,7 +28,9 @@ import org.springframework.web.client.RestClient;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
  * GitLab-specific implementation of {@link RepositoryApiClient}.
@@ -36,6 +39,9 @@ import java.util.stream.Collectors;
 @Slf4j
 public class GitLabApiClient implements RepositoryApiClient {
 
+    public static final String MERGE_PATH = "/api/v4/projects/{projectPath}/merge_requests/{iid}";
+    public static final String SOURCE_BRANCH = "source_branch";
+    public static final String DISCUSSION_PATH = "/api/v4/projects/{projectPath}/merge_requests/{iid}/discussions";
     private final RestClient gitlabRestClient;
     private final RepositoryCredentials credentials;
 
@@ -61,9 +67,93 @@ public class GitLabApiClient implements RepositoryApiClient {
     }
 
     @Override
+    public boolean requiresAuthoritativePullRequestHead() {
+        return true;
+    }
+
+    /**
+     * Resolves the head from {@code GET /projects/:id/merge_requests/:iid}.
+     * Unlike Gitea and GitHub, whose pull request payload nests the head
+     * repository, a merge request names its source branch and commit but only
+     * the <em>id</em> of the source project — the cloneable path comes from a
+     * second lookup, and a forked merge request is exactly the case that has a
+     * different one.
+     */
+    @Override
+    public PullRequestHead getPullRequestHead(String owner, String repo, Long pullNumber,
+                                              String expectedBranch) {
+        String projectPath = encodeProjectPath(owner, repo);
+        Map<String, Object> mr = gitlabRestClient.get()
+                .uri(MERGE_PATH, projectPath, pullNumber)
+                .retrieve()
+                .body(new ParameterizedTypeReference<>() {});
+        if (mr == null) {
+            throw new IllegalStateException("GitLab did not return merge request !" + pullNumber);
+        }
+        String branch = requiredString((String) mr.get(SOURCE_BRANCH),
+                "GitLab merge request source branch is missing");
+        String expected = normalizeBranch(expectedBranch);
+        String actual = normalizeBranch(branch);
+        if (expected == null || !Objects.equals(actual, expected)) {
+            throw new IllegalStateException("GitLab merge request source branch '" + actual
+                    + "' does not match expected branch '" + expected + "'");
+        }
+        String sourcePath = sourceProjectPath(mr, projectPath);
+        int separator = sourcePath.lastIndexOf('/');
+        if (separator <= 0 || separator == sourcePath.length() - 1) {
+            throw new IllegalStateException("GitLab source project path '" + sourcePath
+                    + "' is not a namespace/project path");
+        }
+        return new PullRequestHead(sourcePath.substring(0, separator),
+                sourcePath.substring(separator + 1), actual, nonBlank((String) mr.get("sha")));
+    }
+
+    /**
+     * Returns the {@code path_with_namespace} of the merge request's source
+     * project. A merge request inside the target project carries identical
+     * source and target ids, so only a fork costs the extra request.
+     */
+    private String sourceProjectPath(Map<String, Object> mr, String targetProjectPath) {
+        if (!(mr.get("source_project_id") instanceof Number sourceId)) {
+            return targetProjectPath;
+        }
+        if (mr.get("target_project_id") instanceof Number targetId
+                && targetId.longValue() == sourceId.longValue()) {
+            return targetProjectPath;
+        }
+        Map<String, Object> project = gitlabRestClient.get()
+                .uri("/api/v4/projects/{projectId}", sourceId.longValue())
+                .retrieve()
+                .body(new ParameterizedTypeReference<>() {});
+        Object path = project == null ? null : project.get("path_with_namespace");
+        return path instanceof String resolved && !resolved.isBlank() ? resolved : targetProjectPath;
+    }
+
+    private String requiredString(String value, String message) {
+        String resolved = nonBlank(value);
+        if (resolved == null) {
+            throw new IllegalStateException(message);
+        }
+        return resolved;
+    }
+
+    private String nonBlank(String value) {
+        return value != null && !value.isBlank() ? value : null;
+    }
+
+    private String normalizeBranch(String branch) {
+        if (branch == null || branch.isBlank()) {
+            return null;
+        }
+        return branch.startsWith("refs/heads/")
+                ? branch.substring("refs/heads/".length())
+                : branch;
+    }
+
+    @Override
     public boolean isPullRequestOpen(String owner, String repo, Long pullNumber) {
         Map<String, Object> mr = gitlabRestClient.get()
-                .uri("/api/v4/projects/{projectPath}/merge_requests/{iid}",
+                .uri(MERGE_PATH,
                         encodeProjectPath(owner, repo), pullNumber)
                 .retrieve()
                 .body(new ParameterizedTypeReference<>() {});
@@ -79,7 +169,7 @@ public class GitLabApiClient implements RepositoryApiClient {
 
         // Fetch the MR to get source and target branch
         Map<String, Object> mr = gitlabRestClient.get()
-                .uri("/api/v4/projects/{projectPath}/merge_requests/{iid}", projectPath, pullNumber)
+                .uri(MERGE_PATH, projectPath, pullNumber)
                 .retrieve()
                 .body(new ParameterizedTypeReference<>() {});
         if (mr == null) {
@@ -87,7 +177,7 @@ public class GitLabApiClient implements RepositoryApiClient {
         }
 
         String targetBranch = (String) mr.get("target_branch");
-        String sourceBranch = (String) mr.get("source_branch");
+        String sourceBranch = (String) mr.get(SOURCE_BRANCH);
 
         // Get the compare diff between the branches
         Map<String, Object> compare = gitlabRestClient.get()
@@ -309,7 +399,7 @@ public class GitLabApiClient implements RepositoryApiClient {
 
         // Fetch the MR to get the diff refs needed for position
         Map<String, Object> mr = gitlabRestClient.get()
-                .uri("/api/v4/projects/{projectPath}/merge_requests/{iid}", projectPath, pullNumber)
+                .uri(MERGE_PATH, projectPath, pullNumber)
                 .retrieve()
                 .body(new ParameterizedTypeReference<>() {});
         if (mr == null) {
@@ -337,7 +427,7 @@ public class GitLabApiClient implements RepositoryApiClient {
         discussion.put("position", position);
 
         gitlabRestClient.post()
-                .uri("/api/v4/projects/{projectPath}/merge_requests/{iid}/discussions",
+                .uri(DISCUSSION_PATH,
                         projectPath, pullNumber)
                 .body(discussion)
                 .retrieve()
@@ -350,7 +440,7 @@ public class GitLabApiClient implements RepositoryApiClient {
         log.info("Fetching discussions for MR !{} in {}/{}", pullNumber, owner, repo);
         String projectPath = encodeProjectPath(owner, repo);
         List<GitLabReview> discussions = gitlabRestClient.get()
-                .uri("/api/v4/projects/{projectPath}/merge_requests/{iid}/discussions",
+                .uri(DISCUSSION_PATH,
                         projectPath, pullNumber)
                 .retrieve()
                 .body(new ParameterizedTypeReference<>() {});
@@ -365,7 +455,7 @@ public class GitLabApiClient implements RepositoryApiClient {
 
         // In GitLab, we get all discussions and find the one containing the note with reviewId
         List<GitLabReview> discussions = gitlabRestClient.get()
-                .uri("/api/v4/projects/{projectPath}/merge_requests/{iid}/discussions",
+                .uri(DISCUSSION_PATH,
                         projectPath, pullNumber)
                 .retrieve()
                 .body(new ParameterizedTypeReference<>() {});
@@ -381,7 +471,7 @@ public class GitLabApiClient implements RepositoryApiClient {
                     if (reviewId.equals(note.getId())) {
                         return discussion.getNotes().stream()
                                 .map(this::toReviewComment)
-                                .collect(Collectors.toList());
+                                .toList();
                     }
                 }
             }
@@ -534,7 +624,7 @@ public class GitLabApiClient implements RepositoryApiClient {
         String projectPath = encodeProjectPath(owner, repo);
 
         Map<String, Object> mrBody = new LinkedHashMap<>();
-        mrBody.put("source_branch", head);
+        mrBody.put(SOURCE_BRANCH, head);
         mrBody.put("target_branch", base);
         mrBody.put("title", title);
         mrBody.put("description", body);
