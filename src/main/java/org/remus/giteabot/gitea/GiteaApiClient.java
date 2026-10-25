@@ -9,6 +9,7 @@ import org.remus.giteabot.gitea.model.GiteaTree;
 import org.remus.giteabot.repository.ArtifactCommentRenderer;
 import org.remus.giteabot.repository.ArtifactUploadSupport;
 import org.remus.giteabot.repository.PostReviewAction;
+import org.remus.giteabot.repository.PullRequestHeads;
 import org.remus.giteabot.repository.RepositoryApiClient;
 import org.remus.giteabot.repository.SshEndpoint;
 import org.remus.giteabot.repository.WorkflowDispatchRequest;
@@ -74,9 +75,10 @@ public class GiteaApiClient implements RepositoryApiClient {
         if (head == null) {
             throw new IllegalStateException("Gitea pull request did not provide a head object");
         }
-        String branch = requiredString(head.getRef(), "Gitea pull request head ref is missing");
-        String expected = normalizeBranch(expectedBranch);
-        String actual = normalizeBranch(branch);
+        String branch = PullRequestHeads.requiredString(head.getRef(),
+                "Gitea pull request head ref is missing");
+        String expected = PullRequestHeads.normalizeBranch(expectedBranch);
+        String actual = PullRequestHeads.normalizeBranch(branch);
         if (expected == null || !Objects.equals(actual, expected)) {
             throw new IllegalStateException("Gitea pull request head branch '" + actual
                     + "' does not match expected branch '" + expected + "'");
@@ -85,9 +87,10 @@ public class GiteaApiClient implements RepositoryApiClient {
         if (repository == null) {
             throw new IllegalStateException("Gitea pull request head repository is missing");
         }
-        String repositoryName = nonBlank(repository.getName());
-        String sourceOwner = repository.getOwner() != null ? nonBlank(repository.getOwner().getLogin()) : null;
-        String fullName = nonBlank(repository.getFullName());
+        String repositoryName = PullRequestHeads.nonBlank(repository.getName());
+        String sourceOwner = repository.getOwner() != null
+                ? PullRequestHeads.nonBlank(repository.getOwner().getLogin()) : null;
+        String fullName = PullRequestHeads.nonBlank(repository.getFullName());
         if ((sourceOwner == null || repositoryName == null) && fullName != null) {
             int separator = fullName.indexOf('/');
             if (separator > 0 && separator < fullName.length() - 1) {
@@ -98,28 +101,8 @@ public class GiteaApiClient implements RepositoryApiClient {
         if (sourceOwner == null || repositoryName == null) {
             throw new IllegalStateException("Gitea pull request head repository coordinates are incomplete");
         }
-        return new PullRequestHead(sourceOwner, repositoryName, actual, nonBlank(head.getSha()));
-    }
-
-    private String requiredString(String value, String message) {
-        String resolved = nonBlank(value);
-        if (resolved == null) {
-            throw new IllegalStateException(message);
-        }
-        return resolved;
-    }
-
-    private String nonBlank(String value) {
-        return value != null && !value.isBlank() ? value : null;
-    }
-
-    private String normalizeBranch(String branch) {
-        if (branch == null || branch.isBlank()) {
-            return null;
-        }
-        return branch.startsWith("refs/heads/")
-                ? branch.substring("refs/heads/".length())
-                : branch;
+        return new PullRequestHead(sourceOwner, repositoryName, actual,
+                PullRequestHeads.nonBlank(head.getSha()));
     }
 
     @Override

@@ -8,6 +8,7 @@ import org.remus.giteabot.gitlab.model.GitLabTreeEntry;
 import org.remus.giteabot.repository.ArtifactCommentRenderer;
 import org.remus.giteabot.repository.ArtifactUploadSupport;
 import org.remus.giteabot.repository.PostReviewAction;
+import org.remus.giteabot.repository.PullRequestHeads;
 import org.remus.giteabot.repository.RepositoryApiClient;
 import org.remus.giteabot.repository.WorkflowDispatchRequest;
 import org.remus.giteabot.repository.WorkflowRunStatus;
@@ -93,10 +94,10 @@ public class GitLabApiClient implements RepositoryApiClient {
         if (mr == null) {
             throw new IllegalStateException("GitLab did not return merge request !" + pullNumber);
         }
-        String branch = requiredString((String) mr.get(SOURCE_BRANCH)
-        );
-        String expected = normalizeBranch(expectedBranch);
-        String actual = normalizeBranch(branch);
+        String branch = PullRequestHeads.requiredString((String) mr.get(SOURCE_BRANCH),
+                "GitLab merge request source branch is missing");
+        String expected = PullRequestHeads.normalizeBranch(expectedBranch);
+        String actual = PullRequestHeads.normalizeBranch(branch);
         if (expected == null || !Objects.equals(actual, expected)) {
             throw new IllegalStateException("GitLab merge request source branch '" + actual
                     + "' does not match expected branch '" + expected + "'");
@@ -108,7 +109,8 @@ public class GitLabApiClient implements RepositoryApiClient {
                     + "' is not a namespace/project path");
         }
         return new PullRequestHead(sourcePath.substring(0, separator),
-                sourcePath.substring(separator + 1), actual, nonBlank((String) mr.get("sha")));
+                sourcePath.substring(separator + 1), actual,
+                PullRequestHeads.nonBlank((String) mr.get("sha")));
     }
 
     /**
@@ -130,27 +132,6 @@ public class GitLabApiClient implements RepositoryApiClient {
                 .body(new ParameterizedTypeReference<>() {});
         Object path = project == null ? null : project.get("path_with_namespace");
         return path instanceof String resolved && !resolved.isBlank() ? resolved : targetProjectPath;
-    }
-
-    private String requiredString(String value) {
-        String resolved = nonBlank(value);
-        if (resolved == null) {
-            throw new IllegalStateException("GitLab merge request source branch is missing");
-        }
-        return resolved;
-    }
-
-    private String nonBlank(String value) {
-        return value != null && !value.isBlank() ? value : null;
-    }
-
-    private String normalizeBranch(String branch) {
-        if (branch == null || branch.isBlank()) {
-            return null;
-        }
-        return branch.startsWith("refs/heads/")
-                ? branch.substring("refs/heads/".length())
-                : branch;
     }
 
     @Override

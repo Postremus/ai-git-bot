@@ -7,6 +7,7 @@ import org.remus.giteabot.github.model.GitHubReview;
 import org.remus.giteabot.github.model.GitHubTree;
 import org.remus.giteabot.github.model.GitHubReviewComment;
 import org.remus.giteabot.repository.PostReviewAction;
+import org.remus.giteabot.repository.PullRequestHeads;
 import org.remus.giteabot.repository.RepositoryApiClient;
 import org.remus.giteabot.repository.WorkflowDispatchRequest;
 import org.remus.giteabot.repository.WorkflowRunStatus;
@@ -69,9 +70,10 @@ public class GitHubApiClient implements RepositoryApiClient {
         if (head == null) {
             throw new IllegalStateException("GitHub pull request did not provide a head object");
         }
-        String branch = requiredString(head.getRef());
-        String expected = normalizeBranch(expectedBranch);
-        String actual = normalizeBranch(branch);
+        String branch = PullRequestHeads.requiredString(head.getRef(),
+                "GitHub pull request head ref is missing");
+        String expected = PullRequestHeads.normalizeBranch(expectedBranch);
+        String actual = PullRequestHeads.normalizeBranch(branch);
         if (expected == null || !Objects.equals(actual, expected)) {
             throw new IllegalStateException("GitHub pull request head branch '" + actual
                     + "' does not match expected branch '" + expected + "'");
@@ -80,9 +82,10 @@ public class GitHubApiClient implements RepositoryApiClient {
         if (repository == null) {
             throw new IllegalStateException("GitHub pull request head repository is missing");
         }
-        String repositoryName = nonBlank(repository.getName());
-        String sourceOwner = repository.getOwner() != null ? nonBlank(repository.getOwner().getLogin()) : null;
-        String fullName = nonBlank(repository.getFullName());
+        String repositoryName = PullRequestHeads.nonBlank(repository.getName());
+        String sourceOwner = repository.getOwner() != null
+                ? PullRequestHeads.nonBlank(repository.getOwner().getLogin()) : null;
+        String fullName = PullRequestHeads.nonBlank(repository.getFullName());
         if ((sourceOwner == null || repositoryName == null) && fullName != null) {
             int separator = fullName.indexOf('/');
             if (separator > 0 && separator < fullName.length() - 1) {
@@ -93,28 +96,8 @@ public class GitHubApiClient implements RepositoryApiClient {
         if (sourceOwner == null || repositoryName == null) {
             throw new IllegalStateException("GitHub pull request head repository coordinates are incomplete");
         }
-        return new PullRequestHead(sourceOwner, repositoryName, actual, nonBlank(head.getSha()));
-    }
-
-    private String requiredString(String value) {
-        String resolved = nonBlank(value);
-        if (resolved == null) {
-            throw new IllegalStateException("GitHub pull request head ref is missing");
-        }
-        return resolved;
-    }
-
-    private String nonBlank(String value) {
-        return value != null && !value.isBlank() ? value : null;
-    }
-
-    private String normalizeBranch(String branch) {
-        if (branch == null || branch.isBlank()) {
-            return null;
-        }
-        return branch.startsWith("refs/heads/")
-                ? branch.substring("refs/heads/".length())
-                : branch;
+        return new PullRequestHead(sourceOwner, repositoryName, actual,
+                PullRequestHeads.nonBlank(head.getSha()));
     }
 
     // ---- Pull request operations ----
