@@ -96,7 +96,7 @@ class ReadmeSyncServiceTest {
                 any(RepositoryApiClient.class), anyString(), anyString(), anyString(), anyLong(),
                 eq(PullRequestWorkspaceMode.PUSH_BACK));
         verify(workspaceService, never()).commitAndPush(
-                any(), anyString(), anyString(), anyString(), anyString(), anyBoolean());
+                any(), anyString(), anyString(), anyBoolean());
         // And it must never substitute the default branch.
         verify(repoClient, never()).getDefaultBranch(anyString(), anyString());
     }
@@ -158,7 +158,7 @@ class ReadmeSyncServiceTest {
         assertThat(result.status()).isEqualTo(ReadmeSyncService.Result.Status.FAILED);
         verify(workspaceService, never()).prepareWorkspace(any(), anyString(), anyString(), anyString(), anyLong());
         verify(workspaceService, never()).commitAndPush(
-                any(), anyString(), anyString(), anyString(), anyString(), anyBoolean());
+                any(), anyString(), anyString(), anyBoolean());
     }
 
     @Test
@@ -180,8 +180,7 @@ class ReadmeSyncServiceTest {
                     return new ReadmeSyncAgent.Result(1, "updated", false);
                 });
         when(workspaceService.listChangedFiles(workspace)).thenReturn(List.of("README.md"));
-        when(workspaceService.commitAndPush(eq(workspace), anyString(), anyString(),
-                anyString(), anyString(), eq(true), any(Runnable.class))).thenReturn(true);
+        when(workspaceService.commitAndPush(eq(workspace), anyString(), anyString(), eq(true), any(Runnable.class))).thenReturn(true);
         when(repoClient.createPullRequest(eq("acme"), eq("my-repo"), anyString(), anyString(),
                 anyString(), eq("feature/docs"))).thenReturn(null);
 

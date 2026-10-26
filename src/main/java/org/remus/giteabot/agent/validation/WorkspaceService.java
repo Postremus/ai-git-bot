@@ -51,6 +51,10 @@ import java.util.concurrent.TimeUnit;
 @Service
 public class WorkspaceService {
 
+    /** Git author and committer identity for commits the bot pushes. */
+    static final String GIT_AUTHOR_NAME = "AI Agent";
+    static final String GIT_AUTHOR_EMAIL = "ai-agent@bot.local";
+
     static final String REPOSITORY_DIRECTORY_NAME = "repository";
     private static final String WORKSPACE_ROOT_MARKER = ".agent-workspace";
     private static final Set<PosixFilePermission> OWNER_DIRECTORY_PERMISSIONS = Set.of(
@@ -296,15 +300,12 @@ public class WorkspaceService {
      * @param workspaceDir    The workspace directory
      * @param branchName      Name of the target branch (new or existing)
      * @param commitMessage   Commit message
-     * @param authorName      Git author name
-     * @param authorEmail     Git author e-mail
      * @param createNewBranch {@code true} to create the branch before committing
      * @return {@code true} if commit and push succeeded
      */
     public boolean commitAndPush(Path workspaceDir, String branchName, String commitMessage,
-                                 String authorName, String authorEmail, boolean createNewBranch) {
-        return commitAndPush(workspaceDir, branchName, commitMessage, authorName, authorEmail,
-                createNewBranch, () -> { });
+                                 boolean createNewBranch) {
+        return commitAndPush(workspaceDir, branchName, commitMessage, createNewBranch, () -> { });
     }
 
     /**
@@ -312,8 +313,7 @@ public class WorkspaceService {
      * publication. The original overload preserves the contract of other workflows.
      */
     public boolean commitAndPush(Path workspaceDir, String branchName, String commitMessage,
-                                 String authorName, String authorEmail, boolean createNewBranch,
-                                 Runnable beforePush) {
+                                 boolean createNewBranch, Runnable beforePush) {
         WorkspaceSetup setup = setupsByWorkspace.get(workspaceKey(workspaceDir));
         if (setup == null) {
             log.error("Cannot commit workspace without authentication state: {}", workspaceDir);
@@ -323,16 +323,6 @@ public class WorkspaceService {
             if (setup.closed() || setup.repositoryCredentials() == null) {
                 log.error("Cannot commit a closed workspace: {}", workspaceDir);
                 return false;
-            }
-
-            // Configure git author
-            if (!runCommand(workspaceDir.toFile(),
-                    new String[]{"git", "config", "user.email", authorEmail}, 10).success()) {
-                log.warn("Could not set git user.email, continuing anyway");
-            }
-            if (!runCommand(workspaceDir.toFile(),
-                    new String[]{"git", "config", "user.name", authorName}, 10).success()) {
-                log.warn("Could not set git user.name, continuing anyway");
             }
 
             if (createNewBranch) {
@@ -351,8 +341,14 @@ public class WorkspaceService {
                 return false;
             }
 
+            // The identity is passed only to this commit: the environment overrides any
+            // user.*, author.* or committer.* entry the workspace's .git/config may contain.
             CommandResult commitResult = runCommand(workspaceDir.toFile(),
-                    new String[]{"git", "commit", "-m", commitMessage}, 15);
+                    new String[]{"git", "commit", "-m", commitMessage}, 15, Map.of(
+                            "GIT_AUTHOR_NAME", GIT_AUTHOR_NAME,
+                            "GIT_AUTHOR_EMAIL", GIT_AUTHOR_EMAIL,
+                            "GIT_COMMITTER_NAME", GIT_AUTHOR_NAME,
+                            "GIT_COMMITTER_EMAIL", GIT_AUTHOR_EMAIL));
             if (!commitResult.success()) {
                 // "nothing to commit" is not a real error
                 if (commitResult.output().contains("nothing to commit")) {

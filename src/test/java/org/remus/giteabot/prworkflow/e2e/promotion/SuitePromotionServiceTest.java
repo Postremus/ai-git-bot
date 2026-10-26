@@ -65,8 +65,7 @@ class SuitePromotionServiceTest {
                 anyString(), anyString(), anyString(), any(),
                 eq(PullRequestWorkspaceMode.PUSH_BACK)))
                 .thenReturn(WorkspaceResult.success(workspace));
-        lenient().when(workspaceService.commitAndPush(any(), anyString(), anyString(),
-                anyString(), anyString(), anyBoolean()))
+        lenient().when(workspaceService.commitAndPush(any(), anyString(), anyString(), anyBoolean()))
                 .thenReturn(true);
         lenient().when(runRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
@@ -108,7 +107,7 @@ class SuitePromotionServiceTest {
         verify(workspaceService).prepareWorkspace(
                 repoClient, "acme", "web", "feature/login", 7L);
         verify(workspaceService).commitAndPush(eq(workspace), eq(expectedBranch),
-                anyString(), anyString(), anyString(), eq(true));
+                anyString(), eq(true));
     }
 
     @Test
@@ -173,7 +172,7 @@ class SuitePromotionServiceTest {
                 repoClient, "acme", "web", "feature/x", 3L,
                 PullRequestWorkspaceMode.PUSH_BACK);
         verify(workspaceService).commitAndPush(eq(workspace), eq("feature/x"),
-                anyString(), anyString(), anyString(), eq(false));
+                anyString(), eq(false));
         verify(repoClient, never()).createPullRequest(any(), any(), any(), any(), any(), any());
         // Idempotency: COMMIT_TO_PR records parent prNumber so a re-run no-ops.
         assertThat(run.getFollowUpPrNumber()).isEqualTo(3L);
@@ -208,7 +207,7 @@ class SuitePromotionServiceTest {
         assertThat(out.kind()).isEqualTo(SuitePromotionService.Outcome.Kind.FAILED);
         verify(workspaceService, never()).prepareWorkspace(any(), any(), any(), any(), any());
         verify(workspaceService, never()).commitAndPush(
-                any(), anyString(), anyString(), anyString(), anyString(), anyBoolean());
+                any(), anyString(), anyString(), anyBoolean());
     }
 
     @Test
@@ -265,8 +264,7 @@ class SuitePromotionServiceTest {
 
     @Test
     void pushFailure_surfacesAsOutcomeFailure_andDoesNotOpenPr() {
-        when(workspaceService.commitAndPush(any(), anyString(), anyString(),
-                anyString(), anyString(), anyBoolean())).thenReturn(false);
+        when(workspaceService.commitAndPush(any(), anyString(), anyString(), anyBoolean())).thenReturn(false);
 
         PrTestSuite suite = suite(SuiteLifecycleMode.OFFER_AS_PR, 7L,
                 caseAt("login.spec.ts", "// hi"));
@@ -289,7 +287,7 @@ class SuitePromotionServiceTest {
         assertThat(out.kind()).isEqualTo(SuitePromotionService.Outcome.Kind.FAILED);
         assertThat(out.message()).contains("write");
         verify(workspaceService, never()).commitAndPush(
-                any(), anyString(), anyString(), anyString(), anyString(), anyBoolean());
+                any(), anyString(), anyString(), anyBoolean());
     }
 
     @Test
@@ -306,7 +304,7 @@ class SuitePromotionServiceTest {
         assertThat(out.kind()).isEqualTo(SuitePromotionService.Outcome.Kind.FAILED);
         assertThat(out.message()).contains("write");
         verify(workspaceService, never()).commitAndPush(
-                any(), anyString(), anyString(), anyString(), anyString(), anyBoolean());
+                any(), anyString(), anyString(), anyBoolean());
     }
 
     @Test

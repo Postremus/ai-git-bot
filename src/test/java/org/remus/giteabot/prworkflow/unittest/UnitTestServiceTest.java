@@ -109,8 +109,7 @@ class UnitTestServiceTest {
         when(workspaceService.hasUncommittedChanges(workspace)).thenReturn(true);
         when(workspaceService.listChangedFiles(workspace))
                 .thenReturn(List.of("src/test/java/GeneratedTest.java"));
-        when(workspaceService.commitAndPush(eq(workspace), eq("feature/test"), anyString(),
-                anyString(), anyString(), eq(false))).thenReturn(false);
+        when(workspaceService.commitAndPush(eq(workspace), eq("feature/test"), anyString(), eq(false))).thenReturn(false);
         when(runner.run(any())).thenReturn(UnitTestOutcome.passed(
                 "all tests passed", 1, CoverageResult.unknown(), null));
         when(suiteRepository.findByIdWithCases(10L)).thenReturn(Optional.empty());

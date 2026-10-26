@@ -136,7 +136,7 @@ class IssueImplementationServiceTest {
                 .thenReturn(new ToolResult(true, 0, "BUILD SUCCESS", ""));
 
         when(workspaceService.commitAndPush(eq(FAKE_WORKSPACE), eq("ai-agent/issue-42"),
-                anyString(), anyString(), anyString(), eq(true)))
+                anyString(), eq(true)))
                 .thenReturn(true);
         when(repositoryClient.createPullRequest(eq("testowner"), eq("testrepo"), anyString(), anyString(),
                 eq("ai-agent/issue-42"), eq("main"))).thenReturn(1L);
@@ -154,7 +154,7 @@ class IssueImplementationServiceTest {
                 eq(List.of("compile", "-q", "-B")));
         // Committed and pushed
         verify(workspaceService).commitAndPush(eq(FAKE_WORKSPACE), eq("ai-agent/issue-42"),
-                anyString(), anyString(), anyString(), eq(true));
+                anyString(), eq(true));
         // PR created
         verify(repositoryClient).createPullRequest(eq("testowner"), eq("testrepo"), anyString(), anyString(),
                 eq("ai-agent/issue-42"), eq("main"));
@@ -205,7 +205,7 @@ class IssueImplementationServiceTest {
         when(toolExecutionService.executeTool(eq(FAKE_WORKSPACE), eq("mvn"), anyList()))
                 .thenReturn(new ToolResult(true, 0, "BUILD SUCCESS", ""));
         when(workspaceService.commitAndPush(eq(FAKE_WORKSPACE), eq("ai-agent/issue-42"),
-                anyString(), anyString(), anyString(), eq(true)))
+                anyString(), eq(true)))
                 .thenReturn(true);
         when(repositoryClient.createPullRequest(eq("testowner"), eq("testrepo"), anyString(), anyString(),
                 eq("ai-agent/issue-42"), eq("main"))).thenReturn(1L);
@@ -263,7 +263,7 @@ class IssueImplementationServiceTest {
                 .thenReturn(new ToolResult(true, 0, "BUILD SUCCESS", ""));
 
         when(workspaceService.commitAndPush(eq(FAKE_WORKSPACE), eq("ai-agent/issue-42"),
-                anyString(), anyString(), anyString(), eq(true)))
+                anyString(), eq(true)))
                 .thenReturn(true);
         when(repositoryClient.createPullRequest(eq("testowner"), eq("testrepo"), anyString(), anyString(),
                 eq("ai-agent/issue-42"), eq("main"))).thenReturn(1L);
@@ -275,7 +275,7 @@ class IssueImplementationServiceTest {
         verify(toolExecutionService).executeFileTool(eq(FAKE_WORKSPACE), eq("write-file"),
                 eq(List.of("README.md", "updated")));
         verify(workspaceService, times(1)).commitAndPush(eq(FAKE_WORKSPACE), eq("ai-agent/issue-42"),
-                anyString(), anyString(), anyString(), eq(true));
+                anyString(), eq(true));
         verify(repositoryClient).createPullRequest(eq("testowner"), eq("testrepo"), anyString(), anyString(),
                 eq("ai-agent/issue-42"), eq("main"));
     }
@@ -363,7 +363,7 @@ class IssueImplementationServiceTest {
                 .thenReturn(new ToolResult(true, 0, "BUILD SUCCESS", ""));
 
         when(workspaceService.commitAndPush(eq(FAKE_WORKSPACE), eq("ai-agent/issue-42"),
-                anyString(), anyString(), anyString(), eq(true)))
+                anyString(), eq(true)))
                 .thenReturn(true);
         when(repositoryClient.createPullRequest(eq("testowner"), eq("testrepo"), anyString(), anyString(),
                 eq("ai-agent/issue-42"), eq("develop"))).thenReturn(1L);
@@ -420,7 +420,7 @@ class IssueImplementationServiceTest {
                 .thenReturn(new ToolResult(true, 0, "BUILD SUCCESS", ""));
 
         when(workspaceService.commitAndPush(eq(FAKE_WORKSPACE), eq("ai-agent/issue-42"),
-                anyString(), anyString(), anyString(), eq(true)))
+                anyString(), eq(true)))
                 .thenReturn(true);
         when(repositoryClient.createPullRequest(eq("testowner"), eq("testrepo"), anyString(), anyString(),
                 eq("ai-agent/issue-42"), eq("main"))).thenReturn(1L);
@@ -472,7 +472,7 @@ class IssueImplementationServiceTest {
                 .thenReturn(new ToolResult(true, 0, "BUILD SUCCESS", ""));
 
         when(workspaceService.commitAndPush(eq(FAKE_WORKSPACE), eq("ai-agent/issue-42"),
-                anyString(), anyString(), anyString(), eq(true)))
+                anyString(), eq(true)))
                 .thenReturn(true);
         when(repositoryClient.createPullRequest(eq("testowner"), eq("testrepo"), anyString(), anyString(),
                 eq("ai-agent/issue-42"), eq("release/1.x"))).thenReturn(1L);
@@ -501,7 +501,7 @@ class IssueImplementationServiceTest {
         service.handleIssueAssigned(payload);
 
         verify(repositoryClient, never()).createPullRequest(any(), any(), any(), any(), any(), any());
-        verify(workspaceService, never()).commitAndPush(any(), any(), any(), any(), any(), anyBoolean());
+        verify(workspaceService, never()).commitAndPush(any(), any(), any(), anyBoolean());
     }
 
     @Test
@@ -533,7 +533,7 @@ class IssueImplementationServiceTest {
         when(toolExecutionService.executeTool(any(), any(), any()))
                 .thenReturn(new ToolResult(true, 0, "BUILD SUCCESS", ""));
         // Commit fails
-        when(workspaceService.commitAndPush(any(), any(), any(), any(), any(), anyBoolean()))
+        when(workspaceService.commitAndPush(any(), any(), any(), anyBoolean()))
                 .thenReturn(false);
 
         service.handleIssueAssigned(payload);
@@ -583,7 +583,7 @@ class IssueImplementationServiceTest {
                 .thenReturn(new ToolResult(true, 0, "BUILD SUCCESS", ""));
 
         when(workspaceService.commitAndPush(eq(FAKE_WORKSPACE), eq("ai-agent/issue-42"),
-                anyString(), anyString(), anyString(), eq(true)))
+                anyString(), eq(true)))
                 .thenReturn(true);
         when(repositoryClient.createPullRequest(eq("testowner"), eq("testrepo"), anyString(), anyString(),
                 eq("ai-agent/issue-42"), eq("main"))).thenReturn(1L);
@@ -591,7 +591,7 @@ class IssueImplementationServiceTest {
         serviceWithMcp.handleIssueAssigned(payload);
 
         verify(workspaceService).commitAndPush(eq(FAKE_WORKSPACE), eq("ai-agent/issue-42"),
-                anyString(), anyString(), anyString(), eq(true));
+                anyString(), eq(true));
         verify(repositoryClient).createPullRequest(eq("testowner"), eq("testrepo"), anyString(), anyString(),
                 eq("ai-agent/issue-42"), eq("main"));
     }
@@ -658,7 +658,7 @@ class IssueImplementationServiceTest {
         when(toolExecutionService.executeTool(eq(FAKE_WORKSPACE), eq("mvn"), anyList()))
                 .thenReturn(new ToolResult(true, 0, "BUILD SUCCESS", ""));
         when(workspaceService.commitAndPush(eq(FAKE_WORKSPACE), eq("ai-agent/issue-42"),
-                anyString(), anyString(), anyString(), eq(false)))
+                anyString(), eq(false)))
                 .thenReturn(true);
 
         service.handleIssueComment(payload);
@@ -668,7 +668,7 @@ class IssueImplementationServiceTest {
         verify(toolExecutionService).executeFileTool(eq(FAKE_WORKSPACE), eq("patch-file"),
                 eq(List.of("src/Config.java", "old", "new")));
         verify(workspaceService).commitAndPush(eq(FAKE_WORKSPACE), eq("ai-agent/issue-42"),
-                anyString(), anyString(), anyString(), eq(false));
+                anyString(), eq(false));
         verify(workspaceService).cleanupWorkspace(FAKE_WORKSPACE);
         ArgumentCaptor<String> promptCaptor = ArgumentCaptor.forClass(String.class);
         verify(aiClient, times(2)).chat(anyList(), promptCaptor.capture(), anyString(), isNull(), anyInt());
@@ -728,7 +728,7 @@ class IssueImplementationServiceTest {
         when(toolExecutionService.executeTool(eq(FAKE_WORKSPACE), eq("mvn"), anyList()))
                 .thenReturn(new ToolResult(true, 0, "BUILD SUCCESS", ""));
         when(workspaceService.commitAndPush(eq(FAKE_WORKSPACE), eq("ai-agent/issue-42"),
-                anyString(), anyString(), anyString(), eq(false)))
+                anyString(), eq(false)))
                 .thenReturn(true);
 
         service.handleIssueComment(payload);
@@ -811,13 +811,13 @@ class IssueImplementationServiceTest {
         when(toolExecutionService.executeTool(eq(FAKE_WORKSPACE), eq("mvn"), anyList()))
                 .thenReturn(new ToolResult(true, 0, "BUILD SUCCESS", ""));
         when(workspaceService.commitAndPush(eq(FAKE_WORKSPACE), eq("ai-agent/issue-42"),
-                anyString(), anyString(), anyString(), eq(false)))
+                anyString(), eq(false)))
                 .thenReturn(true);
 
         serviceWithMcp.handleIssueComment(payload);
 
         verify(workspaceService).commitAndPush(eq(FAKE_WORKSPACE), eq("ai-agent/issue-42"),
-                anyString(), anyString(), anyString(), eq(false));
+                anyString(), eq(false));
     }
 
     // ---- answer-only completion (issue #418) ----
@@ -855,7 +855,7 @@ class IssueImplementationServiceTest {
             assertThat(comment.toLowerCase()).doesNotContain("no code changes are needed");
         });
         verify(sessionService).setStatus(any(), eq(AgentSession.AgentSessionStatus.ANSWERED));
-        verify(workspaceService, never()).commitAndPush(any(), any(), any(), any(), any(), anyBoolean());
+        verify(workspaceService, never()).commitAndPush(any(), any(), any(), anyBoolean());
         verify(repositoryClient, never()).createPullRequest(any(), any(), any(), any(), any(), any());
     }
 
@@ -897,7 +897,7 @@ class IssueImplementationServiceTest {
         });
         // An answer to a follow-up question must not erase the open-PR state.
         verify(sessionService).setStatus(eq(session), eq(AgentSession.AgentSessionStatus.PR_CREATED));
-        verify(workspaceService, never()).commitAndPush(any(), any(), any(), any(), any(), anyBoolean());
+        verify(workspaceService, never()).commitAndPush(any(), any(), any(), anyBoolean());
     }
 
     /**
@@ -924,7 +924,7 @@ class IssueImplementationServiceTest {
         });
         assertThat(postedComments()).noneSatisfy(comment -> assertThat(comment).contains(answer));
         verify(sessionService).setStatus(any(), eq(AgentSession.AgentSessionStatus.ANSWERED));
-        verify(workspaceService, never()).commitAndPush(any(), any(), any(), any(), any(), anyBoolean());
+        verify(workspaceService, never()).commitAndPush(any(), any(), any(), anyBoolean());
         verify(repositoryClient, never()).createPullRequest(any(), any(), any(), any(), any(), any());
         // The cat round really ran against the workspace.
         verify(toolExecutionService).executeContextTool(eq(FAKE_WORKSPACE), eq("cat"),
@@ -952,7 +952,7 @@ class IssueImplementationServiceTest {
             assertThat(comment).contains(answer);
         });
         verify(sessionService).setStatus(any(), eq(AgentSession.AgentSessionStatus.ANSWERED));
-        verify(workspaceService, never()).commitAndPush(any(), any(), any(), any(), any(), anyBoolean());
+        verify(workspaceService, never()).commitAndPush(any(), any(), any(), anyBoolean());
         verify(repositoryClient, never()).createPullRequest(any(), any(), any(), any(), any(), any());
     }
 
