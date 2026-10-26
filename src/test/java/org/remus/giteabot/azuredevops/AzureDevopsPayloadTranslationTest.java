@@ -1,8 +1,8 @@
 package org.remus.giteabot.azuredevops;
 
 import org.junit.jupiter.api.Test;
+import org.remus.giteabot.azuredevops.model.ThreadCommentId;
 import org.remus.giteabot.event.model.WebhookPayload;
-import org.remus.giteabot.repository.model.CommentId;
 
 import java.util.List;
 import java.util.Map;
@@ -99,7 +99,7 @@ class AzureDevopsPayloadTranslationTest {
 
         assertNotNull(payload);
         assertEquals("created", payload.getAction());
-        assertEquals(CommentId.NumericCommentId.of(7L), payload.getComment().getId());
+        assertEquals(ThreadCommentId.of(5L, 7L), payload.getComment().getId());
         assertEquals("@bot please review", payload.getComment().getBody());
         assertEquals(42L, payload.getPullRequest().getNumber());
         assertNotNull(payload.getIssue(), "comment events need a synthetic issue");
@@ -116,29 +116,27 @@ class AzureDevopsPayloadTranslationTest {
     }
 
     @Test
+    @SuppressWarnings("unchecked")
     void threadIdFromComment_readsThreadsLink() {
-        assertEquals(5L, handler.threadIdFromComment(commentPayload()));
+        Map<String, Object> resource = (Map<String, Object>) commentPayload().get("resource");
+        Map<String, Object> comment = (Map<String, Object>) resource.get("comment");
+
+        assertEquals(5L, handler.threadIdFromComment(comment));
     }
 
     @Test
     void threadIdFromComment_fallsBackToSelfLink() {
-        Map<String, Object> raw = Map.of(
-                "eventType", "ms.vss-code.git-pullrequest-comment-event",
-                "resource", Map.of("comment", Map.of("id", 7,
-                        "_links", Map.of("self", Map.of("href",
-                                "https://dev.azure.com/contoso/_apis/git/repositories/r/"
-                                        + "pullRequests/42/threads/9/comments/7")))));
+        Map<String, Object> comment = Map.of("id", 7,
+                "_links", Map.of("self", Map.of("href",
+                        "https://dev.azure.com/contoso/_apis/git/repositories/r/"
+                                + "pullRequests/42/threads/9/comments/7")));
 
-        assertEquals(9L, handler.threadIdFromComment(raw));
+        assertEquals(9L, handler.threadIdFromComment(comment));
     }
 
     @Test
     void threadIdFromComment_returnsNullWithoutLinks() {
-        Map<String, Object> raw = Map.of(
-                "eventType", "ms.vss-code.git-pullrequest-comment-event",
-                "resource", Map.of("comment", Map.of("id", 7)));
-
-        assertNull(handler.threadIdFromComment(raw));
+        assertNull(handler.threadIdFromComment(Map.of("id", 7)));
     }
 
     @Test

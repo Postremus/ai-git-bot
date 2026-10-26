@@ -12,6 +12,7 @@ import org.remus.giteabot.azuredevops.model.GitPullRequestCommentThread;
 import org.remus.giteabot.azuredevops.model.GitPullRequestIteration;
 import org.remus.giteabot.azuredevops.model.IdentityRef;
 import org.remus.giteabot.azuredevops.model.ListResponse;
+import org.remus.giteabot.azuredevops.model.ThreadCommentId;
 import org.remus.giteabot.repository.PostReviewAction;
 import org.remus.giteabot.repository.RepositoryApiClient;
 import org.remus.giteabot.repository.model.CommentId;
@@ -343,10 +344,37 @@ public class AzureDevopsApiClient implements RepositoryApiClient {
     @Override
     public CommentId postPullRequestComment(String owner, String repo, Long pullNumber,
                                        String body) {
-        postThread(owner, repo, pullNumber, body, GitPullRequestCommentThread.CommentThreadStatus.CLOSED);
+        GitPullRequestCommentThread thread = postThread(owner, repo, pullNumber, body, GitPullRequestCommentThread.CommentThreadStatus.CLOSED);
 
-        // not supported for now.
+        if (thread != null && thread.getComments() != null && !thread.getComments().isEmpty()) {
+            return ThreadCommentId.of(thread.getId(), thread.getComments().getFirst().getId());
+        }
+
         return null;
+    }
+
+    @Override
+    public void updatePullRequestComment(String owner, String repo, Long pullNumber, CommentId commentId, String body) {
+        // see: https://learn.microsoft.com/en-us/rest/api/azure/devops/git/pull-request-thread-comments/update?view=azure-devops-rest-6.0
+
+        ThreadCommentId threadCommentId = (ThreadCommentId) commentId;
+
+        Comment comment = new Comment();
+        comment.setContent(body);
+        comment.setCommentType(Comment.CommentType.TEXT);
+
+        // Not wrapped in run(): like the other providers, failures reach the caller, which
+        // decides whether a lost update matters (ReviewProgress treats it as optional).
+        AzureDevopsAddress addr = AzureDevopsAddress.parse(owner, repo);
+        Scope scope = repositoryScope(addr);
+        restClient.patch()
+                .uri(builder -> builder
+                        .path(scope.path() + "/pullRequests/{prId}/threads/{threadId}/comments/{commentId}")
+                        .queryParam("api-version", API_VERSION)
+                        .build(vars(scope, pullNumber, threadCommentId.getThreadId(), threadCommentId.getCommentId())))
+                .body(comment)
+                .retrieve()
+                .toBodilessEntity();
     }
 
     /** A review summary is left active, like the inline findings it accompanies. */
@@ -355,8 +383,8 @@ public class AzureDevopsApiClient implements RepositoryApiClient {
         postThread(owner, repo, pullNumber, body, GitPullRequestCommentThread.CommentThreadStatus.ACTIVE);
     }
 
-    private void postThread(String owner, String repo, Long pullNumber, String body,
-                            GitPullRequestCommentThread.CommentThreadStatus status) {
+    private GitPullRequestCommentThread postThread(String owner, String repo, Long pullNumber, String body,
+                                                   GitPullRequestCommentThread.CommentThreadStatus status) {
         // see: https://learn.microsoft.com/en-us/rest/api/azure/devops/git/pull-request-threads/create?view=azure-devops-rest-6.0&tabs=HTTP
 
         Comment comment = new Comment();
@@ -370,21 +398,20 @@ public class AzureDevopsApiClient implements RepositoryApiClient {
 
         AzureDevopsAddress addr = AzureDevopsAddress.parse(owner, repo);
         Scope scope = repositoryScope(addr);
-        run(() -> restClient.post()
-                .uri(builder -> builder
-                        .path(scope.path() + "/pullRequests/{prId}/threads")
-                        .queryParam("api-version", API_VERSION)
-                        .build(vars(scope, pullNumber)))
-                .body(thread)
-                .retrieve()
-                .toBodilessEntity(),
-                "post comment on PR #{} in {}", pullNumber, repo);
+        return call(() -> restClient.post()
+                        .uri(builder -> builder
+                                .path(scope.path() + "/pullRequests/{prId}/threads")
+                                .queryParam("api-version", API_VERSION)
+                                .build(vars(scope, pullNumber)))
+                        .body(thread)
+                        .retrieve()
+                        .body(GitPullRequestCommentThread.class),
+                null, "post comment on PR #{} in {}", pullNumber, repo);
     }
 
     @Override
     public void postIssueComment(String owner, String repo, Long issueNumber, String body) {
-        // Azure DevOps has no separate issue-comment concept for pull requests.
-        postPullRequestComment(owner, repo, issueNumber, body);
+        throw new UnsupportedOperationException("Azure DevOps work items are not supported");
     }
 
     @Override
@@ -524,16 +551,16 @@ public class AzureDevopsApiClient implements RepositoryApiClient {
 
         if (thread.getComments() != null) {
             for (Comment comment : thread.getComments()) {
-                mapped.add(toAzureDevopsReviewComment(comment, path, line));
+                mapped.add(toAzureDevopsReviewComment(thread.getId(), comment, path, line));
             }
         }
         return mapped;
     }
 
-    private AzureDevopsReviewComment toAzureDevopsReviewComment(Comment comment,
+    private AzureDevopsReviewComment toAzureDevopsReviewComment(Long threadId, Comment comment,
                                                                  String path, Integer line) {
         AzureDevopsReviewComment reviewComment = new AzureDevopsReviewComment();
-        reviewComment.setId(CommentId.NumericCommentId.of(comment.getId()));
+        reviewComment.setId(ThreadCommentId.of(threadId, comment.getId()));
 
         reviewComment.setBody(comment.getContent());
         reviewComment.setPath(path);
@@ -600,10 +627,8 @@ public class AzureDevopsApiClient implements RepositoryApiClient {
 
     @Override
     public void addReaction(String owner, String repo, CommentId commentId, String reaction) {
-        // Azure DevOps requires the parent thread id, which this interface method does
-        // not receive; mirrors BitbucketApiClient's no-op for unsupported reactions.
-        log.debug("Reactions require a thread id not available here, ignoring reaction '{}' on comment #{}",
-                reaction, commentId);
+        // Azure DevOps has only comment likes and PR statuses; neither maps to reactions.
+        log.debug("Reactions not supported on Azure DevOps, ignoring reaction '{}' on comment #{}", reaction, commentId);
     }
 
     @Override
