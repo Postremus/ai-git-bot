@@ -32,11 +32,12 @@ class AzureDevopsReviewTest {
     }
 
     @Test
-    void userLoginFallsBackToDisplayName() {
+    void userLoginIgnoresDisplayName() {
+        // displayName is user-editable, so it must never stand in for the identity.
         AzureDevopsReview review = new AzureDevopsReview();
         review.setDisplayName("AI Bot");
 
-        assertEquals("AI Bot", review.getUserLogin());
+        assertNull(review.getUserLogin());
     }
 
     @Test

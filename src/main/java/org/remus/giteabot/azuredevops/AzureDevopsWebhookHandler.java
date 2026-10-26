@@ -660,8 +660,10 @@ public class AzureDevopsWebhookHandler {
             return null;
         }
         WebhookPayload.Owner owner = new WebhookPayload.Owner();
-        String uniqueName = (String) user.get("uniqueName");
-        owner.setLogin(uniqueName != null ? uniqueName : (String) user.get("displayName"));
+        // Only uniqueName identifies the user. displayName is user-editable, and the login
+        // feeds the bot-user, whitelist and PR-author checks, so falling back to it would
+        // let anyone match those by renaming themselves.
+        owner.setLogin((String) user.get("uniqueName"));
         return owner;
     }
 

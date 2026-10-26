@@ -433,7 +433,8 @@ class AzureDevopsApiClientTest {
         assertEquals("dev@contoso.com", comments.get(0).getUserLogin());
         // Every comment of a thread inherits the thread's anchor.
         assertEquals("src/Foo.java", comments.get(1).getPath());
-        assertEquals("Dev", comments.get(1).getUserLogin());
+        // displayName is user-editable and never stands in for the author's identity.
+        assertNull(comments.get(1).getUserLogin());
         // A thread without a threadContext is a top-level conversation comment.
         assertNull(comments.get(2).getPath());
         assertNull(comments.get(2).getLine());
