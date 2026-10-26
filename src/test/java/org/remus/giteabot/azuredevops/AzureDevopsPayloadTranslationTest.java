@@ -2,6 +2,7 @@ package org.remus.giteabot.azuredevops;
 
 import org.junit.jupiter.api.Test;
 import org.remus.giteabot.event.model.WebhookPayload;
+import org.remus.giteabot.repository.model.CommentId;
 
 import java.util.List;
 import java.util.Map;
@@ -98,7 +99,7 @@ class AzureDevopsPayloadTranslationTest {
 
         assertNotNull(payload);
         assertEquals("created", payload.getAction());
-        assertEquals(7L, payload.getComment().getId());
+        assertEquals(CommentId.NumericCommentId.of(7L), payload.getComment().getId());
         assertEquals("@bot please review", payload.getComment().getBody());
         assertEquals(42L, payload.getPullRequest().getNumber());
         assertNotNull(payload.getIssue(), "comment events need a synthetic issue");

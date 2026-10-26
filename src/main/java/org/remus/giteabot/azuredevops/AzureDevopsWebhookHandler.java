@@ -6,6 +6,7 @@ import org.remus.giteabot.admin.BotWebhookService;
 import org.remus.giteabot.admin.RepositoryApiClientFactory;
 import org.remus.giteabot.event.model.WebhookPayload;
 import org.remus.giteabot.repository.RepositoryApiClient;
+import org.remus.giteabot.repository.model.CommentId;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
 
@@ -695,7 +696,7 @@ public class AzureDevopsWebhookHandler {
             return null;
         }
         WebhookPayload.Comment c = new WebhookPayload.Comment();
-        c.setId(toLong(comment.get("id")));
+        c.setId(CommentId.NumericCommentId.of(toLong(comment.get("id"))));
         c.setBody((String) comment.get("content"));
         c.setUser(extractUser((Map<String, Object>) comment.get("author")));
 

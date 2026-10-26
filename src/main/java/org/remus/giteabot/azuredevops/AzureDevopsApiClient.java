@@ -6,6 +6,7 @@ import org.remus.giteabot.azuredevops.model.AzureDevopsReview;
 import org.remus.giteabot.azuredevops.model.AzureDevopsReviewComment;
 import org.remus.giteabot.repository.PostReviewAction;
 import org.remus.giteabot.repository.RepositoryApiClient;
+import org.remus.giteabot.repository.model.CommentId;
 import org.remus.giteabot.repository.model.PullRequestCommit;
 import org.remus.giteabot.repository.model.PullRequestDetails;
 import org.remus.giteabot.repository.model.PullRequestState;
@@ -349,7 +350,7 @@ public class AzureDevopsApiClient implements RepositoryApiClient {
      * visible without counting as unresolved discussions.
      */
     @Override
-    public Long postPullRequestComment(String owner, String repo, Long pullNumber,
+    public CommentId postPullRequestComment(String owner, String repo, Long pullNumber,
                                        String body) {
         postThread(owner, repo, pullNumber, body, THREAD_STATUS_CLOSED);
 
@@ -537,7 +538,7 @@ public class AzureDevopsApiClient implements RepositoryApiClient {
                                                                  String path, Integer line) {
         AzureDevopsReviewComment reviewComment = new AzureDevopsReviewComment();
         if (comment.get("id") instanceof Number n) {
-            reviewComment.setId(n.longValue());
+            reviewComment.setId(CommentId.NumericCommentId.of(n.longValue()));
         }
         reviewComment.setBody((String) comment.get("content"));
         reviewComment.setPath(path);
@@ -605,7 +606,7 @@ public class AzureDevopsApiClient implements RepositoryApiClient {
     public record InlineThreadContext(String path, Integer line) { }
 
     @Override
-    public void addReaction(String owner, String repo, Long commentId, String reaction) {
+    public void addReaction(String owner, String repo, CommentId commentId, String reaction) {
         // Azure DevOps requires the parent thread id, which this interface method does
         // not receive; mirrors BitbucketApiClient's no-op for unsupported reactions.
         log.debug("Reactions require a thread id not available here, ignoring reaction '{}' on comment #{}",

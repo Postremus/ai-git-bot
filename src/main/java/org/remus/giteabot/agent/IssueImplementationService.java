@@ -33,6 +33,7 @@ import org.remus.giteabot.event.model.WebhookPayload;
 import org.remus.giteabot.mcp.McpOrchestrationService;
 import org.remus.giteabot.mcp.McpToolCatalog;
 import org.remus.giteabot.repository.RepositoryApiClient;
+import org.remus.giteabot.repository.model.CommentId;
 import org.remus.giteabot.repository.model.RepositoryTreeEntry;
 import org.remus.giteabot.systemsettings.McpConfiguration;
 
@@ -352,7 +353,7 @@ public class IssueImplementationService {
         String repo        = payload.getRepository().getName();
         String repoFullName = payload.getRepository().getFullName();
         Long   issueNumber  = payload.getIssue().getNumber();
-        Long   commentId    = payload.getComment().getId();
+        CommentId commentId = payload.getComment().getId();
         String commentBody  = payload.getComment().getBody();
 
         log.info("Handling agent comment #{} on issue #{} in {}", commentId, issueNumber, repoFullName);
