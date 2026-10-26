@@ -230,8 +230,8 @@ class AzureDevopsApiClientTest {
                                 + "/pullRequests/42/threads?api-version=6.0"))
                 .andExpect(method(HttpMethod.POST))
                 .andExpect(jsonPath("$.comments[0].content").value("hello"))
-                .andExpect(jsonPath("$.comments[0].commentType").value(1))
-                .andExpect(jsonPath("$.status").value(4))
+                .andExpect(jsonPath("$.comments[0].commentType").value("text"))
+                .andExpect(jsonPath("$.status").value("closed"))
                 .andRespond(withSuccess("{\"id\":1}", MediaType.APPLICATION_JSON));
 
         new AzureDevopsApiClient(builder.build(), creds(), null)
@@ -246,7 +246,7 @@ class AzureDevopsApiClientTest {
         RestClient.Builder builder = RestClient.builder().baseUrl("https://dev.azure.com");
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
         server.expect(method(HttpMethod.POST))
-                .andExpect(jsonPath("$.status").value(4))
+                .andExpect(jsonPath("$.status").value("closed"))
                 .andRespond(withSuccess("{\"id\":1}", MediaType.APPLICATION_JSON));
 
         new AzureDevopsApiClient(builder.build(), creds(), null)
@@ -264,7 +264,7 @@ class AzureDevopsApiClientTest {
                                 + "/pullRequests/42/threads?api-version=6.0"))
                 .andExpect(method(HttpMethod.POST))
                 .andExpect(jsonPath("$.comments[0].content").value("summary"))
-                .andExpect(jsonPath("$.status").value(1))
+                .andExpect(jsonPath("$.status").value("active"))
                 .andRespond(withSuccess("{\"id\":1}", MediaType.APPLICATION_JSON));
 
         new AzureDevopsApiClient(builder.build(), creds(), null)
@@ -280,6 +280,9 @@ class AzureDevopsApiClientTest {
         server.expect(method(HttpMethod.POST))
                 .andExpect(jsonPath("$.threadContext.filePath").value("/src/Foo.java"))
                 .andExpect(jsonPath("$.threadContext.rightFileStart.line").value(12))
+                // Unset left-side anchors are left out rather than sent as null.
+                .andExpect(jsonPath("$.threadContext.leftFileStart").doesNotExist())
+                .andExpect(jsonPath("$.threadContext.leftFileEnd").doesNotExist())
                 .andRespond(withSuccess("{\"id\":1}", MediaType.APPLICATION_JSON));
 
         new AzureDevopsApiClient(builder.build(), creds(), null)
@@ -434,6 +437,27 @@ class AzureDevopsApiClientTest {
         // A thread without a threadContext is a top-level conversation comment.
         assertNull(comments.get(2).getPath());
         assertNull(comments.get(2).getLine());
+        server.verify();
+    }
+
+    @Test
+    void getReviewComments_unknownStatusAndCommentType_keepTheComments() {
+        // One value newer than this client must not fail the whole thread list, which
+        // getReviewComments would otherwise silently turn into an empty list.
+        RestClient.Builder builder = RestClient.builder().baseUrl("https://dev.azure.com");
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        server.expect(method(HttpMethod.GET))
+                .andRespond(withSuccess("""
+                        {"value":[
+                          {"id":5,"status":"somethingNew",
+                           "comments":[{"id":1,"content":"first","commentType":"somethingElse"}]}
+                        ]}""", MediaType.APPLICATION_JSON));
+
+        List<ReviewComment> comments = new AzureDevopsApiClient(builder.build(), creds(), null)
+                .getReviewComments("contoso", "MyProject/my-service", 42L, null);
+
+        assertEquals(1, comments.size());
+        assertEquals("first", comments.get(0).getBody());
         server.verify();
     }
 
