@@ -13,6 +13,7 @@ import org.remus.giteabot.repository.RepositoryApiClient;
 import org.remus.giteabot.repository.SshEndpoint;
 import org.remus.giteabot.repository.WorkflowDispatchRequest;
 import org.remus.giteabot.repository.WorkflowRunStatus;
+import org.remus.giteabot.repository.model.CommentId;
 import org.remus.giteabot.repository.model.RepositoryCredentials;
 import org.remus.giteabot.repository.model.RepositoryTreeEntry;
 import org.remus.giteabot.repository.model.PullRequestCommit;
@@ -311,7 +312,7 @@ public class GiteaApiClient implements RepositoryApiClient {
     }
 
     @Override
-    public Long postPullRequestComment(String owner, String repo, Long pullNumber, String body) {
+    public CommentId postPullRequestComment(String owner, String repo, Long pullNumber, String body) {
         log.info("Posting comment on PR #{} in {}/{}", pullNumber, owner, repo);
         Map<?, ?> response = commentCreationRequest(owner, repo, pullNumber, body).body(Map.class);
         log.info("Comment posted successfully");
@@ -319,7 +320,7 @@ public class GiteaApiClient implements RepositoryApiClient {
     }
 
     @Override
-    public void updatePullRequestComment(String owner, String repo, Long pullNumber, long commentId, String body) {
+    public void updatePullRequestComment(String owner, String repo, Long pullNumber, CommentId commentId, String body) {
         giteaRestClient.patch()
                 .uri("/api/v1/repos/{owner}/{repo}/issues/comments/{id}", owner, repo, commentId)
                 .body(new CommentRequest(body))
@@ -465,7 +466,7 @@ public class GiteaApiClient implements RepositoryApiClient {
     }
 
     @Override
-    public void addReaction(String owner, String repo, Long commentId, String reaction) {
+    public void addReaction(String owner, String repo, CommentId commentId, String reaction) {
         log.info("Adding '{}' reaction to comment #{} in {}/{}", reaction, commentId, owner, repo);
         giteaRestClient.post()
                 .uri("/api/v1/repos/{owner}/{repo}/issues/comments/{id}/reactions", owner, repo, commentId)

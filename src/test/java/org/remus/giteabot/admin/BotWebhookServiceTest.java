@@ -24,6 +24,7 @@ import org.remus.giteabot.mcp.McpOrchestrationService;
 import org.remus.giteabot.mcp.McpToolCatalog;
 import org.remus.giteabot.repository.Reactions;
 import org.remus.giteabot.repository.RepositoryApiClient;
+import org.remus.giteabot.repository.model.CommentId;
 import org.remus.giteabot.session.SessionService;
 import org.remus.giteabot.systemsettings.McpConfiguration;
 import org.remus.giteabot.systemsettings.McpToolSelectionService;
@@ -1883,7 +1884,7 @@ class BotWebhookServiceTest {
 
         // Comment
         WebhookPayload.Comment comment = new WebhookPayload.Comment();
-        comment.setId(commentId);
+        comment.setId(CommentId.NumericCommentId.of(commentId));
         comment.setBody(commentBody);
         WebhookPayload.Owner commentUser = new WebhookPayload.Owner();
         commentUser.setLogin("tom");
@@ -1946,7 +1947,7 @@ class BotWebhookServiceTest {
         WebhookPayload payload = buildIssuePayload(owner, repo, issueNumber, title, body);
         payload.setAction("created");
         WebhookPayload.Comment comment = new WebhookPayload.Comment();
-        comment.setId(42L);
+        comment.setId(CommentId.NumericCommentId.of(42L));
         comment.setBody(commentBody);
         WebhookPayload.Owner commentUser = new WebhookPayload.Owner();
         commentUser.setLogin(commenter);
@@ -1987,7 +1988,7 @@ class BotWebhookServiceTest {
         pr.setBase(base);
         payload.setPullRequest(pr);
         WebhookPayload.Comment comment = new WebhookPayload.Comment();
-        comment.setId(commentId);
+        comment.setId(CommentId.NumericCommentId.of(commentId));
         comment.setBody(commentBody);
         WebhookPayload.Owner commentUser = new WebhookPayload.Owner();
         commentUser.setLogin("tom");

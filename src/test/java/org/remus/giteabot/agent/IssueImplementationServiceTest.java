@@ -23,6 +23,7 @@ import org.remus.giteabot.mcp.McpOrchestrationService;
 import org.remus.giteabot.mcp.McpToolCatalog;
 import org.remus.giteabot.mcp.McpToolDefinition;
 import org.remus.giteabot.repository.RepositoryApiClient;
+import org.remus.giteabot.repository.model.CommentId;
 import org.remus.giteabot.repository.model.RepositoryTreeEntry;
 
 import java.nio.file.Path;
@@ -995,7 +996,7 @@ class IssueImplementationServiceTest {
         payload.setAction("created");
 
         WebhookPayload.Comment comment = new WebhookPayload.Comment();
-        comment.setId(100L);
+        comment.setId(CommentId.NumericCommentId.of(100L));
         comment.setBody(commentBody);
         payload.setComment(comment);
 

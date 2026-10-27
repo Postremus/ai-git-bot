@@ -10,6 +10,7 @@ import org.remus.giteabot.repository.PostReviewAction;
 import org.remus.giteabot.repository.RepositoryApiClient;
 import org.remus.giteabot.repository.WorkflowDispatchRequest;
 import org.remus.giteabot.repository.WorkflowRunStatus;
+import org.remus.giteabot.repository.model.CommentId;
 import org.remus.giteabot.repository.model.PullRequestCommit;
 import org.remus.giteabot.repository.model.PullRequestDetails;
 import org.remus.giteabot.repository.model.RepositoryCredentials;
@@ -115,7 +116,7 @@ public class GitHubApiClient implements RepositoryApiClient {
     }
 
     @Override
-    public Long postPullRequestComment(String owner, String repo, Long pullNumber, String body) {
+    public CommentId postPullRequestComment(String owner, String repo, Long pullNumber, String body) {
         log.info("Posting top-level comment on PR #{} in {}/{}", pullNumber, owner, repo);
         Map<?, ?> response = commentCreationRequest(owner, repo, pullNumber, body).body(Map.class);
         log.info("Comment posted successfully");
@@ -123,7 +124,7 @@ public class GitHubApiClient implements RepositoryApiClient {
     }
 
     @Override
-    public void updatePullRequestComment(String owner, String repo, Long pullNumber, long commentId, String body) {
+    public void updatePullRequestComment(String owner, String repo, Long pullNumber, CommentId commentId, String body) {
         restClient.patch()
                 .uri("/repos/{owner}/{repo}/issues/comments/{comment_id}", owner, repo, commentId)
                 .body(new CommentRequest(body))
@@ -169,7 +170,7 @@ public class GitHubApiClient implements RepositoryApiClient {
     }
 
     @Override
-    public void addReaction(String owner, String repo, Long commentId, String reaction) {
+    public void addReaction(String owner, String repo, CommentId commentId, String reaction) {
         log.info("Adding '{}' reaction to comment #{} in {}/{}", reaction, commentId, owner, repo);
         restClient.post()
                 .uri("/repos/{owner}/{repo}/issues/comments/{comment_id}/reactions",

@@ -11,6 +11,7 @@ import org.remus.giteabot.repository.PostReviewAction;
 import org.remus.giteabot.repository.RepositoryApiClient;
 import org.remus.giteabot.repository.WorkflowDispatchRequest;
 import org.remus.giteabot.repository.WorkflowRunStatus;
+import org.remus.giteabot.repository.model.CommentId;
 import org.remus.giteabot.repository.model.PullRequestCommit;
 import org.remus.giteabot.repository.model.RepositoryCredentials;
 import org.remus.giteabot.repository.model.RepositoryTreeEntry;
@@ -134,7 +135,7 @@ public class GitLabApiClient implements RepositoryApiClient {
     }
 
     @Override
-    public Long postPullRequestComment(String owner, String repo, Long pullNumber, String body) {
+    public CommentId postPullRequestComment(String owner, String repo, Long pullNumber, String body) {
         log.info("Posting merge request note on MR !{} in {}/{}", pullNumber, owner, repo);
         String projectPath = encodeProjectPath(owner, repo);
         Map<?, ?> response = gitlabRestClient.post()
@@ -144,7 +145,7 @@ public class GitLabApiClient implements RepositoryApiClient {
     }
 
     @Override
-    public void updatePullRequestComment(String owner, String repo, Long pullNumber, long commentId, String body) {
+    public void updatePullRequestComment(String owner, String repo, Long pullNumber, CommentId commentId, String body) {
         String projectPath = encodeProjectPath(owner, repo);
         gitlabRestClient.put()
                 .uri("/api/v4/projects/{projectPath}/merge_requests/{iid}/notes/{note_id}",
@@ -269,7 +270,7 @@ public class GitLabApiClient implements RepositoryApiClient {
     }
 
     @Override
-    public void addReaction(String owner, String repo, Long commentId, String reaction) {
+    public void addReaction(String owner, String repo, CommentId commentId, String reaction) {
         // GitLab's award emoji API requires the merge request IID in addition to the note ID,
         // but the RepositoryApiClient interface only provides the comment/note ID.
         // This is a known limitation — reactions are best-effort and non-critical.
@@ -608,7 +609,7 @@ public class GitLabApiClient implements RepositoryApiClient {
      */
     private ReviewComment toReviewComment(GitLabReview.GitLabNote note) {
         GitLabReviewComment comment = new GitLabReviewComment();
-        comment.setId(note.getId());
+        comment.setId(CommentId.NumericCommentId.of(note.getId()));
         comment.setBody(note.getBody());
         comment.setCreatedAt(note.getCreatedAt());
         comment.setAuthor(note.getAuthor());
