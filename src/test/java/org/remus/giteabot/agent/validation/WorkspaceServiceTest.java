@@ -17,6 +17,7 @@ import java.util.Set;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -35,6 +36,10 @@ class WorkspaceServiceTest {
     @BeforeEach
     void createWorkspaceService() {
         workspaceService = new WorkspaceService(null, CLONE_TIMEOUT_SECONDS);
+        // Mirrors the interface default so a fixture can publish refs/pull/<n>/head
+        // without every test restating it; the GitLab override has its own test.
+        lenient().when(repositoryClient.getPullRequestHeadRef(any()))
+                .thenAnswer(invocation -> "refs/pull/" + invocation.getArgument(0) + "/head");
     }
     @Test
     void cleanupWorkspace_deletesDirectory() throws IOException {
@@ -89,6 +94,40 @@ class WorkspaceServiceTest {
 
         verify(client, times(1)).getRepositoryRemote("any", "any");
         verify(client, times(1)).getCredentials();
+
+        workspaceService.cleanupWorkspace(result.workspacePath());
+    }
+
+    @Test
+    void prepareWorkspace_fetchesTheProvidersPullRequestHeadRef() throws Exception {
+        // GitLab publishes the head commit under refs/merge-requests/<n>/head, so the
+        // fallback must ask the client for the ref instead of hardcoding refs/pull/.
+        Path remoteDir = tempDir.resolve("remote-gitlab");
+        Files.createDirectories(remoteDir);
+        runGit(remoteDir, "init", "--bare");
+
+        Path localRepo = tempDir.resolve("local-gitlab");
+        Files.createDirectories(localRepo);
+        runGit(localRepo, "init");
+        runGit(localRepo, "config", "user.email", "test@test.com");
+        runGit(localRepo, "config", "user.name", "Test");
+        runGit(localRepo, "branch", "-M", "main");
+        runGit(localRepo, "remote", "add", "origin", remoteDir.toAbsolutePath().toString());
+        Files.writeString(localRepo.resolve("README.md"), "merge request content");
+        runGit(localRepo, "add", "README.md");
+        runGit(localRepo, "commit", "-m", "mr commit");
+        runGit(localRepo, "push", "-u", "origin", "main");
+        runGit(localRepo, "push", "origin", "main:refs/merge-requests/77/head");
+
+        RepositoryApiClient client = repositoryClient(remoteDir.toAbsolutePath().toString());
+        when(client.getPullRequestHeadRef(77L)).thenReturn("refs/merge-requests/77/head");
+
+        WorkspaceResult result = workspaceService.prepareWorkspace(
+                client, "any", "any", "nonexistent-branch", 77L);
+
+        assertThat(result.success()).isTrue();
+        assertThat(Files.readString(result.workspacePath().resolve("README.md")))
+                .isEqualTo("merge request content");
 
         workspaceService.cleanupWorkspace(result.workspacePath());
     }

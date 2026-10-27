@@ -87,7 +87,9 @@ public class WorkspaceService {
     /**
      * Clones a repository workspace. When a branch-based shallow clone fails and
      * {@code prNumber} is non-null, falls back to cloning the default branch then
-     * fetching {@code refs/pull/<prNumber>/head} (GitHub/Gitea fork-safe ref).
+     * fetching the provider's pull-request head ref
+     * ({@link RepositoryApiClient#getPullRequestHeadRef}) — the fork-safe ref that
+     * carries the head commit in the target repository.
      *
      * <p>The repository client resolves the credential-free remote and its
      * credentials once before any workspace is allocated. HTTP credentials use
@@ -127,8 +129,11 @@ public class WorkspaceService {
 
             // Fork PR fallback: clone default branch → fetch PR head ref
             if (prNumber != null) {
-                log.info("Branch '{}' is not in {}/{} (PR #{}), falling back to refs/pull/{}/head "
-                                + "in this repository: {}", branch, owner, repo, prNumber, prNumber,
+                // The ref is provider-specific (refs/pull/… vs refs/merge-requests/…),
+                // and the failure texts below are what an operator reads on the PR.
+                String headRef = repositoryClient.getPullRequestHeadRef(prNumber);
+                log.info("Branch '{}' is not in {}/{} (PR #{}), falling back to {} "
+                                + "in this repository: {}", branch, owner, repo, prNumber, headRef,
                         cloneResult.output());
                 // Tear down the failed attempt before starting the retry.
                 if (!cleanupWorkspace(setup)) {
@@ -156,14 +161,14 @@ public class WorkspaceService {
 
                 CommandResult fetchResult = runRemoteCommand(setup, workspaceDir.toFile(),
                         cloneTimeoutSeconds,
-                        "fetch", "origin", "refs/pull/" + prNumber + "/head");
+                        "fetch", "origin", headRef);
 
                 if (!fetchResult.success()) {
                     log.error("Failed to fetch PR head ref for PR #{}: {}", prNumber,
                             fetchResult.output());
                     cleanupWorkspace(setup);
                     return WorkspaceResult.failure(
-                            "Failed to fetch refs/pull/" + prNumber + "/head from " + owner + "/"
+                            "Failed to fetch " + headRef + " from " + owner + "/"
                                     + repo + ": " + fetchResult.output());
                 }
 
@@ -178,7 +183,7 @@ public class WorkspaceService {
                             checkoutResult.output());
                     cleanupWorkspace(setup);
                     return WorkspaceResult.failure(
-                            "Failed to checkout refs/pull/" + prNumber + "/head for PR #"
+                            "Failed to checkout " + headRef + " for PR #"
                                     + prNumber + ": " + checkoutResult.output());
                 }
 
@@ -210,7 +215,7 @@ public class WorkspaceService {
      * paying a branch clone against the target repository that can never
      * succeed — the contributor's branch does not live there. Providers without
      * that resolution keep the target-repository behaviour of
-     * {@link #prepareWorkspace}, including its {@code refs/pull/<n>/head}
+     * {@link #prepareWorkspace}, including its provider pull-request-ref
      * fallback.</p>
      *
      * <p>{@code mode} decides how much of the fallback chain is acceptable when
@@ -244,8 +249,9 @@ public class WorkspaceService {
             // PR ref: it carries the head commit even when the provider's head
             // lookup is unavailable or reports a stale branch.
             log.warn("Could not resolve the pull-request head of {}/{}#{} ({}); reviewing "
-                            + "refs/pull/{}/head in the target repository instead",
-                    owner, repo, prNumber, message, prNumber);
+                            + "{} in the target repository instead",
+                    owner, repo, prNumber, message,
+                    repositoryClient.getPullRequestHeadRef(prNumber));
             return prepareWorkspace(repositoryClient, owner, repo, branch, prNumber);
         }
 
@@ -262,8 +268,9 @@ public class WorkspaceService {
         }
 
         log.info("Could not check out head branch '{}' of {}/{} for PR #{}, falling back to "
-                        + "refs/pull/{}/head in {}/{}: {}", head.branch(), head.owner(),
-                head.repository(), prNumber, prNumber, owner, repo, result.error());
+                        + "{} in {}/{}: {}", head.branch(), head.owner(),
+                head.repository(), prNumber, repositoryClient.getPullRequestHeadRef(prNumber),
+                owner, repo, result.error());
         WorkspaceResult fallback = prepareWorkspace(repositoryClient, owner, repo, head.branch(),
                 prNumber);
         if (fallback.success()) {
@@ -271,8 +278,9 @@ public class WorkspaceService {
         }
         return WorkspaceResult.failure("Failed to prepare a workspace for PR #" + prNumber
                 + " (head " + head.owner() + "/" + head.repository() + " branch '" + head.branch()
-                + "': " + result.error() + "; " + owner + "/" + repo + " refs/pull/" + prNumber
-                + "/head: " + fallback.error() + ")");
+                + "': " + result.error() + "; " + owner + "/" + repo + " "
+                + repositoryClient.getPullRequestHeadRef(prNumber)
+                + ": " + fallback.error() + ")");
     }
 
     /**
