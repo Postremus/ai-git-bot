@@ -126,7 +126,7 @@ class I18nCoverageServiceTest {
         verify(agent, never()).generate(any(), any(), any(), anyString(), any(), any(), anyString(),
                 org.mockito.ArgumentMatchers.anyInt());
         verify(workspaceService, never()).commitAndPush(
-                any(), anyString(), anyString(), anyString(), anyString(), anyBoolean());
+                any(), anyString(), anyString(), anyBoolean());
         verify(workspaceService).cleanupWorkspace(ws);
     }
 
@@ -155,7 +155,7 @@ class I18nCoverageServiceTest {
         assertThat(result.status()).isEqualTo(I18nCoverageService.Result.Status.FAILED);
         verify(workspaceService, never()).prepareWorkspace(any(), anyString(), anyString(), anyString(), anyLong());
         verify(workspaceService, never()).commitAndPush(
-                any(), anyString(), anyString(), anyString(), anyString(), anyBoolean());
+                any(), anyString(), anyString(), anyBoolean());
     }
 
     @Test
@@ -176,8 +176,7 @@ class I18nCoverageServiceTest {
                 });
         when(workspaceService.listChangedFiles(workspace))
                 .thenReturn(List.of("i18n/messages_de.properties"));
-        when(workspaceService.commitAndPush(eq(workspace), anyString(), anyString(),
-                anyString(), anyString(), eq(true))).thenReturn(true);
+        when(workspaceService.commitAndPush(eq(workspace), anyString(), anyString(), eq(true))).thenReturn(true);
         when(repoClient.createPullRequest(eq("acme"), eq("my-repo"), anyString(), anyString(),
                 anyString(), eq("feature/i18n"))).thenReturn(null);
 

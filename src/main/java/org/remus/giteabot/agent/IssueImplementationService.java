@@ -55,9 +55,6 @@ import java.util.Optional;
 public class IssueImplementationService {
 
     private static final String AGENT_PROMPT_NAME = "agent";
-    /** Git author identity used for automated commits. */
-    private static final String GIT_AUTHOR_NAME  = "AI Agent";
-    private static final String GIT_AUTHOR_EMAIL = "ai-agent@bot.local";
 
     private final RepositoryApiClient repositoryClient;
     private final AiClient aiClient;
@@ -253,8 +250,7 @@ public class IssueImplementationService {
             }
 
             String commitMessage = String.format("agent: implement #%d - %s", issueNumber, issueTitle);
-            boolean pushed = workspaceService.commitAndPush(workspaceDir, branchName, commitMessage,
-                    GIT_AUTHOR_NAME, GIT_AUTHOR_EMAIL, true);
+            boolean pushed = workspaceService.commitAndPush(workspaceDir, branchName, commitMessage, true);
 
             if (!pushed) {
                 sessionService.setStatus(session, AgentSession.AgentSessionStatus.FAILED);
@@ -441,8 +437,7 @@ public class IssueImplementationService {
                 sessionService.setBranchName(session, branchName);
             }
             String commitMessage = String.format("agent: follow-up for #%d", issueNumber);
-            boolean pushed = workspaceService.commitAndPush(workspaceDir, branchName, commitMessage,
-                    GIT_AUTHOR_NAME, GIT_AUTHOR_EMAIL, createNew);
+            boolean pushed = workspaceService.commitAndPush(workspaceDir, branchName, commitMessage, createNew);
             if (!pushed) {
                 repositoryClient.postIssueComment(owner, repo, issueNumber,
                         "🤖 **AI Agent**: Tool execution succeeded but pushing changes failed.");
