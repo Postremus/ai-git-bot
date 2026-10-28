@@ -5,12 +5,14 @@ import org.remus.giteabot.admin.Bot;
 import org.remus.giteabot.admin.BotWebhookService;
 import org.remus.giteabot.event.model.WebhookPayload;
 import org.remus.giteabot.repository.model.CommentId;
+import org.remus.giteabot.repository.model.GitUser;
 import org.remus.giteabot.util.BotMention;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * Handler for GitHub webhook events.
@@ -55,20 +57,26 @@ public class GitHubWebhookHandler {
             return ResponseEntity.ok("ignored");
         }
 
+        GitUser botUser = botWebhookService.resolveGitUser(bot);
+        if (botUser == null) {
+            return ResponseEntity.ok("ignored");
+        }
+        String botUsername = botUser.username();
+
         // Ignore events triggered by the bot itself
-        if (botWebhookService.isBotUser(bot, webhookPayload)) {
-            log.debug("Ignoring GitHub webhook event from bot's own user '{}'", bot.getGitIntegration().getUsername());
+        if (botWebhookService.isBotUser(botUser, webhookPayload)) {
+            log.debug("Ignoring GitHub webhook event from bot's own user '{}'", botUsername);
             return ResponseEntity.ok("ignored");
         }
 
-        String botAlias = botWebhookService.getBotAlias(bot);
+        String botAlias = botWebhookService.getBotAlias(botUsername);
 
         return switch (eventType) {
-            case "pull_request" -> handlePullRequestEvent(bot, webhookPayload);
+            case "pull_request" -> handlePullRequestEvent(bot, botUsername, webhookPayload);
             case "issue_comment" -> handleIssueCommentEvent(bot, webhookPayload, botAlias);
             case "pull_request_review" -> handlePullRequestReviewEvent(bot, webhookPayload);
             case "pull_request_review_comment" -> handlePullRequestReviewCommentEvent(bot, webhookPayload, botAlias);
-            case "issues" -> handleIssuesEvent(bot, webhookPayload);
+            case "issues" -> handleIssuesEvent(bot, botUsername, webhookPayload);
             default -> {
                 log.debug("Unhandled GitHub event type: {}", eventType);
                 yield ResponseEntity.ok("ignored");
@@ -76,12 +84,12 @@ public class GitHubWebhookHandler {
         };
     }
 
-    private ResponseEntity<String> handlePullRequestEvent(Bot bot, WebhookPayload payload) {
+    private ResponseEntity<String> handlePullRequestEvent(Bot bot, String botUsername, WebhookPayload payload) {
         String action = payload.getAction();
-        if (("opened".equals(action) && (bot.isRunOnPrCreation() || hasBotReviewer(bot, payload)))
-                || ("reopened".equals(action) && (bot.isRunOnPrCreation() || hasBotReviewer(bot, payload)))
+        if (("opened".equals(action) && (bot.isRunOnPrCreation() || hasBotReviewer(botUsername, payload)))
+                || ("reopened".equals(action) && (bot.isRunOnPrCreation() || hasBotReviewer(botUsername, payload)))
                 || ("synchronized".equals(action) && bot.isRunOnPrUpdate())
-                || ("review_requested".equals(action) && isRequestedReviewer(bot, payload))) {
+                || ("review_requested".equals(action) && isRequestedReviewer(botUsername, payload))) {
             botWebhookService.reviewPullRequest(bot, payload);
             return ResponseEntity.ok("review triggered");
         }
@@ -133,12 +141,12 @@ public class GitHubWebhookHandler {
         return ResponseEntity.ok("ignored");
     }
 
-    private ResponseEntity<String> handleIssuesEvent(Bot bot, WebhookPayload payload) {
+    private ResponseEntity<String> handleIssuesEvent(Bot bot, String botUsername, WebhookPayload payload) {
         String action = payload.getAction();
         if ("assigned".equals(action)) {
             if (payload.getIssue() != null
                     && payload.getIssue().getAssignee() != null
-                    && bot.getGitIntegration().getUsername().equalsIgnoreCase(payload.getIssue().getAssignee().getLogin())) {
+                    && botUsername.equalsIgnoreCase(payload.getIssue().getAssignee().getLogin())) {
                 botWebhookService.handleIssueAssigned(bot, payload);
                 return ResponseEntity.ok("agent triggered");
             }
@@ -241,6 +249,7 @@ public class GitHubWebhookHandler {
         if (sender == null) return null;
         WebhookPayload.Owner owner = new WebhookPayload.Owner();
         owner.setLogin((String) sender.get("login"));
+        owner.setId(Objects.toString(toLong(sender.get("id")), null));
         return owner;
     }
 
@@ -299,9 +308,7 @@ public class GitHubWebhookHandler {
         c.setBody((String) comment.get("body"));
         Map<String, Object> user = (Map<String, Object>) comment.get("user");
         if (user != null) {
-            WebhookPayload.Owner u = new WebhookPayload.Owner();
-            u.setLogin((String) user.get("login"));
-            c.setUser(u);
+            c.setUser(extractOwner(user));
         }
         return c;
     }
@@ -354,6 +361,7 @@ public class GitHubWebhookHandler {
         if (owner == null) return null;
         WebhookPayload.Owner o = new WebhookPayload.Owner();
         o.setLogin((String) owner.get("login"));
+        o.setId(Objects.toString(toLong(owner.get("id")), null));
         return o;
     }
 
@@ -392,15 +400,15 @@ public class GitHubWebhookHandler {
         return null;
     }
 
-    private boolean hasBotReviewer(Bot bot, WebhookPayload payload) {
+    private boolean hasBotReviewer(String botUsername, WebhookPayload payload) {
         return payload.getPullRequest() != null
                 && payload.getPullRequest().getRequestedReviewers() != null
                 && payload.getPullRequest().getRequestedReviewers().stream()
-                .anyMatch(reviewer -> bot.getGitIntegration().getUsername().equalsIgnoreCase(reviewer.getLogin()));
+                .anyMatch(reviewer -> botUsername.equalsIgnoreCase(reviewer.getLogin()));
     }
 
-    private boolean isRequestedReviewer(Bot bot, WebhookPayload payload) {
+    private boolean isRequestedReviewer(String botUsername, WebhookPayload payload) {
         return payload.getRequestedReviewer() != null
-                && bot.getGitIntegration().getUsername().equalsIgnoreCase(payload.getRequestedReviewer().getLogin());
+                && botUsername.equalsIgnoreCase(payload.getRequestedReviewer().getLogin());
     }
 }

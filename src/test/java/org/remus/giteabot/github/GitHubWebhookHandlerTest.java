@@ -10,6 +10,7 @@ import org.remus.giteabot.admin.Bot;
 import org.remus.giteabot.admin.BotWebhookService;
 import org.remus.giteabot.admin.GitIntegration;
 import org.remus.giteabot.event.model.WebhookPayload;
+import org.remus.giteabot.repository.model.GitUser;
 import org.springframework.http.ResponseEntity;
 
 import java.util.HashMap;
@@ -33,17 +34,19 @@ class GitHubWebhookHandlerTest {
     private GitHubWebhookHandler handler;
     private Bot bot;
 
+    private static final GitUser BOT_USER = new GitUser("17", "ai_bot", null, null);
+
     @BeforeEach
     void setUp() {
         handler = new GitHubWebhookHandler(botWebhookService);
         bot = new Bot();
         bot.setName("test-bot");
         GitIntegration gitIntegration = new GitIntegration();
-        gitIntegration.setUsername("ai_bot");
         bot.setGitIntegration(gitIntegration);
 
-        lenient().when(botWebhookService.isBotUser(eq(bot), any(WebhookPayload.class))).thenReturn(false);
-        lenient().when(botWebhookService.getBotAlias(bot)).thenReturn("@ai_bot");
+        lenient().when(botWebhookService.resolveGitUser(bot)).thenReturn(BOT_USER);
+        lenient().when(botWebhookService.isBotUser(eq(BOT_USER), any(WebhookPayload.class))).thenReturn(false);
+        lenient().when(botWebhookService.getBotAlias("ai_bot")).thenReturn("@ai_bot");
     }
 
     @Test
@@ -74,6 +77,21 @@ class GitHubWebhookHandlerTest {
 
         assertEquals("assigned", translated.getAction());
         assertNull(translated.getIssue().getRef());
+    }
+
+    @Test
+    void translatePayload_issueComment_carriesTheSenderAndCommentUserIds() {
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("action", "created");
+        payload.put("sender", Map.of("login", "tom", "id", 7));
+        payload.put("repository", repositoryMap());
+        payload.put("issue", Map.of("number", 42, "title", "t"));
+        payload.put("comment", Map.of("id", 1, "body", "hi", "user", Map.of("login", "tom", "id", 7)));
+
+        WebhookPayload translated = handler.translatePayload("issue_comment", payload);
+
+        assertEquals("7", translated.getSender().getId());
+        assertEquals("7", translated.getComment().getUser().getId());
     }
 
     @Test
