@@ -30,6 +30,7 @@ import org.remus.giteabot.event.model.WebhookPayload;
 import org.remus.giteabot.mcp.McpOrchestrationService;
 import org.remus.giteabot.mcp.McpToolCatalog;
 import org.remus.giteabot.repository.RepositoryApiClient;
+import org.remus.giteabot.repository.RepositoryConnection;
 import org.remus.giteabot.systemsettings.BotToolSelectionService;
 import org.remus.giteabot.systemsettings.McpToolSelectionService;
 import org.springframework.stereotype.Service;
@@ -150,14 +151,15 @@ public class IssueTriageService {
         Set<String> allowed = allowedAssignees(params);
         String configuredPrompt = configuredPrompt(params);
         AiClient aiClient = aiClientFactory.getClient(bot.getAiIntegration());
-        RepositoryApiClient repoClient = repositoryApiClientFactory.getApiClient(bot.getGitIntegration());
+        RepositoryConnection connection = repositoryApiClientFactory.getConnection(bot.getGitIntegration());
+        RepositoryApiClient repoClient = connection.getClient();
 
         String issueRef = BranchRefs.normalize(issue.getRef());
         String baseBranch = issueRef != null && !issueRef.isBlank()
                 ? issueRef : repoClient.getDefaultBranch(owner, repo);
 
         WorkspaceResult wsResult = workspaceService.prepareWorkspace(
-                repoClient, owner, repo, baseBranch, null);
+                connection, owner, repo, baseBranch, null);
         if (!wsResult.success()) {
             postErrorComment(repoClient, owner, repo, issue.getNumber(),
                     "Issue triage failed: could not prepare the read-only repository context ("

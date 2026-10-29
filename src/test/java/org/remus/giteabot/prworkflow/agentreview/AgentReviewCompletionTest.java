@@ -1,5 +1,6 @@
 package org.remus.giteabot.prworkflow.agentreview;
 
+import org.remus.giteabot.repository.RepositoryConnections;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -106,14 +107,14 @@ class AgentReviewCompletionTest {
         config.getBudget().setMaxRounds(3);
         ToolCatalog catalog = new ToolCatalog(config);
         service = new AgentReviewService(
-                new AgentReviewContext(repositoryClient, aiClient, "Review the change.", "bot",
+                new AgentReviewContext(RepositoryConnections.of(repositoryClient), aiClient, "Review the change.", "bot",
                         null, null, Set.of("pr-diff"), 200_000),
                 new AgentSessionService(mock(AgentSessionRepository.class)),
                 new ToolExecutionService(config, catalog), catalog, workspaceService,
                 config, null, new Bot(), eventHooks, null);
         lenient().when(aiClient.supportsNativeTools()).thenReturn(true);
         when(repositoryClient.getPullRequestDiff("owner", "repo", 1L)).thenReturn(DIFF);
-        lenient().when(workspaceService.preparePullRequestWorkspace(repositoryClient, "owner", "repo",
+        lenient().when(workspaceService.preparePullRequestWorkspace(RepositoryConnections.of(repositoryClient), "owner", "repo",
                         "feature", 1L, PullRequestWorkspaceMode.READ_ONLY))
                 .thenReturn(WorkspaceResult.success(workspace));
         lenient().when(workspace.path()).thenReturn(WORKSPACE);

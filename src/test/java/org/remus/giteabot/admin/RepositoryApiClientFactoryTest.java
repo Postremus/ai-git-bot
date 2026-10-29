@@ -1,5 +1,6 @@
 package org.remus.giteabot.admin;
 
+import java.time.Duration;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -11,7 +12,9 @@ import org.remus.giteabot.repository.GitTransport;
 import org.remus.giteabot.repository.RepositoryProviderMetadata;
 import org.remus.giteabot.repository.RepositoryProviderRegistry;
 import org.remus.giteabot.repository.RepositoryType;
-import org.remus.giteabot.repository.model.RepositoryCredentials;
+import org.remus.giteabot.repository.RepositoryConnection;
+import org.remus.giteabot.repository.model.HttpCredentials;
+import org.remus.giteabot.repository.model.SshCredentials;
 import org.springframework.web.client.RestClient;
 
 import java.time.Instant;
@@ -19,6 +22,7 @@ import java.time.Instant;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -41,15 +45,16 @@ class RepositoryApiClientFactoryTest {
 
     @BeforeEach
     void setUp() {
-        when(providerRegistry.getProvider(RepositoryType.GITEA)).thenReturn(provider);
-        when(provider.buildRestClient(any(), anyString())).thenReturn(restClient);
-        when(provider.createCredentials(any(), anyString())).thenAnswer(invocation -> {
+        lenient().when(providerRegistry.getProvider(RepositoryType.GITEA)).thenReturn(provider);
+        lenient().when(provider.buildRestClient(any(), anyString())).thenReturn(restClient);
+        lenient().when(provider.createHttpCredentials(any(), anyString())).thenAnswer(invocation ->
+                new HttpCredentials(null, invocation.getArgument(1)));
+        lenient().when(provider.createConnection(any(), any(), any(), any(), any())).thenAnswer(invocation -> {
             GitIntegration integration = invocation.getArgument(0);
-            String token = invocation.getArgument(1);
-            return RepositoryCredentials.of(integration.getUrl(), integration.getUrl(), token);
+            return new RepositoryConnection(integration.getUrl(), integration.getUrl(),
+                    invocation.getArgument(2), invocation.getArgument(3),
+                    new GiteaApiClient(restClient, integration.getUrl()), Duration.ofMinutes(5));
         });
-        when(provider.createClient(any(), any())).thenAnswer(invocation ->
-                new GiteaApiClient(restClient, invocation.getArgument(1)));
     }
 
     @Test
@@ -58,18 +63,16 @@ class RepositoryApiClientFactoryTest {
         ssh.setSshPrivateKey("encrypted-key");
         ssh.setSshKnownHosts("gitea.example.com ssh-ed25519 host-key");
         GitIntegration http = integration(2L, "HTTP", GitTransport.HTTP);
-        when(integrationService.decryptToken(ssh)).thenReturn("ssh-token");
-        when(integrationService.decryptToken(http)).thenReturn("http-token");
-        when(integrationService.decryptSshPrivateKey(ssh)).thenReturn("plain-private-key");
+        lenient().when(integrationService.decryptToken(ssh)).thenReturn("ssh-token");
+        lenient().when(integrationService.decryptToken(http)).thenReturn("http-token");
+        lenient().when(integrationService.decryptSshPrivateKey(ssh)).thenReturn("plain-private-key");
 
-        var sshCredentials = factory.getApiClient(ssh).getCredentials();
-        var httpCredentials = factory.getApiClient(http).getCredentials();
+        var sshCredentials = factory.getConnection(ssh).getCredentials();
+        var httpCredentials = factory.getConnection(http).getCredentials();
 
-        assertThat(sshCredentials.usesSsh()).isTrue();
-        assertThat(sshCredentials.sshPrivateKey()).isEqualTo("plain-private-key");
-        assertThat(sshCredentials.sshKnownHosts()).isEqualTo("gitea.example.com ssh-ed25519 host-key");
-        assertThat(httpCredentials.usesSsh()).isFalse();
-        assertThat(httpCredentials.sshPrivateKey()).isNull();
+        assertThat(sshCredentials).isEqualTo(
+                new SshCredentials("plain-private-key", "gitea.example.com ssh-ed25519 host-key"));
+        assertThat(httpCredentials).isEqualTo(new HttpCredentials(null, "http-token"));
         verify(integrationService, never()).decryptSshPrivateKey(http);
     }
 
@@ -78,10 +81,10 @@ class RepositoryApiClientFactoryTest {
         GitIntegration ssh = integration(1L, "SSH", GitTransport.SSH);
         ssh.setSshPrivateKey("encrypted-key");
         ssh.setSshKnownHosts("gitea.example.com ssh-ed25519 host-key");
-        when(integrationService.decryptToken(ssh)).thenReturn("ssh-token");
-        when(integrationService.decryptSshPrivateKey(ssh)).thenReturn("plain-private-key");
+        lenient().when(integrationService.decryptToken(ssh)).thenReturn("ssh-token");
+        lenient().when(integrationService.decryptSshPrivateKey(ssh)).thenReturn("plain-private-key");
 
-        String toString = factory.getApiClient(ssh).getCredentials().toString();
+        String toString = factory.getConnection(ssh).getCredentials().toString();
 
         assertThat(toString)
                 .doesNotContain("ssh-token")
@@ -90,15 +93,33 @@ class RepositoryApiClientFactoryTest {
     }
 
     @Test
-    void sshClientsAreNotCached() {
+    void sshPrivateKey_isOnlyDecryptedWhenTheCredentialsAreRead() {
         GitIntegration integration = integration(1L, "SSH", GitTransport.SSH);
         integration.setSshPrivateKey("encrypted-key");
-        when(integrationService.decryptToken(integration)).thenReturn("token");
-        when(integrationService.decryptSshPrivateKey(integration)).thenReturn("private-key");
+        lenient().when(integrationService.decryptToken(integration)).thenReturn("token");
+        lenient().when(integrationService.decryptSshPrivateKey(integration)).thenReturn("private-key");
 
-        assertThat(factory.getApiClient(integration)).isNotSameAs(factory.getApiClient(integration));
+        RepositoryConnection connection = factory.getConnection(integration);
+        verify(integrationService, never()).decryptSshPrivateKey(integration);
 
-        verify(integrationService, times(2)).decryptSshPrivateKey(integration);
+        connection.getCredentials();
+        verify(integrationService, times(1)).decryptSshPrivateKey(integration);
+    }
+
+    @Test
+    void sshConnectionsAreCachedWithoutKeepingTheKeyUntilTheIntegrationChanges() {
+        GitIntegration integration = integration(1L, "SSH", GitTransport.SSH);
+        integration.setSshPrivateKey("encrypted-key");
+        lenient().when(integrationService.decryptToken(integration)).thenReturn("token");
+        lenient().when(integrationService.decryptSshPrivateKey(integration)).thenReturn("private-key");
+
+        RepositoryConnection connection = factory.getConnection(integration);
+
+        assertThat(factory.getConnection(integration)).isSameAs(connection);
+        verify(integrationService, never()).decryptSshPrivateKey(integration);
+
+        integration.setUpdatedAt(integration.getUpdatedAt().plusSeconds(1));
+        assertThat(factory.getConnection(integration)).isNotSameAs(connection);
     }
 
     @Test
@@ -107,8 +128,6 @@ class RepositoryApiClientFactoryTest {
         var first = factory.createApiClient(integration, "new-token");
         var second = factory.createApiClient(integration, "new-token");
         assertThat(first).isNotSameAs(second);
-        assertThat(first.getCredentials().token()).isEqualTo("new-token");
-        assertThat(first.getCredentials().usesSsh()).isFalse();
         verify(integrationService, never()).decryptToken(any());
         verify(integrationService, never()).decryptSshPrivateKey(any());
     }

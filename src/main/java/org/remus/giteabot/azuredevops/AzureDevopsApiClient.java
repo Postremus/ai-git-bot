@@ -7,6 +7,7 @@ import org.remus.giteabot.azuredevops.model.AzureDevopsReviewComment;
 import org.remus.giteabot.azuredevops.model.Comment;
 import org.remus.giteabot.azuredevops.model.CommentPosition;
 import org.remus.giteabot.azuredevops.model.CommentThreadContext;
+import org.remus.giteabot.azuredevops.model.ConnectionData;
 import org.remus.giteabot.azuredevops.model.GitCommitRef;
 import org.remus.giteabot.azuredevops.model.GitPullRequestCommentThread;
 import org.remus.giteabot.azuredevops.model.GitPullRequestIteration;
@@ -16,15 +17,18 @@ import org.remus.giteabot.azuredevops.model.ThreadCommentId;
 import org.remus.giteabot.repository.PostReviewAction;
 import org.remus.giteabot.repository.RepositoryApiClient;
 import org.remus.giteabot.repository.model.CommentId;
+import org.remus.giteabot.repository.model.RepositoryUser;
 import org.remus.giteabot.repository.model.PullRequestCommit;
 import org.remus.giteabot.repository.model.PullRequestDetails;
 import org.remus.giteabot.repository.model.PullRequestState;
-import org.remus.giteabot.repository.model.RepositoryCredentials;
+import org.remus.giteabot.repository.model.HttpCredentials;
 import org.remus.giteabot.repository.model.RepositoryTreeEntry;
 import org.remus.giteabot.repository.model.Review;
 import org.remus.giteabot.repository.model.ReviewComment;
 import org.springframework.core.ParameterizedTypeReference;
+import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.client.RestClientException;
 
 import java.net.URI;
 import java.util.ArrayList;
@@ -59,6 +63,11 @@ public class AzureDevopsApiClient implements RepositoryApiClient {
     /** {@code connectionData} exists only as a preview API and rejects a release version. */
     static final String API_VERSION_CONNECTION_DATA = "6.0-preview.1";
 
+    /** Account-level {@code connectionData}, answering for tokens scoped to all accessible organizations. */
+    static final String ACCOUNT_CONNECTION_DATA_URL = "https://app.vssps.visualstudio.com/_apis/connectionData";
+    private static final String ACCOUNT_PROFILE_URL = "https://app.vssps.visualstudio.com/_apis/profile/profiles/me";
+    private static final String API_VERSION_EMAIL = "6.0";
+
     private static final int VOTE_APPROVE = 10;
     /** "Waiting for author": the closest match to "request changes"; -10 would hard-reject. */
     private static final int VOTE_WAITING_FOR_AUTHOR = -5;
@@ -67,7 +76,10 @@ public class AzureDevopsApiClient implements RepositoryApiClient {
     private static final Pattern COMMIT_SHA = Pattern.compile("[0-9a-fA-F]{40}");
 
     private final RestClient restClient;
-    private final RepositoryCredentials credentials;
+    private final String baseUrl;
+    private final String cloneUrl;
+    /** For the Git commands behind {@link #getPullRequestDiff}, decrypted only when one runs. */
+    private final Supplier<HttpCredentials> httpCredentials;
     private final GitDiffService gitDiffService;
 
     /**
@@ -95,16 +107,14 @@ public class AzureDevopsApiClient implements RepositoryApiClient {
      */
     private static final String NO_IDENTITY = "";
 
-    public AzureDevopsApiClient(RestClient restClient, RepositoryCredentials credentials,
+    public AzureDevopsApiClient(RestClient restClient, String baseUrl, String cloneUrl,
+                                Supplier<HttpCredentials> httpCredentials,
                                 GitDiffService gitDiffService) {
         this.restClient = restClient;
-        this.credentials = credentials;
+        this.baseUrl = baseUrl;
+        this.cloneUrl = cloneUrl;
+        this.httpCredentials = httpCredentials;
         this.gitDiffService = gitDiffService;
-    }
-
-    @Override
-    public RepositoryCredentials getCredentials() {
-        return credentials;
     }
 
     /** Azure DevOps Git remotes only accept the PAT as a pre-emptive Basic header. */
@@ -148,8 +158,7 @@ public class AzureDevopsApiClient implements RepositoryApiClient {
      *       the hostname, so without it a host like {@code tfs.example.com} serving a
      *       collection named {@code tfs} would wrongly look already-scoped.</li>
      *   <li>the organization as the URL path's last segment — an Azure DevOps Server
-     *       collection, and also the {@code https://dev.azure.com/contoso} misconfiguration
-     *       the setup guide warns against, which this makes harmless.</li>
+     *       collection, or {@code https://dev.azure.com/contoso} for a single organization.</li>
      * </ul>
      */
     private static boolean scopesOrganization(String url, String organization) {
@@ -186,7 +195,7 @@ public class AzureDevopsApiClient implements RepositoryApiClient {
     private Scope repositoryScope(AzureDevopsAddress addr) {
         // org, project and name stay separate template variables: a combined
         // "Project/Repository" value is encoded to %2F and 404s.
-        if (scopesOrganization(credentials.baseUrl(), addr.organization())) {
+        if (scopesOrganization(baseUrl, addr.organization())) {
             return new Scope("/{project}/_apis/git/repositories/{name}",
                     new Object[]{addr.project(), addr.name()});
         }
@@ -196,7 +205,7 @@ public class AzureDevopsApiClient implements RepositoryApiClient {
 
     /** The path prefix addressing the organization itself, for organization-level APIs. */
     private Scope organizationScope(AzureDevopsAddress addr) {
-        if (scopesOrganization(credentials.baseUrl(), addr.organization())) {
+        if (scopesOrganization(baseUrl, addr.organization())) {
             return new Scope("/_apis", new Object[0]);
         }
         return new Scope("/{org}/_apis", new Object[]{addr.organization()});
@@ -224,7 +233,7 @@ public class AzureDevopsApiClient implements RepositoryApiClient {
     @Override
     public String getRepositoryRemote(String owner, String repo) {
         AzureDevopsAddress addr = AzureDevopsAddress.parse(owner, repo);
-        String base = RepositoryApiClient.validatedCloneBaseUrl(getCloneUrl());
+        String base = RepositoryApiClient.validatedCloneBaseUrl(cloneUrl);
         String organizationSegment = scopesOrganization(base, addr.organization())
                 ? "" : "/" + addr.organization();
         return base + organizationSegment + "/" + addr.project() + "/_git/" + addr.name();
@@ -257,7 +266,7 @@ public class AzureDevopsApiClient implements RepositoryApiClient {
             return null;
         }
 
-        return gitDiffService.diffCommits(this, owner, repo, diffRange.baseSha, diffRange.headSha);
+        return gitDiffService.diffCommits(this, httpCredentials.get(), owner, repo, diffRange.baseSha, diffRange.headSha);
     }
 
     /**
@@ -903,6 +912,115 @@ public class AzureDevopsApiClient implements RepositoryApiClient {
                 + "skipping vote", addr.organization());
         cachedReviewerIds.put(cacheKey, NO_IDENTITY);
         return null;
+    }
+
+    /**
+     * Resolves the identity from {@code connectionData}. Its {@code id} is the same at account
+     * and organization level and is what webhook payloads and {@code @<id>} mentions identify the
+     * bot by. The username is the {@code Account} property, which on Azure DevOps Server lacks
+     * the domain of the {@code uniqueName}, so it is only informational. It is a UPN or an account
+     * name rather than a mailbox, so the e-mail address is read separately. A token without permission for that yields no
+     * e-mail, see {@link RepositoryUser#FALLBACK_EMAIL}.
+     * <p>
+     * {@code connectionData} only answers inside a scope the token may access. An integration on
+     * bare {@code https://dev.azure.com} serves any organization, so it asks the account-level
+     * host, which only accepts tokens scoped to all accessible organizations. Every other
+     * integration URL already names its organization or server, so it asks that.
+     */
+    @Override
+    public RepositoryUser getAuthenticatedUser() {
+        boolean accountLevel = servesAnyOrganization(baseUrl);
+        RestClient.RequestHeadersSpec<?> request = accountLevel
+                ? restClient.get().uri(URI.create(
+                        ACCOUNT_CONNECTION_DATA_URL + "?api-version=" + API_VERSION_CONNECTION_DATA))
+                : restClient.get().uri(builder -> builder
+                        .path("/_apis/connectionData")
+                        .queryParam("api-version", API_VERSION_CONNECTION_DATA)
+                        .build());
+        ConnectionData data;
+        try {
+            data = request.retrieve().body(ConnectionData.class);
+        } catch (RestClientException e) {
+            if (accountLevel) {
+                throw new IllegalStateException("Azure DevOps did not identify the token on "
+                        + "https://dev.azure.com: use a token scoped to all accessible organizations, "
+                        + "or add the organization to the integration URL (" + e.getMessage() + ")", e);
+            }
+            throw e;
+        }
+        ConnectionData.Identity identity = data == null ? null : data.getAuthenticatedUser();
+        if (identity != null && identity.getId() != null && !identity.getId().isBlank()
+                && identity.getDisplayName() != null) {
+            return new RepositoryUser(identity.getId(), identity.getDisplayName(), identity.getProviderDisplayName(),
+                    accountLevel ? fetchProfileEmail() : fetchIdentityEmail(identity.getId()));
+        }
+        throw new IllegalStateException("Azure DevOps returned no authenticated identity");
+    }
+
+    /** Reads the e-mail address where a token scoped to all accessible organizations may ask. */
+    private String fetchProfileEmail() {
+        try {
+            ConnectionData.Profile profile = restClient.get()
+                    .uri(URI.create(ACCOUNT_PROFILE_URL + "?api-version=" + API_VERSION_EMAIL))
+                    .retrieve()
+                    .body(ConnectionData.Profile.class);
+            return profile == null ? null : profile.getEmailAddress();
+        } catch (HttpClientErrorException.Unauthorized | HttpClientErrorException.Forbidden e) {
+            log.warn("The Azure DevOps token may not read the account e-mail, so commits will not link to the "
+                    + "profile: give it the User Profile (Read) scope");
+            return null;
+        }
+    }
+
+    /** Reads the e-mail address from the identity service of the organization or server. */
+    private String fetchIdentityEmail(String identityId) {
+        String query = "/_apis/identities?identityIds=" + identityId
+                + "&queryMembership=None&api-version=" + API_VERSION_EMAIL;
+        try {
+            String identityHost = identityServiceUrl(baseUrl);
+            ConnectionData.Identities identities = (identityHost != null
+                    ? restClient.get().uri(URI.create(identityHost + query))
+                    : restClient.get().uri(query))
+                    .retrieve()
+                    .body(ConnectionData.Identities.class);
+            if (identities == null || identities.getValue() == null || identities.getValue().isEmpty()) {
+                return null;
+            }
+            return identities.getValue().getFirst().getMail();
+        } catch (HttpClientErrorException.Unauthorized | HttpClientErrorException.Forbidden e) {
+            log.warn("The Azure DevOps token may not read the account e-mail, so commits will not link to the "
+                    + "profile: give it the Identity (Read) scope");
+            return null;
+        }
+    }
+
+    /**
+     * Returns the identity service of an Azure DevOps Services URL, which lives on its own host,
+     * or {@code null} for Azure DevOps Server, which serves it from the integration URL.
+     */
+    private static String identityServiceUrl(String url) {
+        URI uri = URI.create(url);
+        String host = uri.getHost();
+        if ("dev.azure.com".equalsIgnoreCase(host)) {
+            return "https://vssps.dev.azure.com" + uri.getPath().replaceAll("/+$", "");
+        }
+        if (host != null && host.toLowerCase(Locale.ROOT).endsWith(".visualstudio.com")) {
+            return "https://" + host.substring(0, host.length() - ".visualstudio.com".length())
+                    + ".vssps.visualstudio.com";
+        }
+        return null;
+    }
+
+    /** Whether {@code url} is bare {@code https://dev.azure.com}, which names no organization. */
+    private static boolean servesAnyOrganization(String url) {
+        URI uri;
+        try {
+            uri = URI.create(url);
+        } catch (IllegalArgumentException e) {
+            return false;
+        }
+        String path = uri.getPath();
+        return "dev.azure.com".equalsIgnoreCase(uri.getHost()) && (path == null || path.isBlank() || "/".equals(path));
     }
 
     record DiffRange(String baseSha, String headSha) {

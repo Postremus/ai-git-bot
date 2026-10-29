@@ -4,7 +4,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.remus.giteabot.repository.model.CommentId;
-import org.remus.giteabot.repository.model.RepositoryCredentials;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.client.MockRestServiceServer;
@@ -22,7 +21,7 @@ class GiteaProgressCommentTest {
         RestClient.Builder builder = RestClient.builder().baseUrl("https://gitea.example.com");
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
         GiteaApiClient client = new GiteaApiClient(builder.build(),
-                RepositoryCredentials.of("https://gitea.example.com", "https://gitea.example.com", "test-token"));
+                "https://gitea.example.com");
         server.expect(requestTo("https://gitea.example.com/api/v1/repos/owner/repo/issues/7/comments"))
                 .andExpect(method(HttpMethod.POST)).andExpect(content().json("{\"body\":\"README Sync starting\"}"))
                 .andRespond(withSuccess(response, MediaType.APPLICATION_JSON));
@@ -36,7 +35,7 @@ class GiteaProgressCommentTest {
         RestClient.Builder builder = RestClient.builder().baseUrl("https://gitea.example.com");
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
         GiteaApiClient client = new GiteaApiClient(builder.build(),
-                RepositoryCredentials.of("https://gitea.example.com", "https://gitea.example.com", "test-token"));
+                "https://gitea.example.com");
         server.expect(requestTo("https://gitea.example.com/api/v1/repos/owner/repo/issues/7/comments"))
                 .andExpect(method(HttpMethod.POST)).andExpect(content().json("{\"body\":\"Starting review\"}"))
                 .andRespond(withSuccess("{\"id\":2147483648,\"body\":\"Starting review\"}", MediaType.APPLICATION_JSON));
@@ -57,7 +56,7 @@ class GiteaProgressCommentTest {
         RestClient.Builder builder = RestClient.builder().baseUrl("https://gitea.example.com");
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
         GiteaApiClient client = new GiteaApiClient(builder.build(),
-                RepositoryCredentials.of("https://gitea.example.com", "https://gitea.example.com", "test-token"));
+                "https://gitea.example.com");
         server.expect(requestTo("https://gitea.example.com/api/v1/repos/owner/repo/issues/7/comments"))
                 .andRespond(withSuccess(response, MediaType.APPLICATION_JSON));
 

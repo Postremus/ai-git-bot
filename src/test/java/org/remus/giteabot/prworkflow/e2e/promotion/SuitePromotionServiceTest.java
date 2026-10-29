@@ -1,5 +1,7 @@
 package org.remus.giteabot.prworkflow.e2e.promotion;
 
+import org.remus.giteabot.repository.RepositoryConnection;
+import org.remus.giteabot.repository.RepositoryConnections;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -60,12 +62,12 @@ class SuitePromotionServiceTest {
         PrWorkflowRunRepository runRepository = mock(PrWorkflowRunRepository.class);
         repoClient = mock(RepositoryApiClient.class);
 
-        when(repositoryApiClientFactory.getApiClient(any())).thenReturn(repoClient);
+        when(repositoryApiClientFactory.getConnection(any())).thenReturn(RepositoryConnections.of(repoClient));
         when(repoClient.getDefaultBranch(anyString(), anyString())).thenReturn("main");
-        when(workspaceService.prepareWorkspace(any(RepositoryApiClient.class),
+        when(workspaceService.prepareWorkspace(any(RepositoryConnection.class),
                 anyString(), anyString(), anyString(), any()))
                 .thenReturn(WorkspaceResult.success(managedWorkspace));
-        when(workspaceService.preparePullRequestWorkspace(any(RepositoryApiClient.class),
+        when(workspaceService.preparePullRequestWorkspace(any(RepositoryConnection.class),
                 anyString(), anyString(), anyString(), any(),
                 eq(PullRequestWorkspaceMode.PUSH_BACK)))
                 .thenReturn(WorkspaceResult.success(managedWorkspace));
@@ -109,7 +111,7 @@ class SuitePromotionServiceTest {
         // File actually written.
         assertThat(workspace.resolve("tests/e2e/pr-7/login.spec.ts")).exists();
         verify(workspaceService).prepareWorkspace(
-                repoClient, "acme", "web", "feature/login", 7L);
+                RepositoryConnections.of(repoClient), "acme", "web", "feature/login", 7L);
         verify(managedWorkspace).commitAndPush(eq(expectedBranch),
                 anyString(), eq(true));
     }
@@ -130,7 +132,7 @@ class SuitePromotionServiceTest {
         assertThat(workspace.resolve("tests/e2e/checkout.spec.ts")).exists();
         assertThat(run.getFollowUpPrNumber()).isEqualTo(5050L);
         verify(workspaceService).prepareWorkspace(
-                eq(repoClient), eq("acme"), eq("web"), eq("main"), isNull());
+                eq(RepositoryConnections.of(repoClient)), eq("acme"), eq("web"), eq("main"), isNull());
     }
 
     @Test
@@ -173,7 +175,7 @@ class SuitePromotionServiceTest {
         assertThat(out.branch()).isEqualTo("feature/x");
         assertThat(workspace.resolve("tests/e2e/pr-3/smoke.spec.ts")).exists();
         verify(workspaceService).preparePullRequestWorkspace(
-                repoClient, "acme", "web", "feature/x", 3L,
+                RepositoryConnections.of(repoClient), "acme", "web", "feature/x", 3L,
                 PullRequestWorkspaceMode.PUSH_BACK);
         verify(managedWorkspace).commitAndPush(eq("feature/x"),
                 anyString(), eq(false));

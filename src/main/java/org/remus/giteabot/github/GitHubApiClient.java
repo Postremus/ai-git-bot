@@ -1,6 +1,8 @@
 package org.remus.giteabot.github;
 
 import lombok.extern.slf4j.Slf4j;
+import org.remus.giteabot.github.model.GitHubEmail;
+import org.remus.giteabot.github.model.GitHubPrivateUser;
 import org.remus.giteabot.github.model.GitHubCommit;
 import org.remus.giteabot.github.model.GitHubPullRequest;
 import org.remus.giteabot.github.model.GitHubReview;
@@ -12,14 +14,15 @@ import org.remus.giteabot.repository.RepositoryApiClient;
 import org.remus.giteabot.repository.WorkflowDispatchRequest;
 import org.remus.giteabot.repository.WorkflowRunStatus;
 import org.remus.giteabot.repository.model.CommentId;
+import org.remus.giteabot.repository.model.RepositoryUser;
 import org.remus.giteabot.repository.model.PullRequestCommit;
 import org.remus.giteabot.repository.model.PullRequestDetails;
 import org.remus.giteabot.repository.model.PullRequestHead;
-import org.remus.giteabot.repository.model.RepositoryCredentials;
 import org.remus.giteabot.repository.model.RepositoryTreeEntry;
 import org.remus.giteabot.repository.model.Review;
 import org.remus.giteabot.repository.model.ReviewComment;
 import org.springframework.core.ParameterizedTypeReference;
+import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClient;
 
 import java.util.List;
@@ -35,22 +38,56 @@ import java.util.Optional;
 public class GitHubApiClient implements RepositoryApiClient {
 
     private final RestClient restClient;
-    private final RepositoryCredentials credentials;
+    private final String cloneUrl;
 
     /**
-     * Creates a GitHubApiClient with the given RestClient and credentials.
+     * Creates a GitHubApiClient with the given RestClient and clone URL.
      *
      * @param restClient  pre-configured RestClient pointing at the GitHub API base URL
-     * @param credentials the repository credentials (base URL, clone URL, token)
+     * @param cloneUrl    the credential-free HTTP clone base URL
      */
-    public GitHubApiClient(RestClient restClient, RepositoryCredentials credentials) {
+    public GitHubApiClient(RestClient restClient, String cloneUrl) {
         this.restClient = restClient;
-        this.credentials = credentials;
+        this.cloneUrl = cloneUrl;
     }
 
     @Override
-    public RepositoryCredentials getCredentials() {
-        return credentials;
+    public String getRepositoryRemote(String owner, String repo) {
+        return RepositoryApiClient.httpRepositoryRemote(cloneUrl, owner, repo);
+    }
+
+    /**
+     * Resolves the account. {@code /user} only returns an e-mail address the account made public,
+     * so a private one is read from {@code /user/emails}. A token without permission for that
+     * yields no e-mail, see {@link RepositoryUser#FALLBACK_EMAIL}.
+     */
+    @Override
+    public RepositoryUser getAuthenticatedUser() {
+        GitHubPrivateUser user = restClient.get().uri("/user").retrieve().body(GitHubPrivateUser.class);
+        if (user == null) {
+            throw new IllegalStateException("GitHub returned no authenticated user");
+        }
+        if (user.getEmail() == null || user.getEmail().isBlank()) {
+            user.setEmail(fetchPrimaryEmail());
+        }
+        return user.toGitUser();
+    }
+
+    private String fetchPrimaryEmail() {
+        try {
+            GitHubEmail[] emails = restClient.get().uri("/user/emails").retrieve().body(GitHubEmail[].class);
+            if (emails != null) {
+                for (GitHubEmail email : emails) {
+                    if (email.isPrimary() && email.isVerified()) {
+                        return email.getEmail();
+                    }
+                }
+            }
+        } catch (HttpClientErrorException.Unauthorized | HttpClientErrorException.Forbidden e) {
+            log.warn("The GitHub token may not read the account e-mail, so commits will not link to the profile: "
+                    + "give it the user:email scope or the \"Email addresses\" permission, or make an address public");
+        }
+        return null;
     }
 
     @Override
@@ -105,9 +142,7 @@ public class GitHubApiClient implements RepositoryApiClient {
 
     @Override
     public String getPullRequestDiff(String owner, String repo, Long pullNumber) {
-        log.info("Fetching diff for PR #{} in {}/{} from baseUrl={}", pullNumber, owner, repo, credentials.baseUrl());
-        log.debug("Token present: {}, tokenLength: {}", credentials.token() != null && !credentials.token().isBlank(),
-                credentials.token() != null ? credentials.token().length() : 0);
+        log.info("Fetching diff for PR #{} in {}/{}", pullNumber, owner, repo);
         return restClient.get()
                 .uri("/repos/{owner}/{repo}/pulls/{pull_number}", owner, repo, pullNumber)
                 .header("Accept", "application/vnd.github.v3.diff")

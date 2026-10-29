@@ -15,6 +15,7 @@ import org.remus.giteabot.prworkflow.WorkflowToolSurface;
 import org.remus.giteabot.prworkflow.WorkflowToolSurfaceFactory;
 import org.remus.giteabot.prworkflow.e2e.SuiteLifecycleMode;
 import org.remus.giteabot.repository.RepositoryApiClient;
+import org.remus.giteabot.repository.RepositoryConnection;
 import org.remus.giteabot.systemsettings.SystemPrompt;
 
 import java.io.IOException;
@@ -51,7 +52,7 @@ public class I18nCoverageService {
     static final int MAX_LOCALE_FILE_CHARS = 40_000;
     static final int MAX_LOCALE_CONTEXT_CHARS = 160_000;
 
-    private final RepositoryApiClient repositoryClient;
+    private final RepositoryConnection repositoryConnection;
     private final AiClient aiClient;
     private final SystemPrompt systemPrompt;
     private final WorkspaceService workspaceService;
@@ -92,7 +93,7 @@ public class I18nCoverageService {
             return Result.skipped("No include patterns configured");
         }
 
-        String headBranch = PrPayloadHydrator.resolveHeadBranch(repositoryClient, payload, owner, repo, prNumber);
+        String headBranch = PrPayloadHydrator.resolveHeadBranch(repositoryConnection.getClient(), payload, owner, repo, prNumber);
         if (headBranch == null) {
             // Never fall back to the default branch: this workflow clones the head
             // branch and (in commit/offer modes) pushes to it.
@@ -107,7 +108,7 @@ public class I18nCoverageService {
         try {
             if (request.lifecycleMode() == SuiteLifecycleMode.OFFER_AS_PR
                     && workspaceService.isAuthoritativePullRequestFromFork(
-                            repositoryClient, owner, repo, headBranch, prNumber)) {
+                            repositoryConnection.getClient(), owner, repo, headBranch, prNumber)) {
                 postComment(owner, repo, prNumber, I18nCoverageSummaryRenderer.renderFailed(prNumber,
                         "offer-as-pr is not supported for fork pull requests; no branch was pushed."));
                 return Result.failed("offer-as-pr is not supported for fork pull requests");
@@ -115,10 +116,10 @@ public class I18nCoverageService {
             context.requireActive("before preparing i18n-coverage workspace");
             WorkspaceResult ws = request.lifecycleMode() == SuiteLifecycleMode.COMMIT_TO_PR
                     ? workspaceService.preparePullRequestWorkspace(
-                            repositoryClient, owner, repo, headBranch, prNumber,
+                            repositoryConnection, owner, repo, headBranch, prNumber,
                             PullRequestWorkspaceMode.PUSH_BACK)
                     : workspaceService.prepareWorkspace(
-                            repositoryClient, owner, repo, headBranch, prNumber);
+                            repositoryConnection, owner, repo, headBranch, prNumber);
             if (!ws.success()) {
                 postComment(owner, repo, prNumber, I18nCoverageSummaryRenderer.renderFailed(prNumber,
                         "failed to prepare workspace: " + ws.error()));
@@ -150,9 +151,9 @@ public class I18nCoverageService {
 
                 I18nCoverageToolContext toolContext =
                         new I18nCoverageToolContext(workspace.path(), request.includePatterns());
-                String diff = repositoryClient.getPullRequestDiff(owner, repo, prNumber);
+                String diff = repositoryConnection.getClient().getPullRequestDiff(owner, repo, prNumber);
                 String kickoff = buildKickoffMessage(workspace.path(), request, prTitle, prBody, diff, report);
-                WorkflowToolSurface surface = surfaceFactory.create(request.context().bot(), repositoryClient,
+                WorkflowToolSurface surface = surfaceFactory.create(request.context().bot(), repositoryConnection.getClient(),
                         I18nCoverageAgent.WORKFLOW_TOOLS, owner, repo, prNumber, workspace);
 
                 context.requireActive("before running i18n-coverage agent");
@@ -225,7 +226,7 @@ public class I18nCoverageService {
             }
             Long followUp;
             try {
-                followUp = repositoryClient.createPullRequest(owner, repo,
+                followUp = repositoryConnection.getClient().createPullRequest(owner, repo,
                         "Sync translation coverage for PR #" + prNumber,
                         "Automated i18n coverage sync for PR #" + prNumber + ".", workBranch, headBranch);
             } catch (RuntimeException e) {
@@ -381,7 +382,7 @@ public class I18nCoverageService {
 
     private void postComment(String owner, String repo, long prNumber, String body) {
         try {
-            repositoryClient.postPullRequestComment(owner, repo, prNumber, body);
+            repositoryConnection.getClient().postPullRequestComment(owner, repo, prNumber, body);
         } catch (RuntimeException e) {
             log.warn("Failed to post i18n-coverage comment on PR #{}: {}", prNumber, e.getMessage());
         }
@@ -389,7 +390,7 @@ public class I18nCoverageService {
 
     private void postReviewComment(String owner, String repo, long prNumber, String body) {
         try {
-            repositoryClient.postReviewComment(owner, repo, prNumber, body);
+            repositoryConnection.getClient().postReviewComment(owner, repo, prNumber, body);
         } catch (RuntimeException e) {
             log.warn("Failed to post i18n-coverage review comment on PR #{}: {}", prNumber, e.getMessage());
         }

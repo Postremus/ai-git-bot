@@ -20,6 +20,7 @@ import org.remus.giteabot.prworkflow.unittest.runner.UnitTestRunRequest;
 import org.remus.giteabot.prworkflow.unittest.runner.UnitTestRunner;
 import org.remus.giteabot.prworkflow.unittest.tools.UnitTestToolContext;
 import org.remus.giteabot.repository.RepositoryApiClient;
+import org.remus.giteabot.repository.RepositoryConnection;
 import org.remus.giteabot.systemsettings.SystemPrompt;
 
 import java.nio.file.Path;
@@ -47,7 +48,7 @@ public class UnitTestService {
     static final int MAX_FILE_CONTEXT_CHARS = 80_000;
     static final int MAX_CHANGED_FILES_IN_CONTEXT = 25;
 
-    private final RepositoryApiClient repositoryClient;
+    private final RepositoryConnection repositoryConnection;
     private final AiClient aiClient;
     private final SystemPrompt systemPrompt;
 
@@ -83,14 +84,14 @@ public class UnitTestService {
         String repo = payload.getRepository().getName();
         long prNumber = PrPayloadHydrator.resolvePrNumberOrZero(payload);
 
-        String diff = repositoryClient.getPullRequestDiff(owner, repo, prNumber);
+        String diff = repositoryConnection.getClient().getPullRequestDiff(owner, repo, prNumber);
         if (diff == null || diff.isBlank()) {
             postComment(owner, repo, prNumber,
                     UnitTestSummaryRenderer.renderSkipped(prNumber, "the pull request has no diff."));
             return Result.skipped("No diff");
         }
 
-        String headBranch = PrPayloadHydrator.resolveHeadBranch(repositoryClient, payload, owner, repo, prNumber);
+        String headBranch = PrPayloadHydrator.resolveHeadBranch(repositoryConnection.getClient(), payload, owner, repo, prNumber);
         if (headBranch == null) {
             // Never fall back to the default branch: this workflow clones the head
             // branch and (in commit-to-pr mode) pushes generated tests to it.
@@ -108,10 +109,10 @@ public class UnitTestService {
             context.requireActive("before preparing unit-test workspace");
             WorkspaceResult ws = request.lifecycleMode() == SuiteLifecycleMode.COMMIT_TO_PR
                     ? workspaceService.preparePullRequestWorkspace(
-                            repositoryClient, owner, repo, headBranch, prNumber,
+                            repositoryConnection, owner, repo, headBranch, prNumber,
                             PullRequestWorkspaceMode.PUSH_BACK)
                     : workspaceService.prepareWorkspace(
-                            repositoryClient, owner, repo, headBranch, prNumber);
+                            repositoryConnection, owner, repo, headBranch, prNumber);
             if (!ws.success()) {
                 postComment(owner, repo, prNumber,
                         UnitTestSummaryRenderer.renderFailed(prNumber,
@@ -170,7 +171,7 @@ public class UnitTestService {
 
         String kickoff = buildKickoffMessage(owner, repo, headRef, framework, prTitle, prBody, diff);
         UnitTestToolContext toolContext = new UnitTestToolContext(suite, workspace.path(), framework);
-        WorkflowToolSurface surface = surfaceFactory.create(context.bot(), repositoryClient,
+        WorkflowToolSurface surface = surfaceFactory.create(context.bot(), repositoryConnection.getClient(),
                 UnitTestAuthorAgent.WORKFLOW_TOOLS, owner, repo, prNumber, workspace);
 
         context.requireActive("before running unit-test author agent");
@@ -300,7 +301,7 @@ public class UnitTestService {
                 break;
             }
             try {
-                String content = repositoryClient.getFileContent(owner, repo, path, ref);
+                String content = repositoryConnection.getClient().getFileContent(owner, repo, path, ref);
                 if (content != null && !content.isEmpty()) {
                     sb.append("--- File: ").append(path).append(" ---\n");
                     sb.append(content).append("\n\n");
@@ -348,7 +349,7 @@ public class UnitTestService {
 
     private void postComment(String owner, String repo, long prNumber, String body) {
         try {
-            repositoryClient.postPullRequestComment(owner, repo, prNumber, body);
+            repositoryConnection.getClient().postPullRequestComment(owner, repo, prNumber, body);
         } catch (RuntimeException e) {
             log.warn("Failed to post unit-test comment on PR #{}: {}", prNumber, e.getMessage());
         }
@@ -356,7 +357,7 @@ public class UnitTestService {
 
     private void postReviewComment(String owner, String repo, long prNumber, String body) {
         try {
-            repositoryClient.postReviewComment(owner, repo, prNumber, body);
+            repositoryConnection.getClient().postReviewComment(owner, repo, prNumber, body);
         } catch (RuntimeException e) {
             log.warn("Failed to post unit-test review comment on PR #{}: {}", prNumber, e.getMessage());
         }

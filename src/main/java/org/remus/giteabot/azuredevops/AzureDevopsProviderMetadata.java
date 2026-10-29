@@ -1,13 +1,16 @@
 package org.remus.giteabot.azuredevops;
 
+import java.time.Duration;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.jspecify.annotations.Nullable;
 import org.remus.giteabot.admin.GitIntegration;
 import org.remus.giteabot.agent.validation.GitDiffService;
-import org.remus.giteabot.repository.RepositoryApiClient;
 import org.remus.giteabot.repository.RepositoryProviderMetadata;
 import org.remus.giteabot.repository.RepositoryType;
-import org.remus.giteabot.repository.model.RepositoryCredentials;
+import org.remus.giteabot.repository.RepositoryConnection;
+import org.remus.giteabot.repository.model.HttpCredentials;
+import org.remus.giteabot.repository.model.SshCredentials;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
@@ -15,24 +18,25 @@ import org.springframework.web.client.RestClient;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 
+import java.util.function.Supplier;
+
 /**
  * Metadata and factory for Azure DevOps repository integration.
  * <p>
- * {@code GitIntegration.url} holds the instance root, in one of four shapes:
+ * {@code GitIntegration.url} holds the instance root, in one of five shapes:
  * <pre>
  * https://dev.azure.com                          Azure DevOps Services (many organizations)
+ * https://dev.azure.com/{organization}           Azure DevOps Services (one organization)
  * https://{organization}.visualstudio.com        Azure DevOps Services, legacy host (one organization)
  * https://{host}/tfs                             Azure DevOps Server, no collection (many collections)
  * https://{host}/tfs/{collection}                Azure DevOps Server, with collection (one collection)
  * </pre>
- * The first and third carry no organization (collection), so one integration serves any
- * number of them, each resolved per event from the webhook payload. The legacy host and the
- * Server URL with a collection pin the organization (or collection) into the URL itself and
- * therefore need one integration each — {@code AzureDevopsApiClient#scopesOrganization}
- * detects this and omits the organization from request paths so it is not addressed twice.
- * <p>
- * {@code https://dev.azure.com/{organization}} is not a valid shape: the organization is
- * appended by the bot.
+ * The first and fourth carry no organization (collection), so one integration serves any
+ * number of them, each resolved per event from the webhook payload; on {@code https://dev.azure.com}
+ * that needs a token scoped to all accessible organizations. The other shapes pin the
+ * organization (or collection) into the URL itself and therefore need one integration each —
+ * {@code AzureDevopsApiClient#scopesOrganization} detects this and omits the organization from
+ * request paths so it is not addressed twice.
  * <p>
  * The API and clone base URLs are identical in all shapes.
  * <p>
@@ -86,15 +90,17 @@ public class AzureDevopsProviderMetadata implements RepositoryProviderMetadata {
     }
 
     @Override
-    public RepositoryCredentials createCredentials(GitIntegration integration,
-                                                   String decryptedToken) {
-        String url = resolveApiUrl(integration);
-        return RepositoryCredentials.of(url, url, integration.getUsername(), decryptedToken);
+    public HttpCredentials createHttpCredentials(GitIntegration integration, String decryptedToken) {
+        return new HttpCredentials(integration.getUsername(), decryptedToken);
     }
 
     @Override
-    public RepositoryApiClient createClient(RestClient restClient,
-                                            RepositoryCredentials credentials) {
-        return new AzureDevopsApiClient(restClient, credentials, gitDiffService);
+    public RepositoryConnection createConnection(GitIntegration integration, RestClient restClient,
+                                                 Supplier<HttpCredentials> httpCredentials,
+                                                 @Nullable Supplier<SshCredentials> sshCredentials,
+                                                 Duration userTtl) {
+        String url = resolveApiUrl(integration);
+        return new RepositoryConnection(url, url, httpCredentials, sshCredentials,
+                new AzureDevopsApiClient(restClient, url, url, httpCredentials, gitDiffService), userTtl);
     }
 }

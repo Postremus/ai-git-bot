@@ -7,7 +7,7 @@ import org.remus.giteabot.admin.RepositoryApiClientFactory;
 import org.remus.giteabot.agent.validation.WorkspaceService;
 import org.remus.giteabot.ai.AiClient;
 import org.remus.giteabot.prworkflow.WorkflowToolSurfaceFactory;
-import org.remus.giteabot.repository.RepositoryApiClient;
+import org.remus.giteabot.repository.RepositoryConnection;
 import org.springframework.stereotype.Component;
 
 /**
@@ -30,8 +30,8 @@ public class I18nCoverageServiceFactory {
             throw new IllegalStateException("Bot must have a system prompt assigned");
         }
         AiClient aiClient = aiClientFactory.getClient(bot.getAiIntegration());
-        RepositoryApiClient repoClient = repositoryApiClientFactory.getApiClient(bot.getGitIntegration());
-        return new I18nCoverageService(repoClient, aiClient, bot.getSystemPrompt(),
+        RepositoryConnection connection = repositoryApiClientFactory.getConnection(bot.getGitIntegration());
+        return new I18nCoverageService(connection, aiClient, bot.getSystemPrompt(),
                 workspaceService, agent, surfaceFactory);
     }
 }

@@ -8,7 +8,6 @@ import org.remus.giteabot.bitbucket.BitbucketApiClient;
 import org.remus.giteabot.gitea.GiteaApiClient;
 import org.remus.giteabot.github.GitHubApiClient;
 import org.remus.giteabot.gitlab.GitLabApiClient;
-import org.remus.giteabot.repository.model.RepositoryCredentials;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.client.MockRestServiceServer;
@@ -69,12 +68,12 @@ class PullRequestWriteStateTest {
     }
 
     private static RepositoryApiClient client(String provider, RestClient restClient) {
-        RepositoryCredentials credentials = RepositoryCredentials.of("https://git.example", "https://git.example", "");
+        String cloneUrl = "https://git.example";
         return switch (provider) {
-            case "gitea" -> new GiteaApiClient(restClient, credentials);
-            case "github" -> new GitHubApiClient(restClient, credentials);
-            case "gitlab" -> new GitLabApiClient(restClient, credentials);
-            case "bitbucket" -> new BitbucketApiClient(restClient, credentials);
+            case "gitea" -> new GiteaApiClient(restClient, cloneUrl);
+            case "github" -> new GitHubApiClient(restClient, cloneUrl);
+            case "gitlab" -> new GitLabApiClient(restClient, cloneUrl);
+            case "bitbucket" -> new BitbucketApiClient(restClient, cloneUrl);
             default -> throw new IllegalArgumentException(provider);
         };
     }

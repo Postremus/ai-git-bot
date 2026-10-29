@@ -1,6 +1,7 @@
 package org.remus.giteabot.gitlab;
 
 import lombok.extern.slf4j.Slf4j;
+import org.remus.giteabot.gitlab.model.GitLabUserPublic;
 import org.remus.giteabot.gitlab.model.GitLabCommit;
 import org.remus.giteabot.gitlab.model.GitLabReview;
 import org.remus.giteabot.gitlab.model.GitLabReviewComment;
@@ -13,9 +14,9 @@ import org.remus.giteabot.repository.RepositoryApiClient;
 import org.remus.giteabot.repository.WorkflowDispatchRequest;
 import org.remus.giteabot.repository.WorkflowRunStatus;
 import org.remus.giteabot.repository.model.CommentId;
+import org.remus.giteabot.repository.model.RepositoryUser;
 import org.remus.giteabot.repository.model.PullRequestCommit;
 import org.remus.giteabot.repository.model.PullRequestHead;
-import org.remus.giteabot.repository.model.RepositoryCredentials;
 import org.remus.giteabot.repository.model.RepositoryTreeEntry;
 import org.remus.giteabot.repository.model.Review;
 import org.remus.giteabot.repository.model.ReviewComment;
@@ -43,22 +44,32 @@ public class GitLabApiClient implements RepositoryApiClient {
     private static final String SOURCE_BRANCH = "source_branch";
     private static final String DISCUSSION_PATH = "/api/v4/projects/{projectPath}/merge_requests/{iid}/discussions";
     private final RestClient gitlabRestClient;
-    private final RepositoryCredentials credentials;
+    private final String cloneUrl;
 
     /**
-     * Creates a GitLabApiClient with the given RestClient and credentials.
+     * Creates a GitLabApiClient with the given RestClient and clone URL.
      *
      * @param restClient  pre-configured RestClient pointing at the GitLab API base URL
-     * @param credentials the repository credentials (base URL, clone URL, token)
+     * @param cloneUrl    the credential-free HTTP clone base URL
      */
-    public GitLabApiClient(RestClient restClient, RepositoryCredentials credentials) {
+    public GitLabApiClient(RestClient restClient, String cloneUrl) {
         this.gitlabRestClient = restClient;
-        this.credentials = credentials;
+        this.cloneUrl = cloneUrl;
     }
 
     @Override
-    public RepositoryCredentials getCredentials() {
-        return credentials;
+    public String getRepositoryRemote(String owner, String repo) {
+        return RepositoryApiClient.httpRepositoryRemote(cloneUrl, owner, repo);
+    }
+
+    @Override
+    public RepositoryUser getAuthenticatedUser() {
+        GitLabUserPublic user = gitlabRestClient.get().uri("/api/v4/user")
+                .retrieve().body(GitLabUserPublic.class);
+        if (user == null) {
+            throw new IllegalStateException("GitLab returned no authenticated user");
+        }
+        return user.toGitUser();
     }
 
     @Override

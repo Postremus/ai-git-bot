@@ -15,7 +15,7 @@ import org.remus.giteabot.config.AgentConfigProperties;
 import org.remus.giteabot.eventhook.EventHookPublisher;
 import org.remus.giteabot.mcp.McpOrchestrationService;
 import org.remus.giteabot.mcp.McpToolCatalog;
-import org.remus.giteabot.repository.RepositoryApiClient;
+import org.remus.giteabot.repository.RepositoryConnection;
 import org.remus.giteabot.systemsettings.BotToolSelectionService;
 import org.remus.giteabot.systemsettings.McpToolSelectionService;
 import org.springframework.stereotype.Component;
@@ -42,7 +42,7 @@ public class AgentReviewServiceFactory {
             throw new IllegalStateException("Bot must have a system prompt assigned");
         }
         AiClient aiClient = aiClientFactory.getClient(bot.getAiIntegration());
-        RepositoryApiClient repoClient = repositoryApiClientFactory.getApiClient(bot.getGitIntegration());
+        RepositoryConnection connection = repositoryApiClientFactory.getConnection(bot.getGitIntegration());
         McpToolCatalog mcpToolCatalog = mcpToolSelectionService.filterCatalogForPrompt(
                 bot.getMcpConfiguration(),
                 mcpOrchestrationService.discoverTools(bot.getMcpConfiguration()));
@@ -50,7 +50,7 @@ public class AgentReviewServiceFactory {
         int contextWindowTokens = bot.getAiIntegration() != null
                 ? bot.getAiIntegration().getContextWindowTokens() : 200_000;
         AgentReviewContext context = new AgentReviewContext(
-                repoClient,
+                connection,
                 aiClient,
                 bot.getSystemPrompt().getReviewAgentSystemPrompt(),
                 bot.getGitIntegration().getUsername(),

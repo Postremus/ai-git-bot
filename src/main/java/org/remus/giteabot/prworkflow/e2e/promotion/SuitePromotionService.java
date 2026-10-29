@@ -14,6 +14,7 @@ import org.remus.giteabot.prworkflow.e2e.PrTestCase;
 import org.remus.giteabot.prworkflow.e2e.PrTestSuite;
 import org.remus.giteabot.prworkflow.e2e.SuiteLifecycleMode;
 import org.remus.giteabot.repository.RepositoryApiClient;
+import org.remus.giteabot.repository.RepositoryConnection;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
@@ -97,12 +98,13 @@ public class SuitePromotionService {
             return Outcome.alreadyPromoted(run.getFollowUpPrNumber());
         }
 
-        RepositoryApiClient client;
+        RepositoryConnection connection;
         try {
-            client = repositoryApiClientFactory.getApiClient(bot.getGitIntegration());
+            connection = repositoryApiClientFactory.getConnection(bot.getGitIntegration());
         } catch (RuntimeException e) {
             return Outcome.failure("Failed to obtain repository client: " + e.getMessage());
         }
+        RepositoryApiClient client = connection.getClient();
 
         long prNumber = suite.getPrNumber();
         if (mode == SuiteLifecycleMode.OFFER_AS_PR
@@ -137,10 +139,10 @@ public class SuitePromotionService {
 
         WorkspaceResult ws = mode == SuiteLifecycleMode.COMMIT_TO_PR
                 ? workspaceService.preparePullRequestWorkspace(
-                        client, repoOwner, repoName, baseBranch, prNumber,
+                        connection, repoOwner, repoName, baseBranch, prNumber,
                         PullRequestWorkspaceMode.PUSH_BACK)
                 : workspaceService.prepareWorkspace(
-                        client, repoOwner, repoName, baseBranch,
+                        connection, repoOwner, repoName, baseBranch,
                         mode == SuiteLifecycleMode.PROMOTE_ON_MERGE ? null : prNumber);
         if (!ws.success()) {
             return Outcome.failure("Workspace preparation failed: " + ws.error());

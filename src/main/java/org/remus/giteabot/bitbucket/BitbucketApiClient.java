@@ -2,6 +2,7 @@ package org.remus.giteabot.bitbucket;
 
 import lombok.extern.slf4j.Slf4j;
 import org.remus.giteabot.bitbucket.model.BitbucketCommit;
+import org.remus.giteabot.bitbucket.model.BitbucketEmail;
 import org.remus.giteabot.bitbucket.model.BitbucketReviewComment;
 import org.remus.giteabot.bitbucket.model.BitbucketTreeEntry;
 import org.remus.giteabot.repository.ArtifactCommentRenderer;
@@ -10,8 +11,8 @@ import org.remus.giteabot.repository.RepositoryApiClient;
 import org.remus.giteabot.repository.WorkflowDispatchRequest;
 import org.remus.giteabot.repository.WorkflowRunStatus;
 import org.remus.giteabot.repository.model.CommentId;
+import org.remus.giteabot.repository.model.RepositoryUser;
 import org.remus.giteabot.repository.model.PullRequestCommit;
-import org.remus.giteabot.repository.model.RepositoryCredentials;
 import org.remus.giteabot.repository.model.RepositoryTreeEntry;
 import org.remus.giteabot.repository.model.Review;
 import org.remus.giteabot.repository.model.ReviewComment;
@@ -22,7 +23,9 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
+import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.client.RestClientException;
 
 import java.nio.charset.StandardCharsets;
 import java.util.List;
@@ -39,23 +42,23 @@ import java.util.Optional;
 public class BitbucketApiClient implements RepositoryApiClient {
 
     private final RestClient restClient;
-    private final RepositoryCredentials credentials;
+    private final String cloneUrl;
     private volatile BitbucketAccount authenticatedAccount;
 
     /**
-     * Creates a BitbucketApiClient with the given RestClient and credentials.
+     * Creates a BitbucketApiClient with the given RestClient and clone URL.
      *
      * @param restClient  pre-configured RestClient pointing at the Bitbucket API base URL
-     * @param credentials the repository credentials (base URL, clone URL, username, token)
+     * @param cloneUrl    the credential-free HTTP clone base URL
      */
-    public BitbucketApiClient(RestClient restClient, RepositoryCredentials credentials) {
+    public BitbucketApiClient(RestClient restClient, String cloneUrl) {
         this.restClient = restClient;
-        this.credentials = credentials;
+        this.cloneUrl = cloneUrl;
     }
 
     @Override
-    public RepositoryCredentials getCredentials() {
-        return credentials;
+    public String getRepositoryRemote(String owner, String repo) {
+        return RepositoryApiClient.httpRepositoryRemote(cloneUrl, owner, repo);
     }
 
     /**
@@ -67,16 +70,53 @@ public class BitbucketApiClient implements RepositoryApiClient {
     public BitbucketAccount getAuthenticatedAccount() {
         BitbucketAccount account = authenticatedAccount;
         if (account == null) {
-            account = restClient.get()
-                    .uri("/user")
-                    .retrieve()
-                    .body(BitbucketAccount.class);
-            if (account == null || (account.accountId() == null && account.uuid() == null)) {
-                throw new IllegalStateException("Bitbucket /user returned neither account_id nor uuid");
-            }
+            account = fetchAuthenticatedAccount();
             authenticatedAccount = account;
         }
         return account;
+    }
+
+    /**
+     * The username is the nickname (else the display name), matching how webhook payload users
+     * are translated. Bitbucket only returns the e-mail address from a second endpoint. A token
+     * without permission for that yields no e-mail, see {@link RepositoryUser#FALLBACK_EMAIL}.
+     */
+    @Override
+    public RepositoryUser getAuthenticatedUser() {
+        BitbucketAccount account = fetchAuthenticatedAccount();
+        String username = account.nickname() != null ? account.nickname() : account.displayName();
+        return new RepositoryUser(account.accountId(), username, account.displayName(), fetchPrimaryEmail());
+    }
+
+    private BitbucketAccount fetchAuthenticatedAccount() {
+        BitbucketAccount account = restClient.get()
+                .uri("/user")
+                .retrieve()
+                .body(BitbucketAccount.class);
+        if (account == null || (account.accountId() == null && account.uuid() == null)) {
+            throw new IllegalStateException("Bitbucket /user returned neither account_id nor uuid");
+        }
+        return account;
+    }
+
+    private String fetchPrimaryEmail() {
+        try {
+            BitbucketEmail.Page page = restClient.get()
+                    .uri("/user/emails")
+                    .retrieve()
+                    .body(BitbucketEmail.Page.class);
+            if (page != null && page.getValues() != null) {
+                for (BitbucketEmail email : page.getValues()) {
+                    if (email.isPrimary() && email.getEmail() != null) {
+                        return email.getEmail();
+                    }
+                }
+            }
+        } catch (HttpClientErrorException.Unauthorized | HttpClientErrorException.Forbidden e) {
+            log.warn("The Bitbucket token may not read the account e-mail, so commits will not link to the profile: "
+                    + "check that it has the read:user:bitbucket scope");
+        }
+        return null;
     }
 
     /**
@@ -101,7 +141,7 @@ public class BitbucketApiClient implements RepositoryApiClient {
 
     @Override
     public String getPullRequestDiff(String owner, String repo, Long pullNumber) {
-        log.info("Fetching diff for PR #{} in {}/{} from baseUrl={}", pullNumber, owner, repo, credentials.baseUrl());
+        log.info("Fetching diff for PR #{} in {}/{}", pullNumber, owner, repo);
         try {
             // Bitbucket Cloud's diff endpoint returns a 302 redirect to the actual diff
             // content; the auto-configured HttpComponents client follows redirects by default.
@@ -217,7 +257,7 @@ public class BitbucketApiClient implements RepositoryApiClient {
     }
 
     private String buildDownloadUrl(String workspace, String repo, String fileName) {
-        String base = credentials.cloneUrl();
+        String base = cloneUrl;
         if (base == null || base.isBlank()) {
             base = "https://bitbucket.org";
         }

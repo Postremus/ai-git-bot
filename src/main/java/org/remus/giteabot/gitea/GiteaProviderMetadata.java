@@ -1,15 +1,20 @@
 package org.remus.giteabot.gitea;
 
+import java.time.Duration;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.jspecify.annotations.Nullable;
 import org.remus.giteabot.admin.GitIntegration;
-import org.remus.giteabot.repository.RepositoryApiClient;
 import org.remus.giteabot.repository.RepositoryProviderMetadata;
 import org.remus.giteabot.repository.RepositoryType;
-import org.remus.giteabot.repository.model.RepositoryCredentials;
+import org.remus.giteabot.repository.RepositoryConnection;
+import org.remus.giteabot.repository.model.HttpCredentials;
+import org.remus.giteabot.repository.model.SshCredentials;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
+
+import java.util.function.Supplier;
 
 /**
  * Metadata and factory for Gitea repository integration.
@@ -69,16 +74,19 @@ public class GiteaProviderMetadata implements RepositoryProviderMetadata {
     }
 
     @Override
-    public RepositoryCredentials createCredentials(GitIntegration integration, String decryptedToken) {
-        String apiUrl = resolveApiUrl(integration);
-        String cloneUrl = resolveCloneUrl(integration);
-        return RepositoryCredentials.of(apiUrl, cloneUrl, decryptedToken);
+    public HttpCredentials createHttpCredentials(GitIntegration integration, String decryptedToken) {
+        return new HttpCredentials(null, decryptedToken);
     }
 
     @Override
-    public RepositoryApiClient createClient(RestClient restClient, RepositoryCredentials credentials) {
-        return new GiteaApiClient(restClient, credentials);
+    public RepositoryConnection createConnection(GitIntegration integration, RestClient restClient,
+                                                 Supplier<HttpCredentials> httpCredentials,
+                                                 @Nullable Supplier<SshCredentials> sshCredentials,
+                                                 Duration userTtl) {
+        String cloneUrl = resolveCloneUrl(integration);
+        boolean usesSsh = sshCredentials != null;
+        GiteaApiClient client = new GiteaApiClient(restClient, cloneUrl, usesSsh,
+                usesSsh ? integration.getSshKnownHosts() : null);
+        return new RepositoryConnection(resolveApiUrl(integration), cloneUrl, httpCredentials, sshCredentials, client, userTtl);
     }
 }
-
-

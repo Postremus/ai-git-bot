@@ -1,5 +1,6 @@
 package org.remus.giteabot.prworkflow.readmesync;
 
+import org.remus.giteabot.repository.RepositoryConnections;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -16,7 +17,6 @@ import org.remus.giteabot.prworkflow.e2e.SuiteLifecycleMode;
 import org.remus.giteabot.repository.RepositoryApiClient;
 import org.remus.giteabot.repository.model.PullRequestDetails;
 import org.remus.giteabot.repository.model.PullRequestState;
-import org.remus.giteabot.repository.model.RepositoryCredentials;
 import org.remus.giteabot.systemsettings.SystemPrompt;
 
 import java.nio.charset.StandardCharsets;
@@ -62,7 +62,7 @@ class ReadmeSyncWritebackTest {
 
         client = mock(RepositoryApiClient.class, CALLS_REAL_METHODS);
         doReturn(remote.toString()).when(client).getRepositoryRemote("acme", "repo");
-        when(client.getCredentials()).thenReturn(RepositoryCredentials.of("", remote.toString(), ""));
+        doReturn(RepositoryConnections.USER).when(client).getAuthenticatedUser();
         when(client.getPullRequestDiff("acme", "repo", 42L)).thenReturn("diff --git a/x b/x\n+changed");
         when(client.getPullRequestDetails("acme", "repo", 42L))
                 .thenReturn(Optional.of(details(PullRequestState.OPEN)));
@@ -80,7 +80,7 @@ class ReadmeSyncWritebackTest {
             context.recordDeleted("obsolete.md");
             return new ReadmeSyncAgent.Result(3, "done", false);
         });
-        service = new ReadmeSyncService(client, mock(AiClient.class), new SystemPrompt(),
+        service = new ReadmeSyncService(RepositoryConnections.of(client), mock(AiClient.class), new SystemPrompt(),
                 new WorkspaceService(root.resolve("workspaces").toString(), 60), agent,
                 mock(WorkflowToolSurfaceFactory.class));
     }

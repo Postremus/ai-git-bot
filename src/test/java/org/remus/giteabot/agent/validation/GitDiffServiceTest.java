@@ -1,10 +1,12 @@
 package org.remus.giteabot.agent.validation;
 
+import org.remus.giteabot.repository.RepositoryConnections;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.remus.giteabot.repository.RepositoryApiClient;
-import org.remus.giteabot.repository.model.RepositoryCredentials;
+import org.remus.giteabot.repository.model.HttpCredentials;
+import org.remus.giteabot.repository.model.RepositoryUser;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -18,6 +20,8 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 class GitDiffServiceTest {
+
+    private static final HttpCredentials CREDENTIALS = new HttpCredentials(null, "token");
 
     @TempDir
     Path tempDir;
@@ -40,8 +44,6 @@ class GitDiffServiceTest {
         service = new GitDiffService(new WorkspaceService(workspaces.toString(), 60));
         client = mock(RepositoryApiClient.class);
         when(client.getRepositoryRemote("owner", "repo")).thenReturn(origin.toUri().toString());
-        when(client.getCredentials()).thenReturn(
-                RepositoryCredentials.of("https://git.example.com", "https://git.example.com", "token"));
     }
 
     @Test
@@ -53,7 +55,7 @@ class GitDiffServiceTest {
         git("mv", "b.txt", "c.txt");
         String head = commit();
 
-        String diff = service.diffCommits(client, "owner", "repo", base, head);
+        String diff = service.diffCommits(client, CREDENTIALS, "owner", "repo", base, head);
 
         assertThat(diff)
                 .contains("diff --git a/a.txt b/a.txt", "-two", "+changed")
@@ -94,7 +96,7 @@ class GitDiffServiceTest {
         write("README.md", "base\n");
         String head = commit();
 
-        assertThat(service.diffCommits(client, "owner", "repo", "0".repeat(40), head)).isNull();
+        assertThat(service.diffCommits(client, CREDENTIALS, "owner", "repo", "0".repeat(40), head)).isNull();
         assertNoWorkspaceLeft();
     }
 
@@ -105,7 +107,7 @@ class GitDiffServiceTest {
         Path marker = tempDir.resolve("injected");
         String injected = "--upload-pack=touch '" + marker.toAbsolutePath().toString().replace('\\', '/') + "'";
 
-        assertThat(service.diffCommits(client, "owner", "repo", injected, head)).isNull();
+        assertThat(service.diffCommits(client, CREDENTIALS, "owner", "repo", injected, head)).isNull();
         assertThat(marker).doesNotExist();
         assertNoWorkspaceLeft();
     }
@@ -114,7 +116,7 @@ class GitDiffServiceTest {
     void diffCommits_returnsNullWithoutAllocatingAWorkspaceWhenProviderResolutionFails() {
         when(client.getRepositoryRemote("owner", "repo")).thenThrow(new IllegalStateException("provider down"));
 
-        assertThat(service.diffCommits(client, "owner", "repo", "a".repeat(40), "b".repeat(40))).isNull();
+        assertThat(service.diffCommits(client, CREDENTIALS, "owner", "repo", "a".repeat(40), "b".repeat(40))).isNull();
         assertThat(workspaces).doesNotExist();
     }
 
@@ -122,8 +124,8 @@ class GitDiffServiceTest {
     void diffCommits_returnsNullAndCleansUpWhenGitInitFails() throws Exception {
         WorkspaceService failingInit = new WorkspaceService(workspaces.toString(), 60) {
             @Override
-            Workspace newWorkspace(Path workspaceRoot, Consumer<Workspace> onCleanedUp) {
-                return new Workspace(workspaceRoot, onCleanedUp) {
+            Workspace newWorkspace(Path workspaceRoot, java.util.function.Supplier<RepositoryUser> repositoryUser, Consumer<Workspace> onCleanedUp) {
+                return new Workspace(workspaceRoot, repositoryUser, onCleanedUp) {
                     @Override
                     CommandResult init() {
                         return new CommandResult(false, "init failed");
@@ -132,7 +134,7 @@ class GitDiffServiceTest {
             }
         };
 
-        assertThat(new GitDiffService(failingInit).diffCommits(client, "owner", "repo", "a".repeat(40), "b".repeat(40)))
+        assertThat(new GitDiffService(failingInit).diffCommits(client, CREDENTIALS, "owner", "repo", "a".repeat(40), "b".repeat(40)))
                 .isNull();
         assertNoWorkspaceLeft();
     }

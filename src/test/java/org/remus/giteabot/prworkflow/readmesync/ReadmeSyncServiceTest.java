@@ -1,5 +1,7 @@
 package org.remus.giteabot.prworkflow.readmesync;
 
+import org.remus.giteabot.repository.RepositoryConnection;
+import org.remus.giteabot.repository.RepositoryConnections;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -55,7 +57,7 @@ class ReadmeSyncServiceTest {
         agent = mock(ReadmeSyncAgent.class);
         AiClient aiClient = mock(AiClient.class);
         SystemPrompt systemPrompt = new SystemPrompt();
-        service = new ReadmeSyncService(repoClient, aiClient, systemPrompt, workspaceService, agent,
+        service = new ReadmeSyncService(RepositoryConnections.of(repoClient), aiClient, systemPrompt, workspaceService, agent,
                 mock(WorkflowToolSurfaceFactory.class));
 
         when(repoClient.getPullRequestDiff(anyString(), anyString(), anyLong()))
@@ -93,9 +95,9 @@ class ReadmeSyncServiceTest {
         assertThat(result.status()).isEqualTo(ReadmeSyncService.Result.Status.SKIPPED);
         // The critical guarantee: no clone and no push to any (default) branch.
         verify(workspaceService, never()).prepareWorkspace(
-                any(RepositoryApiClient.class), anyString(), anyString(), anyString(), anyLong());
+                any(RepositoryConnection.class), anyString(), anyString(), anyString(), anyLong());
         verify(workspaceService, never()).preparePullRequestWorkspace(
-                any(RepositoryApiClient.class), anyString(), anyString(), anyString(), anyLong(),
+                any(RepositoryConnection.class), anyString(), anyString(), anyString(), anyLong(),
                 eq(PullRequestWorkspaceMode.PUSH_BACK));
         verify(managedWorkspace, never()).commitAndPush(anyString(), anyString(), anyBoolean());
         // And it must never substitute the default branch.
@@ -109,7 +111,7 @@ class ReadmeSyncServiceTest {
         // Fail the workspace prep so the run stops right after resolution — we only
         // assert which branch it tried to clone.
         when(workspaceService.preparePullRequestWorkspace(
-                eq(repoClient), anyString(), anyString(), anyString(), anyLong(),
+                eq(RepositoryConnections.of(repoClient)), anyString(), anyString(), anyString(), anyLong(),
                 eq(PullRequestWorkspaceMode.PUSH_BACK)))
                 .thenReturn(WorkspaceResult.failure("stop here"));
 
@@ -117,7 +119,7 @@ class ReadmeSyncServiceTest {
 
         ArgumentCaptor<String> branch = ArgumentCaptor.forClass(String.class);
         verify(workspaceService).preparePullRequestWorkspace(
-                eq(repoClient), eq("acme"), eq("my-repo"), branch.capture(), eq(42L),
+                eq(RepositoryConnections.of(repoClient)), eq("acme"), eq("my-repo"), branch.capture(), eq(42L),
                 eq(PullRequestWorkspaceMode.PUSH_BACK));
         assertThat(branch.getValue()).isEqualTo("feature/login");
         verify(repoClient, never()).getDefaultBranch(anyString(), anyString());
@@ -130,7 +132,7 @@ class ReadmeSyncServiceTest {
         head.setRef("feature/from-payload");
         payload.getPullRequest().setHead(head);
         when(workspaceService.preparePullRequestWorkspace(
-                eq(repoClient), anyString(), anyString(), anyString(), anyLong(),
+                eq(RepositoryConnections.of(repoClient)), anyString(), anyString(), anyString(), anyLong(),
                 eq(PullRequestWorkspaceMode.PUSH_BACK)))
                 .thenReturn(WorkspaceResult.failure("stop here"));
 
@@ -138,7 +140,7 @@ class ReadmeSyncServiceTest {
 
         ArgumentCaptor<String> branch = ArgumentCaptor.forClass(String.class);
         verify(workspaceService).preparePullRequestWorkspace(
-                eq(repoClient), eq("acme"), eq("my-repo"), branch.capture(), eq(42L),
+                eq(RepositoryConnections.of(repoClient)), eq("acme"), eq("my-repo"), branch.capture(), eq(42L),
                 eq(PullRequestWorkspaceMode.PUSH_BACK));
         assertThat(branch.getValue()).isEqualTo("feature/from-payload");
         verify(repoClient, never()).getPullRequestDetails(anyString(), anyString(), anyLong());
@@ -170,7 +172,7 @@ class ReadmeSyncServiceTest {
         head.setRef("feature/docs");
         payload.getPullRequest().setHead(head);
         when(workspaceService.prepareWorkspace(
-                repoClient, "acme", "my-repo", "feature/docs", 42L))
+                RepositoryConnections.of(repoClient), "acme", "my-repo", "feature/docs", 42L))
                 .thenReturn(WorkspaceResult.success(managedWorkspace));
         when(managedWorkspace.path()).thenReturn(workspace);
         when(agent.write(any(), any(), any(), anyString(), any(), org.mockito.ArgumentMatchers.anyInt()))

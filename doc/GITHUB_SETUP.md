@@ -56,6 +56,7 @@ The bot authenticates against the GitHub API using a Personal Access Token.
 4. Give it a descriptive name (e.g., `ai-code-review-bot`)
 5. Select the following **scopes**:
    - ✅ `repo` — Full control of private repositories
+   - ✅ `user:email` — Read the bot's e-mail address, which links its commits to its profile
    - ✅ `write:discussion` — Write access to discussions (optional)
 6. Click **Generate token**
 7. **Copy the token immediately** — it will not be shown again
@@ -75,8 +76,14 @@ The bot authenticates against the GitHub API using a Personal Access Token.
      - ✅ `Issues`: Read and write
      - ✅ `Pull requests`: Read and write
      - ✅ `Metadata`: Read-only (required)
+   - **Account permissions:**
+     - ✅ `Email addresses`: Read-only (links the bot's commits to its profile)
 6. Click **Generate token**
 7. **Copy the token immediately** — it will not be shown again
+
+The scope and permission are not needed when the bot account has a public e-mail address on
+its profile. Without either, the bot commits as `ai-agent@bot.local`, which GitHub cannot link
+to its profile.
 
 You'll enter this token when creating a **Git Integration** in the bot's web UI.
 

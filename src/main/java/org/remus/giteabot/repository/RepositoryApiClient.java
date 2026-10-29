@@ -1,7 +1,7 @@
 package org.remus.giteabot.repository;
 
 import org.remus.giteabot.repository.model.CommentId;
-import org.remus.giteabot.repository.model.RepositoryCredentials;
+import org.remus.giteabot.repository.model.RepositoryUser;
 import org.remus.giteabot.repository.model.RepositoryTreeEntry;
 import org.remus.giteabot.repository.model.PullRequestCommit;
 import org.remus.giteabot.repository.model.PullRequestDetails;
@@ -29,28 +29,6 @@ import java.util.Optional;
  * entity stored in the database.
  */
 public interface RepositoryApiClient {
-
-    /**
-     * Returns the credentials used by this client: API base URL, credential-free
-     * HTTP clone base URL, username, and token, plus the selected Git transport
-     * and its SSH material (private key, {@code known_hosts}) when SSH is active.
-     */
-    RepositoryCredentials getCredentials();
-
-    /** Returns the API base URL of the repository provider (e.g. {@code https://api.github.com}). */
-    default String getBaseUrl() {
-        return getCredentials().baseUrl();
-    }
-
-    /**
-     * Returns the credential-free HTTP clone base URL (e.g. {@code https://github.com}).
-     * This is the HTTP-transport base only; the actual Git remote for clone, fetch,
-     * and push operations is resolved per repository by {@link #getRepositoryRemote},
-     * which providers may override to select SSH.
-     */
-    default String getCloneUrl() {
-        return getCredentials().cloneUrl();
-    }
 
     /**
      * Validates an HTTP clone base URL and returns it normalized: lower-case scheme, no
@@ -96,16 +74,18 @@ public interface RepositoryApiClient {
     }
 
     /**
-     * Resolves the complete, credential-free Git remote for one repository.
-     * Providers may override this to select a repository-specific transport; an override
-     * that still builds an HTTP remote must run its base URL through
-     * {@link #validatedCloneBaseUrl}.
+     * Resolves the complete, credential-free Git remote for one repository. An implementation
+     * building an HTTP remote must run its base URL through {@link #validatedCloneBaseUrl},
+     * see {@link #httpRepositoryRemote} for the common layout.
      */
-    default String getRepositoryRemote(String owner, String repo) {
+    String getRepositoryRemote(String owner, String repo);
+
+    /** Builds the {@code {base}/{owner}/{repo}.git} HTTP remote most providers use. */
+    static String httpRepositoryRemote(String cloneBaseUrl, String owner, String repo) {
         if (owner == null || owner.isBlank() || repo == null || repo.isBlank()) {
             throw new IllegalStateException("Repository remote cannot be resolved");
         }
-        return validatedCloneBaseUrl(getCloneUrl()) + "/" + owner + "/" + repo + ".git";
+        return validatedCloneBaseUrl(cloneBaseUrl) + "/" + owner + "/" + repo + ".git";
     }
 
     /**
@@ -118,10 +98,11 @@ public interface RepositoryApiClient {
         return false;
     }
 
-    /** Returns the authentication token used by this client. */
-    default String getToken() {
-        return getCredentials().token();
-    }
+    /**
+     * Fetches the account this client's token authenticates as. Callers that know the integration
+     * and ask often should go through {@link RepositoryConnection#getUser()}, which caches the result for a limited time.
+     */
+    RepositoryUser getAuthenticatedUser();
 
     /**
      * Returns the name users type after {@code @} to address the bot, for providers that

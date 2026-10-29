@@ -1,8 +1,13 @@
 package org.remus.giteabot.repository;
 
+import org.jspecify.annotations.Nullable;
 import org.remus.giteabot.admin.GitIntegration;
-import org.remus.giteabot.repository.model.RepositoryCredentials;
+import org.remus.giteabot.repository.model.HttpCredentials;
+import org.remus.giteabot.repository.model.SshCredentials;
 import org.springframework.web.client.RestClient;
+
+import java.time.Duration;
+import java.util.function.Supplier;
 
 /**
  * Metadata and factory interface for Git repository provider integrations.
@@ -26,21 +31,27 @@ public interface RepositoryProviderMetadata {
     RestClient buildRestClient(GitIntegration integration, String decryptedToken);
 
     /**
-     * Creates the credentials record from the Git integration configuration.
+     * Creates the credentials for Git over HTTP.
      *
      * @param integration    the Git integration configuration
      * @param decryptedToken the decrypted access token
-     * @return credentials containing all authentication information
+     * @return the HTTP Git username and password
      */
-    RepositoryCredentials createCredentials(GitIntegration integration, String decryptedToken);
+    HttpCredentials createHttpCredentials(GitIntegration integration, String decryptedToken);
 
     /**
-     * Creates a RepositoryApiClient instance for this provider.
+     * Creates the connection to this provider, including its API client.
      *
-     * @param restClient  the configured RestClient
-     * @param credentials the repository credentials
-     * @return configured RepositoryApiClient
+     * @param integration     the Git integration configuration
+     * @param restClient      the configured RestClient
+     * @param httpCredentials the credentials for Git over HTTP
+     * @param sshCredentials  the credentials for Git over SSH, or {@code null} when SSH is not selected
+     * @param userTtl         how long the account the token authenticates as is cached
+     * @return the connection
      */
-    RepositoryApiClient createClient(RestClient restClient, RepositoryCredentials credentials);
+    RepositoryConnection createConnection(GitIntegration integration, RestClient restClient,
+                                          Supplier<HttpCredentials> httpCredentials,
+                                          @Nullable Supplier<SshCredentials> sshCredentials,
+                                          Duration userTtl);
 }
 

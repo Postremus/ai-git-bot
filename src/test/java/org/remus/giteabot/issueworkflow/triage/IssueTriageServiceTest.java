@@ -1,5 +1,6 @@
 package org.remus.giteabot.issueworkflow.triage;
 
+import org.remus.giteabot.repository.RepositoryConnections;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -103,8 +104,8 @@ class IssueTriageServiceTest {
                 mcpOrchestrationService, mcpToolSelectionService, botToolSelectionService,
                 new AgentConfigProperties(), null);
         lenient().when(aiClientFactory.getClient(any())).thenReturn(aiClient);
-        lenient().when(repositoryApiClientFactory.getApiClient(any())).thenReturn(repoClient);
-        lenient().when(workspaceService.prepareWorkspace(eq(repoClient), anyString(), anyString(),
+        lenient().when(repositoryApiClientFactory.getConnection(any())).thenReturn(RepositoryConnections.of(repoClient));
+        lenient().when(workspaceService.prepareWorkspace(eq(RepositoryConnections.of(repoClient)), anyString(), anyString(),
                 anyString(), any()))
                 .thenReturn(WorkspaceResult.success(Workspace.unmanaged(Path.of("/tmp/triage-ws"))));
         lenient().when(repoClient.getDefaultBranch("owner", "repo")).thenReturn("main");
@@ -332,7 +333,7 @@ class IssueTriageServiceTest {
 
     @Test
     void workspacePreparationFails_postsErrorCommentAndFails() {
-        when(workspaceService.prepareWorkspace(eq(repoClient), anyString(), anyString(),
+        when(workspaceService.prepareWorkspace(eq(RepositoryConnections.of(repoClient)), anyString(), anyString(),
                 anyString(), any()))
                 .thenReturn(WorkspaceResult.failure("disk full"));
 

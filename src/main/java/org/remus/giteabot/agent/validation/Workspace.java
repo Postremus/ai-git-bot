@@ -2,7 +2,10 @@ package org.remus.giteabot.agent.validation;
 
 import lombok.extern.slf4j.Slf4j;
 import org.remus.giteabot.repository.SshEndpoint;
+import org.remus.giteabot.repository.model.RepositoryUser;
+import org.remus.giteabot.repository.model.HttpCredentials;
 import org.remus.giteabot.repository.model.RepositoryCredentials;
+import org.remus.giteabot.repository.model.SshCredentials;
 
 import java.io.File;
 import java.io.IOException;
@@ -24,6 +27,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
 import java.util.stream.Stream;
 
 /**
@@ -35,10 +39,6 @@ import java.util.stream.Stream;
  */
 @Slf4j
 public class Workspace implements AutoCloseable {
-
-    /** Git author and committer identity for commits the bot pushes. */
-    private static final String GIT_AUTHOR_NAME = "AI Agent";
-    private static final String GIT_AUTHOR_EMAIL = "ai-agent@bot.local";
 
     private static final String REPOSITORY_DIRECTORY_NAME = "repository";
     private static final String CLOSED_MESSAGE = "Workspace was already cleaned up";
@@ -54,6 +54,7 @@ public class Workspace implements AutoCloseable {
     private final Path directory;
     private final Path root;
     private final Consumer<Workspace> onCleanedUp;
+    private final Supplier<RepositoryUser> repositoryUser;
     private Path credentialsFile;
     private Path sshPrivateKeyFile;
     private Path sshKnownHostsFile;
@@ -63,17 +64,20 @@ public class Workspace implements AutoCloseable {
     private volatile boolean closed;
 
     /**
-     * @param root        the private temporary parent, which contains the repository directory
-     * @param onCleanedUp called once the directory is gone
+     * @param root           the private temporary parent, which contains the repository directory
+     * @param repositoryUser the commit identity, only asked for when committing
+     * @param onCleanedUp    called once the directory is gone
      */
-    Workspace(Path root, Consumer<Workspace> onCleanedUp) {
+    Workspace(Path root, Supplier<RepositoryUser> repositoryUser, Consumer<Workspace> onCleanedUp) {
         this.root = root;
+        this.repositoryUser = repositoryUser;
         this.directory = root.resolve(REPOSITORY_DIRECTORY_NAME);
         this.onCleanedUp = onCleanedUp;
     }
 
     private Workspace(Path directory) {
         this.root = null;
+        this.repositoryUser = null;
         this.directory = directory;
         this.onCleanedUp = workspace -> { };
     }
@@ -119,6 +123,14 @@ public class Workspace implements AutoCloseable {
             return false;
         }
 
+        final RepositoryUser user;
+        try {
+            user = repositoryUser.get();
+        } catch (RuntimeException e) {
+            log.error("Cannot commit without a commit identity: {}", e.getMessage());
+            return false;
+        }
+
         if (createNewBranch) {
             CommandResult checkoutResult = git(15, "checkout", "-b", branchName);
             if (!checkoutResult.success()) {
@@ -137,10 +149,10 @@ public class Workspace implements AutoCloseable {
         // user.*, author.* or committer.* entry the workspace's .git/config may contain.
         CommandResult commitResult = GitCommandRunner.run(directory.toFile(),
                 new String[]{"git", "commit", "-m", commitMessage}, 15, Map.of(
-                        "GIT_AUTHOR_NAME", GIT_AUTHOR_NAME,
-                        "GIT_AUTHOR_EMAIL", GIT_AUTHOR_EMAIL,
-                        "GIT_COMMITTER_NAME", GIT_AUTHOR_NAME,
-                        "GIT_COMMITTER_EMAIL", GIT_AUTHOR_EMAIL));
+                        "GIT_AUTHOR_NAME", user.displayName(),
+                        "GIT_AUTHOR_EMAIL", user.email(),
+                        "GIT_COMMITTER_NAME", user.displayName(),
+                        "GIT_COMMITTER_EMAIL", user.email()));
         if (!commitResult.success()) {
             // "nothing to commit" is not a real error
             if (commitResult.output().contains("nothing to commit")) {
@@ -416,23 +428,26 @@ public class Workspace implements AutoCloseable {
     }
 
     void createAuthenticationFiles(String remote, RepositoryCredentials credentials) throws IOException {
-        if (!credentials.usesSsh()) {
-            if (!authorizationHeaderEnvironment().isEmpty()) {
-                // The token travels as an HTTP header, see authorizationHeaderEnvironment.
-                // Otherwise fall through, so opting in can never drop authentication.
-                return;
+        switch (credentials) {
+            case HttpCredentials http -> {
+                if (!authorizationHeaderEnvironment().isEmpty()) {
+                    // The token travels as an HTTP header, see authorizationHeaderEnvironment.
+                    // Otherwise fall through, so opting in can never drop authentication.
+                    return;
+                }
+                createCredentialsFile(remote, http.username(), http.password());
             }
-            createCredentialsFile(remote, credentials.username(), credentials.token());
-            return;
+            case SshCredentials ssh -> {
+                if (ssh.privateKey() == null || ssh.privateKey().isBlank()
+                        || ssh.knownHosts() == null || ssh.knownHosts().isBlank()) {
+                    throw new IOException("SSH private key and known_hosts are required");
+                }
+                sshPrivateKeyFile = Files.createTempFile(root, "ssh-key-", ".tmp");
+                writeSecretFile(sshPrivateKeyFile, normalizeSecret(ssh.privateKey()));
+                sshKnownHostsFile = Files.createTempFile(root, "known-hosts-", ".tmp");
+                writeSecretFile(sshKnownHostsFile, normalizeSecret(ssh.knownHosts()));
+            }
         }
-        if (credentials.sshPrivateKey() == null || credentials.sshPrivateKey().isBlank()
-                || credentials.sshKnownHosts() == null || credentials.sshKnownHosts().isBlank()) {
-            throw new IOException("SSH private key and known_hosts are required");
-        }
-        sshPrivateKeyFile = Files.createTempFile(root, "ssh-key-", ".tmp");
-        writeSecretFile(sshPrivateKeyFile, normalizeSecret(credentials.sshPrivateKey()));
-        sshKnownHostsFile = Files.createTempFile(root, "known-hosts-", ".tmp");
-        writeSecretFile(sshKnownHostsFile, normalizeSecret(credentials.sshKnownHosts()));
     }
 
     void clearAuthenticationFiles() {
@@ -477,16 +492,15 @@ public class Workspace implements AutoCloseable {
         if (!usesAuthorizationHeader) {
             return Map.of();
         }
-        RepositoryCredentials credentials = repositoryCredentials;
         String remote = repositoryRemote;
-        if (credentials == null || credentials.usesSsh()
-                || credentials.token() == null || credentials.token().isBlank()
+        if (!(repositoryCredentials instanceof HttpCredentials credentials)
+                || credentials.password() == null || credentials.password().isBlank()
                 || remote == null || !remote.toLowerCase(Locale.ROOT).matches("https?://.*")) {
             return Map.of();
         }
         String username = credentials.hasUsername() ? credentials.username() : "";
         String basic = Base64.getEncoder().encodeToString(
-                (username + ":" + credentials.token()).getBytes(StandardCharsets.UTF_8));
+                (username + ":" + credentials.password()).getBytes(StandardCharsets.UTF_8));
         return Map.of(
                 "GIT_CONFIG_COUNT", "1",
                 "GIT_CONFIG_KEY_0", "http." + remote + ".extraheader",

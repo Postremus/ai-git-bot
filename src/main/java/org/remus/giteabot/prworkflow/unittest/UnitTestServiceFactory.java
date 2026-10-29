@@ -10,7 +10,7 @@ import org.remus.giteabot.ai.AiClient;
 import org.remus.giteabot.prworkflow.WorkflowToolSurfaceFactory;
 import org.remus.giteabot.prworkflow.unittest.agents.UnitTestAuthorAgent;
 import org.remus.giteabot.prworkflow.unittest.runner.UnitTestRunner;
-import org.remus.giteabot.repository.RepositoryApiClient;
+import org.remus.giteabot.repository.RepositoryConnection;
 import org.springframework.stereotype.Component;
 
 /**
@@ -36,8 +36,8 @@ public class UnitTestServiceFactory {
             throw new IllegalStateException("Bot must have a system prompt assigned");
         }
         AiClient aiClient = aiClientFactory.getClient(bot.getAiIntegration());
-        RepositoryApiClient repoClient = repositoryApiClientFactory.getApiClient(bot.getGitIntegration());
-        return new UnitTestService(repoClient, aiClient, bot.getSystemPrompt(),
+        RepositoryConnection connection = repositoryApiClientFactory.getConnection(bot.getGitIntegration());
+        return new UnitTestService(connection, aiClient, bot.getSystemPrompt(),
                 workspaceService, frameworkDetector, authorAgent, runner, suiteRepository, surfaceFactory);
     }
 }

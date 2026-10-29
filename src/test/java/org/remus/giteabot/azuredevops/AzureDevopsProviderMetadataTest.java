@@ -1,9 +1,10 @@
 package org.remus.giteabot.azuredevops;
 
+import java.time.Duration;
 import org.junit.jupiter.api.Test;
 import org.remus.giteabot.admin.GitIntegration;
 import org.remus.giteabot.repository.RepositoryType;
-import org.remus.giteabot.repository.model.RepositoryCredentials;
+import org.remus.giteabot.repository.model.HttpCredentials;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -45,10 +46,16 @@ class AzureDevopsProviderMetadataTest {
     }
 
     @Test
-    void createClient_returnsAzureDevopsClient() {
-        RepositoryCredentials creds = RepositoryCredentials.of(
-                "https://dev.azure.com", "https://dev.azure.com", "ado_pat");
+    void createConnection_holdsTheUrlsAndAnAzureDevopsClient() {
+        GitIntegration integration = new GitIntegration();
+        integration.setUrl("https://dev.azure.com/");
 
-        assertInstanceOf(AzureDevopsApiClient.class, metadata.createClient(null, creds));
+        RepositoryConnection connection = metadata.createConnection(
+                integration, null, () -> new HttpCredentials(null, "ado_pat"), null, Duration.ofMinutes(5));
+
+        assertInstanceOf(AzureDevopsApiClient.class, connection.getClient());
+        assertEquals("https://dev.azure.com", connection.getBaseUrl());
+        assertEquals("https://dev.azure.com", connection.getCloneUrl());
+        assertEquals(new HttpCredentials(null, "ado_pat"), connection.getCredentials());
     }
 }

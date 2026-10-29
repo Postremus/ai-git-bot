@@ -86,7 +86,8 @@ class GiteaSshEndToEndTest {
             assertTrue(gitea.getSshKeyIdsByTitle(configured.getSshRemoteKeyTitle())
                     .contains(configured.getSshRemoteKeyId()), "managed key visible via Gitea API");
 
-            WorkspaceResult ws = workspaceService.prepareWorkspace(client, owner, repo, "main", null);
+            WorkspaceResult ws = workspaceService.prepareWorkspace(
+                    repositoryApiClientFactory.getConnection(configured), owner, repo, "main", null);
             assertTrue(ws.success(), "SSH clone via bot workspace: " + ws.error());
             try {
                 assertTrue(Files.exists(ws.workspace().path().resolve("README.md")),
