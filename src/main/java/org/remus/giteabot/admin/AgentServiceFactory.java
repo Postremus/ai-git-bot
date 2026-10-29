@@ -62,7 +62,7 @@ public class AgentServiceFactory {
                 repoClient,
                 aiClient,
                 bot.getSystemPrompt().getIssueAgentSystemPrompt(),
-                gitUserService.getBotUsername(bot),
+                gitUserService.getGitUser(bot.getGitIntegration()),
                 mcpOrchestrationService,
                 bot.getMcpConfiguration(),
                 mcpToolCatalog,
@@ -86,7 +86,7 @@ public class AgentServiceFactory {
         requireSystemPrompt(bot);
         return new WriterAgentService(repoClient, aiClient, promptService, agentConfig,
                 agentSessionService, toolExecutionService, toolCatalog, workspaceService,
-                bot.getSystemPrompt().getWriterAgentSystemPrompt(), gitUserService.getBotUsername(bot),
+                bot.getSystemPrompt().getWriterAgentSystemPrompt(), gitUserService.getGitUser(bot.getGitIntegration()),
                 mcpOrchestrationService, bot.getMcpConfiguration(), mcpToolCatalog,
                 botToolSelectionService.allowedBuiltinTools(bot.getToolConfiguration()),
                 getContextWindowTokens(bot), pythonExecution);

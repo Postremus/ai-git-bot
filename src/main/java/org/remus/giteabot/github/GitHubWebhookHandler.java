@@ -61,22 +61,20 @@ public class GitHubWebhookHandler {
         if (botUser == null) {
             return ResponseEntity.ok("ignored");
         }
-        String botUsername = botUser.username();
-
         // Ignore events triggered by the bot itself
         if (botWebhookService.isBotUser(botUser, webhookPayload)) {
-            log.debug("Ignoring GitHub webhook event from bot's own user '{}'", botUsername);
+            log.debug("Ignoring GitHub webhook event from bot's own user '{}'", botUser.username());
             return ResponseEntity.ok("ignored");
         }
 
-        String botAlias = botWebhookService.getBotAlias(botUsername);
+        String botAlias = botWebhookService.getBotAlias(botUser.username());
 
         return switch (eventType) {
-            case "pull_request" -> handlePullRequestEvent(bot, botUsername, webhookPayload);
+            case "pull_request" -> handlePullRequestEvent(bot, botUser, webhookPayload);
             case "issue_comment" -> handleIssueCommentEvent(bot, webhookPayload, botAlias);
             case "pull_request_review" -> handlePullRequestReviewEvent(bot, webhookPayload);
             case "pull_request_review_comment" -> handlePullRequestReviewCommentEvent(bot, webhookPayload, botAlias);
-            case "issues" -> handleIssuesEvent(bot, botUsername, webhookPayload);
+            case "issues" -> handleIssuesEvent(bot, botUser, webhookPayload);
             default -> {
                 log.debug("Unhandled GitHub event type: {}", eventType);
                 yield ResponseEntity.ok("ignored");
@@ -84,12 +82,12 @@ public class GitHubWebhookHandler {
         };
     }
 
-    private ResponseEntity<String> handlePullRequestEvent(Bot bot, String botUsername, WebhookPayload payload) {
+    private ResponseEntity<String> handlePullRequestEvent(Bot bot, GitUser botUser, WebhookPayload payload) {
         String action = payload.getAction();
-        if (("opened".equals(action) && (bot.isRunOnPrCreation() || hasBotReviewer(botUsername, payload)))
-                || ("reopened".equals(action) && (bot.isRunOnPrCreation() || hasBotReviewer(botUsername, payload)))
+        if (("opened".equals(action) && (bot.isRunOnPrCreation() || hasBotReviewer(botUser, payload)))
+                || ("reopened".equals(action) && (bot.isRunOnPrCreation() || hasBotReviewer(botUser, payload)))
                 || ("synchronized".equals(action) && bot.isRunOnPrUpdate())
-                || ("review_requested".equals(action) && isRequestedReviewer(botUsername, payload))) {
+                || ("review_requested".equals(action) && isRequestedReviewer(botUser, payload))) {
             botWebhookService.reviewPullRequest(bot, payload);
             return ResponseEntity.ok("review triggered");
         }
@@ -141,12 +139,11 @@ public class GitHubWebhookHandler {
         return ResponseEntity.ok("ignored");
     }
 
-    private ResponseEntity<String> handleIssuesEvent(Bot bot, String botUsername, WebhookPayload payload) {
+    private ResponseEntity<String> handleIssuesEvent(Bot bot, GitUser botUser, WebhookPayload payload) {
         String action = payload.getAction();
         if ("assigned".equals(action)) {
             if (payload.getIssue() != null
-                    && payload.getIssue().getAssignee() != null
-                    && botUsername.equalsIgnoreCase(payload.getIssue().getAssignee().getLogin())) {
+                    && BotWebhookService.isBot(botUser, payload.getIssue().getAssignee())) {
                 botWebhookService.handleIssueAssigned(bot, payload);
                 return ResponseEntity.ok("agent triggered");
             }
@@ -340,20 +337,8 @@ public class GitHubWebhookHandler {
             ipr.setMerged(prLink.get("merged_at") != null ? Boolean.TRUE : null);
             i.setPullRequest(ipr);
         }
-        Map<String, Object> assignee = (Map<String, Object>) issue.get("assignee");
-        if (assignee != null) {
-            WebhookPayload.Owner a = new WebhookPayload.Owner();
-            a.setLogin((String) assignee.get("login"));
-            i.setAssignee(a);
-        }
-        List<Map<String, Object>> assignees = (List<Map<String, Object>>) issue.get("assignees");
-        if (assignees != null) {
-            i.setAssignees(assignees.stream().map(am -> {
-                WebhookPayload.Owner ao = new WebhookPayload.Owner();
-                ao.setLogin((String) am.get("login"));
-                return ao;
-            }).toList());
-        }
+        i.setAssignee(extractOwner((Map<String, Object>) issue.get("assignee")));
+        i.setAssignees(extractOwners((List<Map<String, Object>>) issue.get("assignees")));
         return i;
     }
 
@@ -400,15 +385,14 @@ public class GitHubWebhookHandler {
         return null;
     }
 
-    private boolean hasBotReviewer(String botUsername, WebhookPayload payload) {
+    private boolean hasBotReviewer(GitUser botUser, WebhookPayload payload) {
         return payload.getPullRequest() != null
                 && payload.getPullRequest().getRequestedReviewers() != null
                 && payload.getPullRequest().getRequestedReviewers().stream()
-                .anyMatch(reviewer -> botUsername.equalsIgnoreCase(reviewer.getLogin()));
+                .anyMatch(reviewer -> BotWebhookService.isBot(botUser, reviewer));
     }
 
-    private boolean isRequestedReviewer(String botUsername, WebhookPayload payload) {
-        return payload.getRequestedReviewer() != null
-                && botUsername.equalsIgnoreCase(payload.getRequestedReviewer().getLogin());
+    private boolean isRequestedReviewer(GitUser botUser, WebhookPayload payload) {
+        return BotWebhookService.isBot(botUser, payload.getRequestedReviewer());
     }
 }

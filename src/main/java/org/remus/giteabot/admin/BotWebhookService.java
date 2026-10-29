@@ -534,8 +534,10 @@ public class BotWebhookService {
             try {
                 WebhookPayload.Issue issue = payload.getIssue();
                 if (issue != null) {
+                    GitUser botUser = gitUserService.getGitUser(bot.getGitIntegration());
                     WebhookPayload.Owner assignee = new WebhookPayload.Owner();
-                    assignee.setLogin(gitUserService.getBotUsername(bot));
+                    assignee.setLogin(botUser.username());
+                    assignee.setId(botUser.id());
                     issue.setAssignee(assignee);
                 }
                 issueWorkflowOrchestrator.runAssigned(bot, payload);
@@ -843,18 +845,10 @@ public class BotWebhookService {
     }
 
     /**
-     * Compares the stable account id when both sides carry one, since the username can be
-     * renamed on the provider. Otherwise falls back to the username, so a payload without
-     * ids can never make the bot answer itself.
+     * Whether the payload user is the bot, see {@link GitUser#matches}.
      */
-    private static boolean isBot(GitUser botUser, WebhookPayload.Owner owner) {
-        if (owner == null) {
-            return false;
-        }
-        if (botUser.id() != null && owner.getId() != null) {
-            return botUser.id().equalsIgnoreCase(owner.getId());
-        }
-        return botUser.username().equalsIgnoreCase(owner.getLogin());
+    public static boolean isBot(GitUser botUser, WebhookPayload.Owner owner) {
+        return owner != null && botUser.matches(owner.getId(), owner.getLogin());
     }
 
     /**

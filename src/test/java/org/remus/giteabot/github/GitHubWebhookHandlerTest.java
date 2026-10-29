@@ -271,6 +271,31 @@ class GitHubWebhookHandlerTest {
         verify(botWebhookService).reviewPullRequest(eq(bot), any(WebhookPayload.class));
     }
 
+    @Test
+    void pullRequestReviewRequestedForRenamedBot_isMatchedById() {
+        Map<String, Object> renamedBot = ownerMap("renamed_bot");
+        renamedBot.put("id", 17);
+        Map<String, Object> payload = prPayload("review_requested", List.of(renamedBot));
+        payload.put("requested_reviewer", renamedBot);
+
+        ResponseEntity<String> response = handler.handleWebhook(bot, "pull_request", payload);
+
+        assertEquals("review triggered", response.getBody());
+    }
+
+    @Test
+    void pullRequestReviewRequestedForOtherUserWithTheBotsLogin_isIgnored() {
+        Map<String, Object> impostor = ownerMap("ai_bot");
+        impostor.put("id", 99);
+        Map<String, Object> payload = prPayload("review_requested", List.of(impostor));
+        payload.put("requested_reviewer", impostor);
+
+        ResponseEntity<String> response = handler.handleWebhook(bot, "pull_request", payload);
+
+        assertEquals("ignored", response.getBody());
+        verify(botWebhookService, never()).reviewPullRequest(any(), any());
+    }
+
     private Map<String, Object> ownerMap(String login) {
         Map<String, Object> m = new HashMap<>();
         m.put("login", login);

@@ -547,10 +547,11 @@ public class AzureDevopsApiClient implements RepositoryApiClient {
         reviewComment.setBody(comment.getContent());
         reviewComment.setPath(path);
         reviewComment.setLine(line);
-        // Only uniqueName identifies the author: displayName is user-editable, so falling
-        // back to it would let anyone pass for the bot by renaming themselves.
-        IdentityRef author = comment.getAuthor();
-        reviewComment.setUserLogin(author != null ? author.getUniqueName() : null);
+        if (comment.getAuthor() != null) {
+            IdentityRef author = comment.getAuthor();
+            reviewComment.setUserLogin(author.getUniqueName());
+            reviewComment.setUserId(author.getId());
+        }
         return reviewComment;
     }
 

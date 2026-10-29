@@ -26,6 +26,18 @@ public record GitUser(@Nullable String id, String username, @Nullable String dis
         email = blankToNull(email);
     }
 
+    /**
+     * Whether the given account is this user. Compares the stable account id when both sides
+     * carry one, since the username can be renamed on the provider. Otherwise falls back to the
+     * username, so a payload without ids still recognises the bot.
+     */
+    public boolean matches(@Nullable String otherId, @Nullable String otherUsername) {
+        if (id != null && otherId != null && !otherId.isBlank()) {
+            return id.equalsIgnoreCase(otherId);
+        }
+        return username.equalsIgnoreCase(otherUsername);
+    }
+
     private static @Nullable String blankToNull(@Nullable String value) {
         return value == null || value.isBlank() ? null : value;
     }

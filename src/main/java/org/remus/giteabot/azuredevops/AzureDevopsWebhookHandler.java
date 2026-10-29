@@ -360,14 +360,14 @@ public class AzureDevopsWebhookHandler {
      * its own post-review vote would otherwise arrive as a review request and trigger a
      * second review of the commit it has just reviewed.
      */
-    private boolean botReviewerAdded(Bot bot, String botId, WebhookPayload payload) {
+    private boolean botReviewerAdded(Bot bot, String botUserId, WebhookPayload payload) {
         if (payload.getPullRequest() == null
                 || payload.getPullRequest().getRequestedReviewers() == null) {
             return false;
         }
         String key = trackingKey(bot, payload);
-        boolean isReviewer = hasBotReviewer(botId, payload);
-        boolean selfAdded = isReviewer && botHasVoted(botId, payload);
+        boolean isReviewer = hasBotReviewer(botUserId, payload);
+        boolean selfAdded = isReviewer && botHasVoted(botUserId, payload);
         synchronized (trackedPullRequests) {
             Tracked previous = trackedPullRequests.getOrDefault(key, Tracked.NOTHING);
             trackedPullRequests.put(key,

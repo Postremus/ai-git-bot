@@ -50,7 +50,7 @@ public class CodeReviewServiceFactory {
         }
         AiClient aiClient = aiClientFactory.getClient(bot.getAiIntegration());
         String sessionPromptKey = "system-prompt:" + bot.getSystemPrompt().getId();
-        return new CodeReviewService(repoClient, aiClient, sessionService, gitUserService.getBotUsername(bot),
+        return new CodeReviewService(repoClient, aiClient, sessionService, gitUserService.getGitUser(bot.getGitIntegration()),
                 reviewConfig, sessionPromptKey, bot.getSystemPrompt().getReviewSystemPrompt(),
                 maxDiffCharsPerChunk, maxDiffChunks, retryTruncatedChunkChars, excludedFilePatterns);
     }

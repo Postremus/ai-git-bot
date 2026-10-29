@@ -225,15 +225,13 @@ public class GiteaWebhookHandler {
         if (botUser == null) {
             return ResponseEntity.ok("ignored");
         }
-        String botUsername = botUser.username();
-
         // Ignore events triggered by the bot itself
         if (botWebhookService.isBotUser(botUser, payload)) {
-            log.debug("Ignoring Gitea webhook event from bot's own user '{}'", botUsername);
+            log.debug("Ignoring Gitea webhook event from bot's own user '{}'", botUser.username());
             return ResponseEntity.ok("ignored");
         }
 
-        String botAlias = botWebhookService.getBotAlias(botUsername);
+        String botAlias = botWebhookService.getBotAlias(botUser.username());
 
         // Handle inline review comments
         if (payload.getComment() != null && payload.getComment().getPath() != null
@@ -285,8 +283,7 @@ public class GiteaWebhookHandler {
         if ("assigned".equals(payload.getAction()) && payload.getIssue() != null
                 && payload.getPullRequest() == null) {
             // Check if the assignee is the bot
-            if (payload.getIssue().getAssignee() != null
-                    && botUsername.equalsIgnoreCase(payload.getIssue().getAssignee().getLogin())) {
+            if (BotWebhookService.isBot(botUser, payload.getIssue().getAssignee())) {
                 botWebhookService.handleIssueAssigned(bot, payload);
                 return ResponseEntity.ok("agent triggered");
             }
@@ -320,11 +317,11 @@ public class GiteaWebhookHandler {
             return ResponseEntity.ok("session closed");
         }
 
-        if (("opened".equals(action) && (bot.isRunOnPrCreation() || hasBotReviewer(botUsername, payload)))
-                || ("reopened".equals(action) && (bot.isRunOnPrCreation() || hasBotReviewer(botUsername, payload)))
+        if (("opened".equals(action) && (bot.isRunOnPrCreation() || hasBotReviewer(botUser, payload)))
+                || ("reopened".equals(action) && (bot.isRunOnPrCreation() || hasBotReviewer(botUser, payload)))
                 || ("synchronized".equals(action) && bot.isRunOnPrUpdate())
-                || ("assigned".equals(action) && isBotAssignee(botUsername, payload))
-                || ("review_requested".equals(action) && isRequestedReviewer(botUsername, payload))) {
+                || ("assigned".equals(action) && isBotAssignee(botUser, payload))
+                || ("review_requested".equals(action) && isRequestedReviewer(botUser, payload))) {
             botWebhookService.reviewPullRequest(bot, payload);
             return ResponseEntity.ok("review triggered");
         }
@@ -333,28 +330,26 @@ public class GiteaWebhookHandler {
         return ResponseEntity.ok("ignored");
     }
 
-    private boolean hasBotReviewer(String botUsername, WebhookPayload payload) {
+    private boolean hasBotReviewer(GitUser botUser, WebhookPayload payload) {
         return payload.getPullRequest() != null
                 && payload.getPullRequest().getRequestedReviewers() != null
                 && payload.getPullRequest().getRequestedReviewers().stream()
-                .anyMatch(reviewer -> botUsername.equalsIgnoreCase(reviewer.getLogin()));
+                .anyMatch(reviewer -> BotWebhookService.isBot(botUser, reviewer));
     }
 
-    private boolean isRequestedReviewer(String botUsername, WebhookPayload payload) {
-        return payload.getRequestedReviewer() != null
-                && botUsername.equalsIgnoreCase(payload.getRequestedReviewer().getLogin());
+    private boolean isRequestedReviewer(GitUser botUser, WebhookPayload payload) {
+        return BotWebhookService.isBot(botUser, payload.getRequestedReviewer());
     }
 
-    private boolean isBotAssignee(String botUsername, WebhookPayload payload) {
+    private boolean isBotAssignee(GitUser botUser, WebhookPayload payload) {
         if (payload.getPullRequest() == null) {
             return false;
         }
-        if (payload.getPullRequest().getAssignee() != null
-                && botUsername.equalsIgnoreCase(payload.getPullRequest().getAssignee().getLogin())) {
+        if (BotWebhookService.isBot(botUser, payload.getPullRequest().getAssignee())) {
             return true;
         }
         return payload.getPullRequest().getAssignees() != null
                 && payload.getPullRequest().getAssignees().stream()
-                .anyMatch(assignee -> botUsername.equalsIgnoreCase(assignee.getLogin()));
+                .anyMatch(assignee -> BotWebhookService.isBot(botUser, assignee));
     }
 }
