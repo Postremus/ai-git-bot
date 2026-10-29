@@ -148,8 +148,7 @@ public class AzureDevopsApiClient implements RepositoryApiClient {
      *       the hostname, so without it a host like {@code tfs.example.com} serving a
      *       collection named {@code tfs} would wrongly look already-scoped.</li>
      *   <li>the organization as the URL path's last segment — an Azure DevOps Server
-     *       collection, and also the {@code https://dev.azure.com/contoso} misconfiguration
-     *       the setup guide warns against, which this makes harmless.</li>
+     *       collection, or {@code https://dev.azure.com/contoso} for a single organization.</li>
      * </ul>
      */
     private static boolean scopesOrganization(String url, String organization) {
