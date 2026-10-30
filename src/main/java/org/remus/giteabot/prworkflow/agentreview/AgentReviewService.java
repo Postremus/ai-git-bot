@@ -210,7 +210,6 @@ public class AgentReviewService {
         ReviewProgress progress = enableProgressComments
                 ? new ReviewProgress(repositoryClient, owner, repo, prNumber, Clock.systemUTC()) : null;
         boolean completed = false;
-        Workspace workspace = null;
         try {
             if (progress != null) {
                 progress.start();
@@ -226,55 +225,55 @@ public class AgentReviewService {
                                 + "review was skipped. The bot log holds the Git output.");
                 return ReviewResult.FAILED;
             }
-            workspace = wsResult.workspace();
+            try (Workspace workspace = wsResult.workspace()) {
+                String systemPrompt = resolveSystemPrompt(enableFormalDecision, decisionPrompt);
+                String userMessage = buildKickoffMessage(prTitle, prBody, diffSummary);
 
-            String systemPrompt = resolveSystemPrompt(enableFormalDecision, decisionPrompt);
-            String userMessage = buildKickoffMessage(prTitle, prBody, diffSummary);
+                AgentSession session = new AgentSession(owner, repo, prNumber, prTitle);
 
-            AgentSession session = new AgentSession(owner, repo, prNumber, prTitle);
+                LoopOutcome outcome = runReviewLoop(session, owner, repo, prNumber,
+                        workspace, headBranch, systemPrompt, userMessage, maxToolRounds, diffSummary,
+                        runId, toolCallConsumer, progress);
 
-            LoopOutcome outcome = runReviewLoop(session, owner, repo, prNumber,
-                    workspace, headBranch, systemPrompt, userMessage, maxToolRounds, diffSummary,
-                    runId, toolCallConsumer, progress);
-
-            if (!outcome.success()) {
-                log.warn("Agentic review for PR #{} failed; no review will be published", prNumber);
-                return ReviewResult.FAILED;
-            }
-
-            String review = outcome.payload() instanceof String s ? s : null;
-            if (review == null || review.isBlank()) {
-                log.warn("Agentic review for PR #{} produced no review text", prNumber);
-                return ReviewResult.FAILED;
-            }
-
-            ParseResult parsed = enableFormalDecision
-                    ? parseFormalReviewResult(review, severityThresholds) : ParseResult.noDecision(review);
-
-            PostReviewAction action = parsed.action() != null ? parsed.action() : PostReviewAction.NONE;
-            String reviewBody = formatReview(parsed.reviewText());
-            try {
-                repositoryClient.postReview(owner, repo, prNumber, reviewBody, action);
-                if (action != PostReviewAction.NONE) {
-                    log.info("Agentic review posted formal decision {} for PR #{} in {}/{}",
-                            action, prNumber, owner, repo);
+                if (!outcome.success()) {
+                    log.warn("Agentic review for PR #{} failed; no review will be published", prNumber);
+                    return ReviewResult.FAILED;
                 }
-            } catch (Exception e) {
-                if (action == PostReviewAction.NONE) {
-                    throw e;
-                }
-                // Fall back to a plain comment so the findings survive a failed formal submission.
-                log.warn("Failed to post formal review {} for PR #{} in {}/{}: {} — "
-                        + "falling back to a plain review comment",
-                        action, prNumber, owner, repo, e.getMessage());
-                repositoryClient.postReviewComment(owner, repo, prNumber, reviewBody);
-            }
 
-            publishFindingEvents(eventHookPublisher, bot, parsed, owner, repo, prNumber);
-            log.info("Agentic review completed for PR #{} in {}/{} (decision={})",
-                    prNumber, owner, repo, action);
-            completed = true;
-            return ReviewResult.POSTED;
+                String review = outcome.payload() instanceof String s ? s : null;
+                if (review == null || review.isBlank()) {
+                    log.warn("Agentic review for PR #{} produced no review text", prNumber);
+                    return ReviewResult.FAILED;
+                }
+
+                ParseResult parsed = enableFormalDecision
+                        ? parseFormalReviewResult(review, severityThresholds) : ParseResult.noDecision(review);
+
+                PostReviewAction action = parsed.action() != null ? parsed.action() : PostReviewAction.NONE;
+                String reviewBody = formatReview(parsed.reviewText());
+                try {
+                    repositoryClient.postReview(owner, repo, prNumber, reviewBody, action);
+                    if (action != PostReviewAction.NONE) {
+                        log.info("Agentic review posted formal decision {} for PR #{} in {}/{}",
+                                action, prNumber, owner, repo);
+                    }
+                } catch (Exception e) {
+                    if (action == PostReviewAction.NONE) {
+                        throw e;
+                    }
+                    // Fall back to a plain comment so the findings survive a failed formal submission.
+                    log.warn("Failed to post formal review {} for PR #{} in {}/{}: {} — "
+                            + "falling back to a plain review comment",
+                            action, prNumber, owner, repo, e.getMessage());
+                    repositoryClient.postReviewComment(owner, repo, prNumber, reviewBody);
+                }
+
+                publishFindingEvents(eventHookPublisher, bot, parsed, owner, repo, prNumber);
+                log.info("Agentic review completed for PR #{} in {}/{} (decision={})",
+                        prNumber, owner, repo, action);
+                completed = true;
+                return ReviewResult.POSTED;
+            }
         } catch (Exception e) {
             log.error("Agentic review failed for PR #{} in {}/{}: {}", prNumber, owner, repo, e.getMessage(), e);
             postErrorComment(owner, repo, prNumber, "Agentic Review",
@@ -283,14 +282,8 @@ public class AgentReviewService {
                             + "Please try again later.", e);
             return ReviewResult.FAILED;
         } finally {
-            try {
-                if (workspace != null) {
-                    workspace.close();
-                }
-            } finally {
-                if (progress != null) {
-                    progress.finish(completed);
-                }
+            if (progress != null) {
+                progress.finish(completed);
             }
         }
     }
@@ -330,7 +323,6 @@ public class AgentReviewService {
         ReviewProgress progress = enableProgressComments
                 ? new ReviewProgress(repositoryClient, owner, repo, prNumber, Clock.systemUTC()) : null;
         boolean completed = false;
-        Workspace workspace = null;
         try {
             if (progress != null) {
                 progress.start();
@@ -346,33 +338,33 @@ public class AgentReviewService {
                                 + "could not be answered. The bot log holds the Git output.");
                 return ReviewResult.FAILED;
             }
-            workspace = wsResult.workspace();
+            try (Workspace workspace = wsResult.workspace()) {
+                String systemPrompt = resolveSystemPrompt(false, null);
+                String userMessage = buildClarificationMessage(prTitle, prBody, diffSummary, userQuestion);
 
-            String systemPrompt = resolveSystemPrompt(false, null);
-            String userMessage = buildClarificationMessage(prTitle, prBody, diffSummary, userQuestion);
 
+                AgentSession session = new AgentSession(owner, repo, prNumber, prTitle);
 
-            AgentSession session = new AgentSession(owner, repo, prNumber, prTitle);
+                LoopOutcome outcome = runReviewLoop(session, owner, repo, prNumber,
+                        workspace, headBranch, systemPrompt, userMessage,
+                        maxToolRounds, diffSummary, null, null, progress);
 
-            LoopOutcome outcome = runReviewLoop(session, owner, repo, prNumber,
-                    workspace, headBranch, systemPrompt, userMessage,
-                    maxToolRounds, diffSummary, null, null, progress);
+                if (!outcome.success()) {
+                    log.warn("Clarification for PR #{} failed; no answer will be published", prNumber);
+                    return ReviewResult.FAILED;
+                }
 
-            if (!outcome.success()) {
-                log.warn("Clarification for PR #{} failed; no answer will be published", prNumber);
-                return ReviewResult.FAILED;
+                String answer = outcome.payload() instanceof String s ? s : null;
+                if (answer == null || answer.isBlank()) {
+                    log.warn("Clarification for PR #{} produced no answer", prNumber);
+                    return ReviewResult.FAILED;
+                }
+
+                repositoryClient.postPullRequestComment(owner, repo, prNumber, formatClarification(answer));
+                log.info("Clarification answered for PR #{} in {}/{}", prNumber, owner, repo);
+                completed = true;
+                return ReviewResult.POSTED;
             }
-
-            String answer = outcome.payload() instanceof String s ? s : null;
-            if (answer == null || answer.isBlank()) {
-                log.warn("Clarification for PR #{} produced no answer", prNumber);
-                return ReviewResult.FAILED;
-            }
-
-            repositoryClient.postPullRequestComment(owner, repo, prNumber, formatClarification(answer));
-            log.info("Clarification answered for PR #{} in {}/{}", prNumber, owner, repo);
-            completed = true;
-            return ReviewResult.POSTED;
         } catch (Exception e) {
             log.error("Clarification failed for PR #{} in {}/{}: {}", prNumber, owner, repo, e.getMessage(), e);
             postErrorComment(owner, repo, prNumber, "Clarification",
@@ -381,14 +373,8 @@ public class AgentReviewService {
                             + "Please try again later.", e);
             return ReviewResult.FAILED;
         } finally {
-            try {
-                if (workspace != null) {
-                    workspace.close();
-                }
-            } finally {
-                if (progress != null) {
-                    progress.finish(completed);
-                }
+            if (progress != null) {
+                progress.finish(completed);
             }
         }
     }
