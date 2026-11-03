@@ -46,32 +46,25 @@ import java.util.Optional;
 public class GiteaApiClient implements RepositoryApiClient {
 
     private final RestClient giteaRestClient;
-    private final String cloneUrl;
-    private final boolean usesSsh;
     private final String sshKnownHosts;
 
     /**
-     * Creates a GiteaApiClient whose Git remotes use HTTP.
+     * Creates a GiteaApiClient without pinned SSH host keys.
      *
      * @param restClient pre-configured RestClient pointing at the Gitea API base URL
-     * @param cloneUrl   the credential-free HTTP clone base URL
      */
-    public GiteaApiClient(RestClient restClient, String cloneUrl) {
-        this(restClient, cloneUrl, false, null);
+    public GiteaApiClient(RestClient restClient) {
+        this(restClient, null);
     }
 
     /**
      * Creates a GiteaApiClient.
      *
      * @param restClient    pre-configured RestClient pointing at the Gitea API base URL
-     * @param cloneUrl      the credential-free HTTP clone base URL
-     * @param usesSsh       whether Git remotes use SSH
      * @param sshKnownHosts the pinned {@code known_hosts} entries SSH clone URLs must match, if any
      */
-    public GiteaApiClient(RestClient restClient, String cloneUrl, boolean usesSsh, String sshKnownHosts) {
+    public GiteaApiClient(RestClient restClient, String sshKnownHosts) {
         this.giteaRestClient = restClient;
-        this.cloneUrl = cloneUrl;
-        this.usesSsh = usesSsh;
         this.sshKnownHosts = sshKnownHosts;
     }
 
@@ -118,11 +111,12 @@ public class GiteaApiClient implements RepositoryApiClient {
                 PullRequestHeads.nonBlank(head.getSha()));
     }
 
-    @Override
-    public String getRepositoryRemote(String owner, String repo) {
-        if (!usesSsh) {
-            return RepositoryApiClient.httpRepositoryRemote(cloneUrl, owner, repo);
-        }
+    /**
+     * Returns the SSH clone URL Gitea reports for {@code owner/repo}, checked against the
+     * pinned host keys. The SSH {@link org.remus.giteabot.repository.RepositoryRemoteResolver}
+     * of a Gitea connection: Gitea's SSH host and port are only known to the server.
+     */
+    public String getSshRepositoryRemote(String owner, String repo) {
         Map<String, Object> repoInfo = giteaRestClient.get()
                 .uri("/api/v1/repos/{owner}/{repo}", owner, repo)
                 .retrieve()

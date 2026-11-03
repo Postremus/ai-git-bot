@@ -9,6 +9,7 @@ import org.remus.giteabot.agent.validation.GitDiffService;
 import org.remus.giteabot.repository.RepositoryProviderMetadata;
 import org.remus.giteabot.repository.RepositoryType;
 import org.remus.giteabot.repository.RepositoryConnection;
+import org.remus.giteabot.repository.RepositoryRemoteResolver;
 import org.remus.giteabot.repository.model.HttpCredentials;
 import org.remus.giteabot.repository.model.SshCredentials;
 import org.springframework.beans.factory.ObjectProvider;
@@ -100,7 +101,36 @@ public class AzureDevopsProviderMetadata implements RepositoryProviderMetadata {
                                                  @Nullable Supplier<SshCredentials> sshCredentials,
                                                  Duration userTtl) {
         String url = resolveApiUrl(integration);
-        return new RepositoryConnection(url, url, httpCredentials, sshCredentials,
-                new AzureDevopsApiClient(restClient, url, url, httpCredentials, gitDiffService), userTtl);
+        RepositoryRemoteResolver remoteResolver = remoteResolver(url);
+        boolean usesAuthorizationHeader = AzureDevopsApiClient.USES_GIT_AUTHORIZATION_HEADER;
+        return new RepositoryConnection(url, url, remoteResolver, usesAuthorizationHeader,
+                httpCredentials, sshCredentials,
+                new AzureDevopsApiClient(restClient, url, remoteResolver, httpCredentials, gitDiffService),
+                userTtl);
+    }
+
+    /**
+     * Azure DevOps clone URLs are {@code {base}/{org}/{project}/_git/{name}} rather than
+     * the {@code {base}/{owner}/{repo}.git} of {@link RepositoryRemoteResolver#http}, so the
+     * path is assembled here — including the same organization-scoping rule the REST paths
+     * use, since a legacy or Azure DevOps Server clone URL carries the organization in its
+     * host or collection prefix already.
+     * <p>
+     * The base URL still goes through {@link RepositoryRemoteResolver#validatedCloneBaseUrl},
+     * which is what keeps a credential-bearing URL out of the remote handed to {@code git}.
+     */
+    static RepositoryRemoteResolver remoteResolver(String cloneUrl) {
+        String base;
+        try {
+            base = RepositoryRemoteResolver.validatedCloneBaseUrl(cloneUrl);
+        } catch (IllegalStateException e) {
+            return RepositoryRemoteResolver.failing(e);
+        }
+        return (owner, repo) -> {
+            AzureDevopsAddress addr = AzureDevopsAddress.parse(owner, repo);
+            String organizationSegment = AzureDevopsApiClient.scopesOrganization(base, addr.organization())
+                    ? "" : "/" + addr.organization();
+            return base + organizationSegment + "/" + addr.project() + "/_git/" + addr.name();
+        };
     }
 }

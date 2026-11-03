@@ -16,6 +16,7 @@ import org.remus.giteabot.azuredevops.model.ListResponse;
 import org.remus.giteabot.azuredevops.model.ThreadCommentId;
 import org.remus.giteabot.repository.PostReviewAction;
 import org.remus.giteabot.repository.RepositoryApiClient;
+import org.remus.giteabot.repository.RepositoryRemoteResolver;
 import org.remus.giteabot.repository.model.CommentId;
 import org.remus.giteabot.repository.model.RepositoryUser;
 import org.remus.giteabot.repository.model.PullRequestCommit;
@@ -77,7 +78,8 @@ public class AzureDevopsApiClient implements RepositoryApiClient {
 
     private final RestClient restClient;
     private final String baseUrl;
-    private final String cloneUrl;
+    /** The remotes of the Git commands behind {@link #getPullRequestDiff}. */
+    private final RepositoryRemoteResolver remoteResolver;
     /** For the Git commands behind {@link #getPullRequestDiff}, decrypted only when one runs. */
     private final Supplier<HttpCredentials> httpCredentials;
     private final GitDiffService gitDiffService;
@@ -107,20 +109,18 @@ public class AzureDevopsApiClient implements RepositoryApiClient {
      */
     private static final String NO_IDENTITY = "";
 
-    public AzureDevopsApiClient(RestClient restClient, String baseUrl, String cloneUrl,
+    /** Azure DevOps Git remotes only accept the PAT as a pre-emptive Basic header. */
+    static final boolean USES_GIT_AUTHORIZATION_HEADER = true;
+
+    public AzureDevopsApiClient(RestClient restClient, String baseUrl,
+                                RepositoryRemoteResolver remoteResolver,
                                 Supplier<HttpCredentials> httpCredentials,
                                 GitDiffService gitDiffService) {
         this.restClient = restClient;
         this.baseUrl = baseUrl;
-        this.cloneUrl = cloneUrl;
+        this.remoteResolver = remoteResolver;
         this.httpCredentials = httpCredentials;
         this.gitDiffService = gitDiffService;
-    }
-
-    /** Azure DevOps Git remotes only accept the PAT as a pre-emptive Basic header. */
-    @Override
-    public boolean usesGitAuthorizationHeader() {
-        return true;
     }
 
     // ---- Request scoping ----
@@ -161,7 +161,7 @@ public class AzureDevopsApiClient implements RepositoryApiClient {
      *       collection, or {@code https://dev.azure.com/contoso} for a single organization.</li>
      * </ul>
      */
-    private static boolean scopesOrganization(String url, String organization) {
+    static boolean scopesOrganization(String url, String organization) {
         if (url == null || url.isBlank() || organization == null || organization.isBlank()) {
             return false;
         }
@@ -219,26 +219,6 @@ public class AzureDevopsApiClient implements RepositoryApiClient {
         return all;
     }
 
-    /**
-     * Azure DevOps clone URLs are {@code {base}/{org}/{project}/_git/{name}} rather than
-     * the {@code {base}/{owner}/{repo}.git} the interface default builds, so the path is
-     * assembled here — including the same organization-scoping rule the REST paths use,
-     * since a legacy or Azure DevOps Server clone URL carries the organization in its
-     * host or collection prefix already.
-     * <p>
-     * The base URL still goes through
-     * {@link RepositoryApiClient#validatedCloneBaseUrl}, which is what keeps a
-     * credential-bearing URL out of the remote handed to {@code git}.
-     */
-    @Override
-    public String getRepositoryRemote(String owner, String repo) {
-        AzureDevopsAddress addr = AzureDevopsAddress.parse(owner, repo);
-        String base = RepositoryApiClient.validatedCloneBaseUrl(cloneUrl);
-        String organizationSegment = scopesOrganization(base, addr.organization())
-                ? "" : "/" + addr.organization();
-        return base + organizationSegment + "/" + addr.project() + "/_git/" + addr.name();
-    }
-
     // ---- Pull request operations ----
 
     /**
@@ -266,7 +246,8 @@ public class AzureDevopsApiClient implements RepositoryApiClient {
             return null;
         }
 
-        return gitDiffService.diffCommits(this, httpCredentials.get(), owner, repo, diffRange.baseSha, diffRange.headSha);
+        return gitDiffService.diffCommits(remoteResolver, USES_GIT_AUTHORIZATION_HEADER, httpCredentials.get(),
+                owner, repo, diffRange.baseSha, diffRange.headSha);
     }
 
     /**

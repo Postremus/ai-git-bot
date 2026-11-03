@@ -13,6 +13,7 @@ import org.remus.giteabot.repository.RepositoryProviderMetadata;
 import org.remus.giteabot.repository.RepositoryProviderRegistry;
 import org.remus.giteabot.repository.RepositoryType;
 import org.remus.giteabot.repository.RepositoryConnection;
+import org.remus.giteabot.repository.RepositoryRemoteResolver;
 import org.remus.giteabot.repository.model.HttpCredentials;
 import org.remus.giteabot.repository.model.SshCredentials;
 import org.springframework.web.client.RestClient;
@@ -52,8 +53,9 @@ class RepositoryApiClientFactoryTest {
         lenient().when(provider.createConnection(any(), any(), any(), any(), any())).thenAnswer(invocation -> {
             GitIntegration integration = invocation.getArgument(0);
             return new RepositoryConnection(integration.getUrl(), integration.getUrl(),
+                    RepositoryRemoteResolver.http(integration.getUrl()), false,
                     invocation.getArgument(2), invocation.getArgument(3),
-                    new GiteaApiClient(restClient, integration.getUrl()), Duration.ofMinutes(5));
+                    new GiteaApiClient(restClient), Duration.ofMinutes(5));
         });
     }
 

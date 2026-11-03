@@ -88,6 +88,7 @@ class CachedRepositoryUserTest {
     @Test
     void connection_asksTheProviderOnlyWhenTheUserIsRead() {
         RepositoryConnection connection = new RepositoryConnection("https://git.example.com", "https://git.example.com",
+                RepositoryRemoteResolver.http("https://git.example.com"), false,
                 () -> new HttpCredentials(null, "token"), null, client, Duration.ofMinutes(10));
         verifyNoInteractions(client);
         when(client.getAuthenticatedUser()).thenReturn(BOT);

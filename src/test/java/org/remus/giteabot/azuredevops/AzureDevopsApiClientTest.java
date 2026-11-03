@@ -38,7 +38,7 @@ class AzureDevopsApiClientTest {
 
     private static AzureDevopsApiClient newClient(RestClient restClient, String baseUrl, String cloneUrl,
                                                   GitDiffService gitDiffService) {
-        return new AzureDevopsApiClient(restClient, baseUrl, cloneUrl,
+        return new AzureDevopsApiClient(restClient, baseUrl, AzureDevopsProviderMetadata.remoteResolver(cloneUrl),
                 () -> new HttpCredentials("bot@contoso.com", "ado_pat"), gitDiffService);
     }
 
@@ -177,46 +177,6 @@ class AzureDevopsApiClientTest {
                         PostReviewAction.APPROVE);
 
         server.verify();
-    }
-
-    @Test
-    void getRepositoryRemote_omitsTheOrganizationWhenTheCloneBaseAlreadyCarriesIt() {
-        assertEquals("https://contoso.visualstudio.com/MyProject/_git/my-service",
-                newClient(RestClient.builder().build(), "https://contoso.visualstudio.com", "https://contoso.visualstudio.com", null)
-                        .getRepositoryRemote("contoso", "MyProject/my-service"));
-
-        assertEquals("https://tfs.example.com/tfs/DefaultCollection/MyProject/_git/my-service",
-                newClient(RestClient.builder().build(), "https://tfs.example.com/tfs/DefaultCollection", "https://tfs.example.com/tfs/DefaultCollection", null)
-                        .getRepositoryRemote("DefaultCollection", "MyProject/my-service"));
-    }
-
-    @Test
-    void getRepositoryRemote_rejectsCredentialBearingHttpBase() {
-        // The remote is passed to git as a command-line argument and echoed back in its
-        // error output, so a PAT in the clone base URL must not survive into it. The
-        // interface default enforces this; the Azure DevOps override builds its own path
-        // and must not lose the guarantee along the way.
-        AzureDevopsApiClient client = newClient(RestClient.builder().build(), "https://dev.azure.com", "https://user:pat@dev.azure.com", null);
-
-        IllegalStateException e = assertThrows(IllegalStateException.class,
-                () -> client.getRepositoryRemote("contoso", "MyProject/my-service"));
-        assertEquals("HTTP clone base URL must be credential-free", e.getMessage());
-    }
-
-    @Test
-    void getRepositoryRemote_rejectsUnsupportedScheme() {
-        AzureDevopsApiClient client = newClient(RestClient.builder().build(), "https://dev.azure.com", "ssh://dev.azure.com", null);
-
-        assertThrows(IllegalStateException.class,
-                () -> client.getRepositoryRemote("contoso", "MyProject/my-service"));
-    }
-
-    @Test
-    void getRepositoryRemote_usesGitSegment() {
-        AzureDevopsApiClient client = newClient(null, URL, URL, null);
-
-        assertEquals("https://dev.azure.com/contoso/MyProject/_git/my-service",
-                client.getRepositoryRemote("contoso", "MyProject/my-service"));
     }
 
     @Test

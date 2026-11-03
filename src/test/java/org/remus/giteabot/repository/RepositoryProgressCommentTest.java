@@ -115,8 +115,8 @@ class RepositoryProgressCommentTest {
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
         RestClient restClient = builder.build();
         RepositoryApiClient client = switch (provider) {
-            case GITHUB -> new GitHubApiClient(restClient, baseUrl);
-            case GITLAB -> new GitLabApiClient(restClient, baseUrl);
+            case GITHUB -> new GitHubApiClient(restClient);
+            case GITLAB -> new GitLabApiClient(restClient);
             case BITBUCKET -> new BitbucketApiClient(restClient, baseUrl);
             default -> throw new IllegalArgumentException("Unexpected test provider: " + provider);
         };

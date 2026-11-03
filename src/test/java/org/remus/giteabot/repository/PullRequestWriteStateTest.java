@@ -70,9 +70,9 @@ class PullRequestWriteStateTest {
     private static RepositoryApiClient client(String provider, RestClient restClient) {
         String cloneUrl = "https://git.example";
         return switch (provider) {
-            case "gitea" -> new GiteaApiClient(restClient, cloneUrl);
-            case "github" -> new GitHubApiClient(restClient, cloneUrl);
-            case "gitlab" -> new GitLabApiClient(restClient, cloneUrl);
+            case "gitea" -> new GiteaApiClient(restClient);
+            case "github" -> new GitHubApiClient(restClient);
+            case "gitlab" -> new GitLabApiClient(restClient);
             case "bitbucket" -> new BitbucketApiClient(restClient, cloneUrl);
             default -> throw new IllegalArgumentException(provider);
         };

@@ -56,11 +56,6 @@ public class BitbucketApiClient implements RepositoryApiClient {
         this.cloneUrl = cloneUrl;
     }
 
-    @Override
-    public String getRepositoryRemote(String owner, String repo) {
-        return RepositoryApiClient.httpRepositoryRemote(cloneUrl, owner, repo);
-    }
-
     /**
      * Returns the Bitbucket account behind the configured e-mail/API-token pair.
      * The result is memoized; clients are re-created whenever the integration changes.

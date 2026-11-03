@@ -27,7 +27,7 @@ class GiteaApiClientArtifactUploadTest {
     void inlineableTextArtifact_doesNotCallAssetsEndpoint() {
         RestClient.Builder builder = RestClient.builder().baseUrl("https://gitea.example.com");
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
-        GiteaApiClient client = new GiteaApiClient(builder.build(), CLONE_URL);
+        GiteaApiClient client = new GiteaApiClient(builder.build());
 
         server.expect(requestTo("https://gitea.example.com/api/v1/repos/owner/repo/issues/5/comments"))
                 .andExpect(method(HttpMethod.POST))
@@ -48,7 +48,7 @@ class GiteaApiClientArtifactUploadTest {
     void largeBinaryArtifact_uploadsAndLinks() {
         RestClient.Builder builder = RestClient.builder().baseUrl("https://gitea.example.com");
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
-        GiteaApiClient client = new GiteaApiClient(builder.build(), CLONE_URL);
+        GiteaApiClient client = new GiteaApiClient(builder.build());
 
         server.expect(requestTo("https://gitea.example.com/api/v1/repos/owner/repo/issues/5/assets"))
                 .andExpect(method(HttpMethod.POST))
@@ -76,7 +76,7 @@ class GiteaApiClientArtifactUploadTest {
     void uploadFailure_fallsBackToSummaryComment() {
         RestClient.Builder builder = RestClient.builder().baseUrl("https://gitea.example.com");
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
-        GiteaApiClient client = new GiteaApiClient(builder.build(), CLONE_URL);
+        GiteaApiClient client = new GiteaApiClient(builder.build());
 
         server.expect(requestTo("https://gitea.example.com/api/v1/repos/owner/repo/issues/5/assets"))
                 .andExpect(method(HttpMethod.POST))

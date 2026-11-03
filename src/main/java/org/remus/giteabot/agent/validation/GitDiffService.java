@@ -1,7 +1,7 @@
 package org.remus.giteabot.agent.validation;
 
 import lombok.extern.slf4j.Slf4j;
-import org.remus.giteabot.repository.RepositoryApiClient;
+import org.remus.giteabot.repository.RepositoryRemoteResolver;
 import org.remus.giteabot.repository.model.RepositoryCredentials;
 import org.springframework.stereotype.Service;
 
@@ -45,16 +45,19 @@ public class GitDiffService {
     }
 
     /**
-     * Returns {@code git diff --find-renames baseSha headSha} for the client's repository,
+     * Returns {@code git diff --find-renames baseSha headSha} for {@code owner/repo},
      * cut at a file boundary when it exceeds {@link #MAX_DIFF_BYTES}.
      *
+     * @param remoteResolver          resolves the remote of {@code owner/repo}
+     * @param usesAuthorizationHeader whether Git over HTTP authenticates with a pre-emptive
+     *                                {@code Authorization} header
      * @return the diff, or {@code null} when the commits could not be fetched or diffed
      */
-    public String diffCommits(RepositoryApiClient repositoryClient, RepositoryCredentials credentials,
-                              String owner, String repo,
+    public String diffCommits(RepositoryRemoteResolver remoteResolver, boolean usesAuthorizationHeader,
+                              RepositoryCredentials credentials, String owner, String repo,
                               String baseSha, String headSha) {
         try (Workspace workspace = workspaceService.createEmptyWorkspace(
-                repositoryClient, credentials, owner, repo)) {
+                remoteResolver, usesAuthorizationHeader, credentials, owner, repo)) {
             CommandResult fetch = workspace.gitRemote(120, "fetch", "--depth=1", "--no-tags",
                     "--end-of-options", workspace.repositoryRemote(), baseSha, headSha);
             if (!fetch.success()) {

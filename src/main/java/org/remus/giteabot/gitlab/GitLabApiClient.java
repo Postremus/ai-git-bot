@@ -44,22 +44,14 @@ public class GitLabApiClient implements RepositoryApiClient {
     private static final String SOURCE_BRANCH = "source_branch";
     private static final String DISCUSSION_PATH = "/api/v4/projects/{projectPath}/merge_requests/{iid}/discussions";
     private final RestClient gitlabRestClient;
-    private final String cloneUrl;
 
     /**
-     * Creates a GitLabApiClient with the given RestClient and clone URL.
+     * Creates a GitLabApiClient with the given RestClient.
      *
      * @param restClient  pre-configured RestClient pointing at the GitLab API base URL
-     * @param cloneUrl    the credential-free HTTP clone base URL
      */
-    public GitLabApiClient(RestClient restClient, String cloneUrl) {
+    public GitLabApiClient(RestClient restClient) {
         this.gitlabRestClient = restClient;
-        this.cloneUrl = cloneUrl;
-    }
-
-    @Override
-    public String getRepositoryRemote(String owner, String repo) {
-        return RepositoryApiClient.httpRepositoryRemote(cloneUrl, owner, repo);
     }
 
     @Override

@@ -34,7 +34,7 @@ class GitLabApiClientArtifactUploadTest {
     void inlineableTextArtifact_doesNotCallUploadsEndpoint() {
         RestClient.Builder builder = RestClient.builder().baseUrl("https://gitlab.example.com");
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
-        GitLabApiClient client = new GitLabApiClient(builder.build(), CLONE_URL);
+        GitLabApiClient client = new GitLabApiClient(builder.build());
 
         server.expect(requestTo("https://gitlab.example.com/api/v4/projects/owner%2Frepo/merge_requests/9/notes"))
                 .andExpect(method(HttpMethod.POST))
@@ -56,7 +56,7 @@ class GitLabApiClientArtifactUploadTest {
     void largeBinaryArtifact_uploadsAndLinks() {
         RestClient.Builder builder = RestClient.builder().baseUrl("https://gitlab.example.com");
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
-        GitLabApiClient client = new GitLabApiClient(builder.build(), CLONE_URL);
+        GitLabApiClient client = new GitLabApiClient(builder.build());
 
         // 1) Multipart upload
         server.expect(requestTo("https://gitlab.example.com/api/v4/projects/owner%2Frepo/uploads"))
@@ -86,7 +86,7 @@ class GitLabApiClientArtifactUploadTest {
     void uploadFailure_fallsBackToSummaryComment() {
         RestClient.Builder builder = RestClient.builder().baseUrl("https://gitlab.example.com");
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
-        GitLabApiClient client = new GitLabApiClient(builder.build(), CLONE_URL);
+        GitLabApiClient client = new GitLabApiClient(builder.build());
 
         server.expect(requestTo("https://gitlab.example.com/api/v4/projects/owner%2Frepo/uploads"))
                 .andExpect(method(HttpMethod.POST))
@@ -107,7 +107,7 @@ class GitLabApiClientArtifactUploadTest {
     void unknownContentType_doesNotThrow() {
         RestClient.Builder builder = RestClient.builder().baseUrl("https://gitlab.example.com");
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
-        GitLabApiClient client = new GitLabApiClient(builder.build(), CLONE_URL);
+        GitLabApiClient client = new GitLabApiClient(builder.build());
 
         server.expect(requestTo("https://gitlab.example.com/api/v4/projects/owner%2Frepo/uploads"))
                 .andExpect(method(HttpMethod.POST))

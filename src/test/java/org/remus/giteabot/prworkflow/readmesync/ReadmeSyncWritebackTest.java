@@ -61,7 +61,6 @@ class ReadmeSyncWritebackTest {
         git(seed, "push", "origin", "feature/docs");
 
         client = mock(RepositoryApiClient.class, CALLS_REAL_METHODS);
-        doReturn(remote.toString()).when(client).getRepositoryRemote("acme", "repo");
         doReturn(RepositoryConnections.USER).when(client).getAuthenticatedUser();
         when(client.getPullRequestDiff("acme", "repo", 42L)).thenReturn("diff --git a/x b/x\n+changed");
         when(client.getPullRequestDetails("acme", "repo", 42L))
@@ -80,7 +79,7 @@ class ReadmeSyncWritebackTest {
             context.recordDeleted("obsolete.md");
             return new ReadmeSyncAgent.Result(3, "done", false);
         });
-        service = new ReadmeSyncService(RepositoryConnections.of(client), mock(AiClient.class), new SystemPrompt(),
+        service = new ReadmeSyncService(RepositoryConnections.of(client, (owner, repo) -> remote.toString()), mock(AiClient.class), new SystemPrompt(),
                 new WorkspaceService(root.resolve("workspaces").toString(), 60), agent,
                 mock(WorkflowToolSurfaceFactory.class));
     }

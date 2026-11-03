@@ -8,6 +8,7 @@ import org.remus.giteabot.admin.GitIntegration;
 import org.remus.giteabot.repository.RepositoryProviderMetadata;
 import org.remus.giteabot.repository.RepositoryType;
 import org.remus.giteabot.repository.RepositoryConnection;
+import org.remus.giteabot.repository.RepositoryRemoteResolver;
 import org.remus.giteabot.repository.model.HttpCredentials;
 import org.remus.giteabot.repository.model.SshCredentials;
 import org.springframework.beans.factory.ObjectProvider;
@@ -129,7 +130,8 @@ public class BitbucketProviderMetadata implements RepositoryProviderMetadata {
                                                  @Nullable Supplier<SshCredentials> sshCredentials,
                                                  Duration userTtl) {
         String cloneUrl = resolveCloneUrl(integration);
-        return new RepositoryConnection(resolveApiUrl(integration), cloneUrl, httpCredentials, sshCredentials,
+        return new RepositoryConnection(resolveApiUrl(integration), cloneUrl,
+                RepositoryRemoteResolver.http(cloneUrl), false, httpCredentials, sshCredentials,
                 new BitbucketApiClient(restClient, cloneUrl), userTtl);
     }
 }

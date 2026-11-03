@@ -8,6 +8,7 @@ import org.remus.giteabot.admin.GitIntegration;
 import org.remus.giteabot.repository.RepositoryProviderMetadata;
 import org.remus.giteabot.repository.RepositoryType;
 import org.remus.giteabot.repository.RepositoryConnection;
+import org.remus.giteabot.repository.RepositoryRemoteResolver;
 import org.remus.giteabot.repository.model.HttpCredentials;
 import org.remus.giteabot.repository.model.SshCredentials;
 import org.springframework.beans.factory.ObjectProvider;
@@ -85,8 +86,11 @@ public class GiteaProviderMetadata implements RepositoryProviderMetadata {
                                                  Duration userTtl) {
         String cloneUrl = resolveCloneUrl(integration);
         boolean usesSsh = sshCredentials != null;
-        GiteaApiClient client = new GiteaApiClient(restClient, cloneUrl, usesSsh,
-                usesSsh ? integration.getSshKnownHosts() : null);
-        return new RepositoryConnection(resolveApiUrl(integration), cloneUrl, httpCredentials, sshCredentials, client, userTtl);
+        GiteaApiClient client = new GiteaApiClient(restClient, usesSsh ? integration.getSshKnownHosts() : null);
+        // Gitea's SSH host and port are only known to the server, so an SSH remote is looked up per repository.
+        RepositoryRemoteResolver remoteResolver = usesSsh
+                ? client::getSshRepositoryRemote : RepositoryRemoteResolver.http(cloneUrl);
+        return new RepositoryConnection(resolveApiUrl(integration), cloneUrl, remoteResolver, false,
+                httpCredentials, sshCredentials, client, userTtl);
     }
 }

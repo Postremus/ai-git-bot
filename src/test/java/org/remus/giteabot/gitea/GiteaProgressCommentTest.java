@@ -20,8 +20,7 @@ class GiteaProgressCommentTest {
     void existingCommentCallDoesNotRequireAResponseId(String response) {
         RestClient.Builder builder = RestClient.builder().baseUrl("https://gitea.example.com");
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
-        GiteaApiClient client = new GiteaApiClient(builder.build(),
-                "https://gitea.example.com");
+        GiteaApiClient client = new GiteaApiClient(builder.build());
         server.expect(requestTo("https://gitea.example.com/api/v1/repos/owner/repo/issues/7/comments"))
                 .andExpect(method(HttpMethod.POST)).andExpect(content().json("{\"body\":\"README Sync starting\"}"))
                 .andRespond(withSuccess(response, MediaType.APPLICATION_JSON));
@@ -34,8 +33,7 @@ class GiteaProgressCommentTest {
     void createsAndEditsOneIssueCommentForThePullRequest() {
         RestClient.Builder builder = RestClient.builder().baseUrl("https://gitea.example.com");
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
-        GiteaApiClient client = new GiteaApiClient(builder.build(),
-                "https://gitea.example.com");
+        GiteaApiClient client = new GiteaApiClient(builder.build());
         server.expect(requestTo("https://gitea.example.com/api/v1/repos/owner/repo/issues/7/comments"))
                 .andExpect(method(HttpMethod.POST)).andExpect(content().json("{\"body\":\"Starting review\"}"))
                 .andRespond(withSuccess("{\"id\":2147483648,\"body\":\"Starting review\"}", MediaType.APPLICATION_JSON));
@@ -55,8 +53,7 @@ class GiteaProgressCommentTest {
     void returnsNoIdWhenTheResponseHasNoUsableId(String response) {
         RestClient.Builder builder = RestClient.builder().baseUrl("https://gitea.example.com");
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
-        GiteaApiClient client = new GiteaApiClient(builder.build(),
-                "https://gitea.example.com");
+        GiteaApiClient client = new GiteaApiClient(builder.build());
         server.expect(requestTo("https://gitea.example.com/api/v1/repos/owner/repo/issues/7/comments"))
                 .andRespond(withSuccess(response, MediaType.APPLICATION_JSON));
 

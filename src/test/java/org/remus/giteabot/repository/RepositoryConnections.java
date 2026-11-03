@@ -13,6 +13,8 @@ public final class RepositoryConnections {
 
     public static final RepositoryUser USER = new RepositoryUser("1", "bot", "Bot", "bot@example.com");
 
+    private static final String URL = "https://git.example.com";
+
     private static final Map<RepositoryApiClient, RepositoryConnection> CONNECTIONS =
             Collections.synchronizedMap(new WeakHashMap<>());
 
@@ -26,7 +28,19 @@ public final class RepositoryConnections {
 
     /** Returns a new connection authenticating with the given credentials. */
     public static RepositoryConnection of(RepositoryApiClient client, HttpCredentials credentials) {
-        return new RepositoryConnection("https://git.example.com", "https://git.example.com",
+        return of(client, credentials, RepositoryRemoteResolver.http(URL), false);
+    }
+
+    /** Returns a new connection resolving its Git remotes with {@code remoteResolver}. */
+    public static RepositoryConnection of(RepositoryApiClient client, RepositoryRemoteResolver remoteResolver) {
+        return of(client, new HttpCredentials(null, "token"), remoteResolver, false);
+    }
+
+    /** Returns a new connection with the given credentials, remotes and HTTP authentication mode. */
+    public static RepositoryConnection of(RepositoryApiClient client, HttpCredentials credentials,
+                                          RepositoryRemoteResolver remoteResolver,
+                                          boolean usesGitAuthorizationHeader) {
+        return new RepositoryConnection(URL, URL, remoteResolver, usesGitAuthorizationHeader,
                 () -> credentials, null, client, Duration.ofMinutes(5));
     }
 }

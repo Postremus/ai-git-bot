@@ -2,6 +2,7 @@ package org.remus.giteabot.azuredevops;
 
 import org.junit.jupiter.api.Test;
 import org.remus.giteabot.agent.validation.GitDiffService;
+import org.remus.giteabot.repository.RepositoryRemoteResolver;
 import org.remus.giteabot.repository.model.HttpCredentials;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.client.MockRestServiceServer;
@@ -9,6 +10,7 @@ import org.springframework.web.client.RestClient;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -30,6 +32,9 @@ class AzureDevopsApiClientDiffTest {
 
     private static final HttpCredentials CREDENTIALS = new HttpCredentials(null, "ado_pat");
 
+    private static final RepositoryRemoteResolver REMOTES =
+            AzureDevopsProviderMetadata.remoteResolver("https://dev.azure.com");
+
     /** A client whose iterations request answers with the given JSON. */
     private AzureDevopsApiClient client(String iterationsJson) {
         RestClient.Builder builder = RestClient.builder().baseUrl("https://dev.azure.com");
@@ -37,7 +42,7 @@ class AzureDevopsApiClientDiffTest {
                 .ignoreExpectOrder(true).build();
         server.expect(manyTimes(), anything()).andRespond(request ->
                 withSuccess(iterationsJson, MediaType.APPLICATION_JSON).createResponse(request));
-        return new AzureDevopsApiClient(builder.build(), "https://dev.azure.com", "https://dev.azure.com",
+        return new AzureDevopsApiClient(builder.build(), "https://dev.azure.com", REMOTES,
                 () -> CREDENTIALS, gitDiffService);
     }
 
@@ -65,7 +70,7 @@ class AzureDevopsApiClientDiffTest {
         AzureDevopsApiClient client = client(iterations(
                 iteration(1, TARGET_TIP, OLD_HEAD, TARGET_TIP),
                 iteration(2, MERGE_BASE, HEAD_SHA, TARGET_TIP)));
-        when(gitDiffService.diffCommits(client, CREDENTIALS, "contoso", "MyProject/my-service", MERGE_BASE, HEAD_SHA))
+        when(gitDiffService.diffCommits(REMOTES, true, CREDENTIALS, "contoso", "MyProject/my-service", MERGE_BASE, HEAD_SHA))
                 .thenReturn("diff --git a/x b/x\n");
 
         assertEquals("diff --git a/x b/x\n",
@@ -77,7 +82,7 @@ class AzureDevopsApiClientDiffTest {
         AzureDevopsApiClient client = client(iterations(
                 iteration(2, MERGE_BASE, HEAD_SHA, TARGET_TIP),
                 iteration(1, TARGET_TIP, OLD_HEAD, TARGET_TIP)));
-        when(gitDiffService.diffCommits(client, CREDENTIALS, "contoso", "MyProject/my-service", MERGE_BASE, HEAD_SHA))
+        when(gitDiffService.diffCommits(REMOTES, true, CREDENTIALS, "contoso", "MyProject/my-service", MERGE_BASE, HEAD_SHA))
                 .thenReturn("diff");
 
         assertEquals("diff", client.getPullRequestDiff("contoso", "MyProject/my-service", 42L));
@@ -86,7 +91,7 @@ class AzureDevopsApiClientDiffTest {
     @Test
     void getPullRequestDiff_fallsBackToTheTargetTipWithoutAMergeBase() {
         AzureDevopsApiClient client = client(iterations(iteration(1, null, HEAD_SHA, TARGET_TIP)));
-        when(gitDiffService.diffCommits(client, CREDENTIALS, "contoso", "MyProject/my-service", TARGET_TIP, HEAD_SHA))
+        when(gitDiffService.diffCommits(REMOTES, true, CREDENTIALS, "contoso", "MyProject/my-service", TARGET_TIP, HEAD_SHA))
                 .thenReturn("diff");
 
         assertEquals("diff", client.getPullRequestDiff("contoso", "MyProject/my-service", 42L));
@@ -97,7 +102,7 @@ class AzureDevopsApiClientDiffTest {
         AzureDevopsApiClient client = client(iterations());
 
         assertNull(client.getPullRequestDiff("contoso", "MyProject/my-service", 42L));
-        verify(gitDiffService, never()).diffCommits(any(), any(), anyString(), anyString(), any(), any());
+        verify(gitDiffService, never()).diffCommits(any(), anyBoolean(), any(), anyString(), anyString(), any(), any());
     }
 
     @Test
@@ -107,10 +112,10 @@ class AzureDevopsApiClientDiffTest {
                 .ignoreExpectOrder(true).build();
         server.expect(manyTimes(), anything()).andRespond(request ->
                 withServerError().createResponse(request));
-        AzureDevopsApiClient client = new AzureDevopsApiClient(builder.build(), "https://dev.azure.com", "https://dev.azure.com",
+        AzureDevopsApiClient client = new AzureDevopsApiClient(builder.build(), "https://dev.azure.com", REMOTES,
                 () -> CREDENTIALS, gitDiffService);
 
         assertNull(client.getPullRequestDiff("contoso", "MyProject/my-service", 42L));
-        verify(gitDiffService, never()).diffCommits(any(), any(), anyString(), anyString(), any(), any());
+        verify(gitDiffService, never()).diffCommits(any(), anyBoolean(), any(), anyString(), anyString(), any(), any());
     }
 }

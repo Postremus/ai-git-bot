@@ -38,22 +38,14 @@ import java.util.Optional;
 public class GitHubApiClient implements RepositoryApiClient {
 
     private final RestClient restClient;
-    private final String cloneUrl;
 
     /**
-     * Creates a GitHubApiClient with the given RestClient and clone URL.
+     * Creates a GitHubApiClient with the given RestClient.
      *
      * @param restClient  pre-configured RestClient pointing at the GitHub API base URL
-     * @param cloneUrl    the credential-free HTTP clone base URL
      */
-    public GitHubApiClient(RestClient restClient, String cloneUrl) {
+    public GitHubApiClient(RestClient restClient) {
         this.restClient = restClient;
-        this.cloneUrl = cloneUrl;
-    }
-
-    @Override
-    public String getRepositoryRemote(String owner, String repo) {
-        return RepositoryApiClient.httpRepositoryRemote(cloneUrl, owner, repo);
     }
 
     /**

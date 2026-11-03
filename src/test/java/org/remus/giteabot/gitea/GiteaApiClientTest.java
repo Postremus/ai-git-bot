@@ -37,23 +37,15 @@ class GiteaApiClientTest {
 
     @Test
     void implementsRepositoryApiClient() {
-        GiteaApiClient client = new GiteaApiClient(null, CLONE_URL);
+        GiteaApiClient client = new GiteaApiClient(null);
         assertInstanceOf(RepositoryApiClient.class, client);
-    }
-
-    @Test
-    void getRepositoryRemote_buildsCompleteHttpUrl() {
-        GiteaApiClient client = new GiteaApiClient(null, CLONE_URL);
-
-        assertEquals("https://gitea.example.com/owner/repo.git",
-                client.getRepositoryRemote("owner", "repo"));
     }
 
     @Test
     void managedSsh_detectsEndpointAndRegistersWritableUserKey() {
         RestClient.Builder builder = RestClient.builder().baseUrl(CLONE_URL);
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
-        GiteaApiClient client = new GiteaApiClient(builder.build(), CLONE_URL);
+        GiteaApiClient client = new GiteaApiClient(builder.build());
         server.expect(requestTo(CLONE_URL + "/api/v1/repos/search?limit=1&private=true"))
                 .andRespond(withSuccess("{\"data\":[{\"ssh_url\":\"ssh://git@gitea.example.com:2222/owner/repo.git\"}]}",
                         MediaType.APPLICATION_JSON));
@@ -80,7 +72,7 @@ class GiteaApiClientTest {
     void managedSsh_rejectsMissingOrUnsafeEndpoint(String response) {
         RestClient.Builder builder = RestClient.builder().baseUrl(CLONE_URL);
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
-        GiteaApiClient client = new GiteaApiClient(builder.build(), CLONE_URL);
+        GiteaApiClient client = new GiteaApiClient(builder.build());
         server.expect(requestTo(CLONE_URL + "/api/v1/repos/search?limit=1&private=true"))
                 .andRespond(withSuccess(response, MediaType.APPLICATION_JSON));
         assertThrows(IllegalStateException.class, client::getAnySshCloneUrl);
@@ -92,7 +84,7 @@ class GiteaApiClientTest {
     void managedSsh_rejectsMissingOrInvalidRegistrationId(String response) {
         RestClient.Builder builder = RestClient.builder().baseUrl(CLONE_URL);
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
-        GiteaApiClient client = new GiteaApiClient(builder.build(), CLONE_URL);
+        GiteaApiClient client = new GiteaApiClient(builder.build());
         server.expect(requestTo(CLONE_URL + "/api/v1/user/keys"))
                 .andRespond(withSuccess(response, MediaType.APPLICATION_JSON));
         assertThrows(IllegalStateException.class, () -> client.createSshKey("title", "public"));
@@ -103,7 +95,7 @@ class GiteaApiClientTest {
     void managedSsh_titleRecoveryReadsAllPagesEvenWhenServerLimitsPageSize() {
         RestClient.Builder builder = RestClient.builder().baseUrl(CLONE_URL);
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
-        GiteaApiClient client = new GiteaApiClient(builder.build(), CLONE_URL);
+        GiteaApiClient client = new GiteaApiClient(builder.build());
         server.expect(requestTo(CLONE_URL + "/api/v1/user/keys?page=1&limit=50"))
                 .andRespond(withSuccess("[{\"id\":1,\"title\":\"unrelated\"}]", MediaType.APPLICATION_JSON));
         server.expect(requestTo(CLONE_URL + "/api/v1/user/keys?page=2&limit=50"))
@@ -119,7 +111,7 @@ class GiteaApiClientTest {
     void managedSsh_ambiguousKeyListIsNotTreatedAsAbsent(String response) {
         RestClient.Builder builder = RestClient.builder().baseUrl(CLONE_URL);
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
-        GiteaApiClient client = new GiteaApiClient(builder.build(), CLONE_URL);
+        GiteaApiClient client = new GiteaApiClient(builder.build());
         server.expect(requestTo(CLONE_URL + "/api/v1/user/keys?page=1&limit=50"))
                 .andRespond(withSuccess(response, MediaType.APPLICATION_JSON));
         assertThrows(IllegalStateException.class, client::getSshKeyIds);
@@ -130,7 +122,7 @@ class GiteaApiClientTest {
     void getPullRequestHead_resolvesForkRepositoryAndBranch() {
         RestClient.Builder builder = RestClient.builder().baseUrl("https://gitea.example.com");
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
-        GiteaApiClient client = new GiteaApiClient(builder.build(), CLONE_URL);
+        GiteaApiClient client = new GiteaApiClient(builder.build());
 
         server.expect(requestTo("https://gitea.example.com/api/v1/repos/base/project/pulls/7"))
                 .andExpect(method(HttpMethod.GET))
@@ -153,7 +145,7 @@ class GiteaApiClientTest {
     void getPullRequestHead_rejectsBranchMismatch() {
         RestClient.Builder builder = RestClient.builder().baseUrl("https://gitea.example.com");
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
-        GiteaApiClient client = new GiteaApiClient(builder.build(), CLONE_URL);
+        GiteaApiClient client = new GiteaApiClient(builder.build());
 
         server.expect(requestTo("https://gitea.example.com/api/v1/repos/base/project/pulls/7"))
                 .andRespond(withSuccess("""
@@ -172,7 +164,7 @@ class GiteaApiClientTest {
     void getPullRequestHead_rejectsMissingSourceRepository() {
         RestClient.Builder builder = RestClient.builder().baseUrl("https://gitea.example.com");
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
-        GiteaApiClient client = new GiteaApiClient(builder.build(), CLONE_URL);
+        GiteaApiClient client = new GiteaApiClient(builder.build());
 
         server.expect(requestTo("https://gitea.example.com/api/v1/repos/base/project/pulls/7"))
                 .andRespond(withSuccess("{" + "\"head\":{\"ref\":\"main\",\"sha\":\"abc123\"}}",
@@ -187,7 +179,7 @@ class GiteaApiClientTest {
     void getRepositoryTree_mapsBlobAndTreeEntries() {
         RestClient.Builder builder = RestClient.builder().baseUrl("https://gitea.example.com");
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
-        GiteaApiClient client = new GiteaApiClient(builder.build(), CLONE_URL);
+        GiteaApiClient client = new GiteaApiClient(builder.build());
 
         server.expect(requestTo("https://gitea.example.com/api/v1/repos/base/project/git/trees/main?recursive=true"))
                 .andExpect(method(HttpMethod.GET))
@@ -209,7 +201,7 @@ class GiteaApiClientTest {
     void getPullRequestCommits_mapsShaAndNestedMessage() {
         RestClient.Builder builder = RestClient.builder().baseUrl("https://gitea.example.com");
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
-        GiteaApiClient client = new GiteaApiClient(builder.build(), CLONE_URL);
+        GiteaApiClient client = new GiteaApiClient(builder.build());
 
         server.expect(requestTo("https://gitea.example.com/api/v1/repos/base/project/pulls/7/commits"))
                 .andExpect(method(HttpMethod.GET))
@@ -230,7 +222,7 @@ class GiteaApiClientTest {
         // rather than expecting a nested {"id": ...} object.
         RestClient.Builder builder = RestClient.builder().baseUrl("https://gitea.example.com");
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
-        GiteaApiClient client = new GiteaApiClient(builder.build(), CLONE_URL);
+        GiteaApiClient client = new GiteaApiClient(builder.build());
 
         server.expect(requestTo("https://gitea.example.com/api/v1/repos/base/project/pulls/7/reviews/3/comments"))
                 .andExpect(method(HttpMethod.GET))
@@ -252,7 +244,7 @@ class GiteaApiClientTest {
     void getPullRequestDetails_mapsTitleBodyAndHead() {
         RestClient.Builder builder = RestClient.builder().baseUrl("https://gitea.example.com");
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
-        GiteaApiClient client = new GiteaApiClient(builder.build(), CLONE_URL);
+        GiteaApiClient client = new GiteaApiClient(builder.build());
 
         server.expect(requestTo("https://gitea.example.com/api/v1/repos/base/project/pulls/7"))
                 .andExpect(method(HttpMethod.GET))
@@ -271,38 +263,11 @@ class GiteaApiClientTest {
     }
 
     @Test
-    void getRepositoryRemote_rejectsCredentialBearingHttpBase() {
-        GiteaApiClient client = new GiteaApiClient(null,
-                "https://user:secret@gitea.example.com");
-
-        assertThrows(IllegalStateException.class,
-                () -> client.getRepositoryRemote("owner", "repo"));
-    }
-
-    @Test
-    void getRepositoryRemote_acceptsCaseInsensitiveHttpScheme() {
-        GiteaApiClient client = new GiteaApiClient(null,
-                "HTTPS://gitea.example.com");
-
-        assertEquals("https://gitea.example.com/owner/repo.git",
-                client.getRepositoryRemote("owner", "repo"));
-    }
-
-    @Test
-    void getRepositoryRemote_rejectsUnsupportedScheme() {
-        GiteaApiClient client = new GiteaApiClient(null,
-                "ftp://gitea.example.com");
-
-        assertThrows(IllegalStateException.class,
-                () -> client.getRepositoryRemote("owner", "repo"));
-    }
-
-    @Test
-    void getRepositoryRemote_sshEnabled_usesRepositorySshUrl() {
+    void getSshRepositoryRemote_usesRepositorySshUrl() {
         RestClient.Builder builder = RestClient.builder().baseUrl("https://gitea.example.com");
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
         GiteaApiClient client = new GiteaApiClient(builder.build(),
-                CLONE_URL, true, "gitea.example.com ssh-ed25519 host-key");
+                "gitea.example.com ssh-ed25519 host-key");
 
         server.expect(requestTo("https://gitea.example.com/api/v1/repos/owner/repo"))
                 .andExpect(method(HttpMethod.GET))
@@ -310,16 +275,16 @@ class GiteaApiClientTest {
                         MediaType.APPLICATION_JSON));
 
         assertEquals("git@gitea.example.com:owner/repo.git",
-                client.getRepositoryRemote("owner", "repo"));
+                client.getSshRepositoryRemote("owner", "repo"));
         server.verify();
     }
 
     @Test
-    void getRepositoryRemote_acceptsMatchingSshUrlWithCustomPort() {
+    void getSshRepositoryRemote_acceptsMatchingSshUrlWithCustomPort() {
         RestClient.Builder builder = RestClient.builder().baseUrl("https://gitea.example.com");
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
         GiteaApiClient client = new GiteaApiClient(builder.build(),
-                CLONE_URL, true, "[gitea.example.com]:2222 ssh-ed25519 host-key");
+                "[gitea.example.com]:2222 ssh-ed25519 host-key");
 
         server.expect(requestTo("https://gitea.example.com/api/v1/repos/owner/repo"))
                 .andRespond(withSuccess(
@@ -327,7 +292,7 @@ class GiteaApiClientTest {
                         MediaType.APPLICATION_JSON));
 
         assertEquals("ssh://git@gitea.example.com:2222/owner/repo.git",
-                client.getRepositoryRemote("owner", "repo"));
+                client.getSshRepositoryRemote("owner", "repo"));
         server.verify();
     }
 
@@ -341,17 +306,17 @@ class GiteaApiClientTest {
             "git@[gitea.example.com:owner/repo.git", "git@host]:owner/repo.git",
             "git@[host]suffix:owner/repo.git"
     })
-    void getRepositoryRemote_rejectsNonSshApiValues(String sshUrl) {
+    void getSshRepositoryRemote_rejectsNonSshApiValues(String sshUrl) {
         RestClient.Builder builder = RestClient.builder().baseUrl("https://gitea.example.com");
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
         GiteaApiClient client = new GiteaApiClient(builder.build(),
-                CLONE_URL, true, "gitea.example.com ssh-ed25519 host-key");
+                "gitea.example.com ssh-ed25519 host-key");
 
         server.expect(requestTo("https://gitea.example.com/api/v1/repos/owner/repo"))
                 .andRespond(withSuccess("{\"ssh_url\":\"" + sshUrl + "\"}", MediaType.APPLICATION_JSON));
 
         assertThrows(IllegalStateException.class,
-                () -> client.getRepositoryRemote("owner", "repo"));
+                () -> client.getSshRepositoryRemote("owner", "repo"));
         server.verify();
     }
 
@@ -360,17 +325,17 @@ class GiteaApiClientTest {
             "git@other.example.com:owner/repo.git",
             "ssh://git@gitea.example.com:2222/owner/repo.git"
     })
-    void getRepositoryRemote_rejectsCanonicalKnownHostsEndpointMismatch(String sshUrl) {
+    void getSshRepositoryRemote_rejectsCanonicalKnownHostsEndpointMismatch(String sshUrl) {
         RestClient.Builder builder = RestClient.builder().baseUrl("https://gitea.example.com");
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
         GiteaApiClient client = new GiteaApiClient(builder.build(),
-                CLONE_URL, true, "gitea.example.com ssh-ed25519 host-key");
+                "gitea.example.com ssh-ed25519 host-key");
 
         server.expect(requestTo("https://gitea.example.com/api/v1/repos/owner/repo"))
                 .andRespond(withSuccess("{\"ssh_url\":\"" + sshUrl + "\"}", MediaType.APPLICATION_JSON));
 
         assertThrows(IllegalStateException.class,
-                () -> client.getRepositoryRemote("owner", "repo"));
+                () -> client.getSshRepositoryRemote("owner", "repo"));
         server.verify();
     }
 
@@ -379,11 +344,11 @@ class GiteaApiClientTest {
             "|1|hash|salt ssh-ed25519 host-key",
             "*.example.com ssh-ed25519 host-key"
     })
-    void getRepositoryRemote_preservesManualKnownHostsCompatibility(String knownHosts) {
+    void getSshRepositoryRemote_preservesManualKnownHostsCompatibility(String knownHosts) {
         RestClient.Builder builder = RestClient.builder().baseUrl("https://gitea.example.com");
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
         GiteaApiClient client = new GiteaApiClient(builder.build(),
-                CLONE_URL, true, knownHosts);
+                knownHosts);
 
         server.expect(requestTo("https://gitea.example.com/api/v1/repos/owner/repo"))
                 .andRespond(withSuccess(
@@ -391,7 +356,7 @@ class GiteaApiClientTest {
                         MediaType.APPLICATION_JSON));
 
         assertEquals("git@other.example.com:owner/repo.git",
-                client.getRepositoryRemote("owner", "repo"));
+                client.getSshRepositoryRemote("owner", "repo"));
         server.verify();
     }
 
@@ -399,7 +364,7 @@ class GiteaApiClientTest {
     void getIssueComments_fetchesIssueCommentsWithLimit() {
         RestClient.Builder builder = RestClient.builder().baseUrl("https://gitea.example.com");
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
-        GiteaApiClient client = new GiteaApiClient(builder.build(), CLONE_URL);
+        GiteaApiClient client = new GiteaApiClient(builder.build());
 
         server.expect(requestTo(
                         "https://gitea.example.com/api/v1/repos/owner/repo/issues/42/comments?limit=50"))
@@ -418,7 +383,7 @@ class GiteaApiClientTest {
     void postReview_approve_submitsSingleReviewWithBodyAndEvent() {
         RestClient.Builder builder = RestClient.builder().baseUrl("https://gitea.example.com");
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
-        GiteaApiClient client = new GiteaApiClient(builder.build(), CLONE_URL);
+        GiteaApiClient client = new GiteaApiClient(builder.build());
 
         server.expect(requestTo("https://gitea.example.com/api/v1/repos/owner/repo/pulls/7/reviews"))
                 .andExpect(method(HttpMethod.POST))
@@ -436,7 +401,7 @@ class GiteaApiClientTest {
     void postReview_none_submitsSingleCommentReview() {
         RestClient.Builder builder = RestClient.builder().baseUrl("https://gitea.example.com");
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
-        GiteaApiClient client = new GiteaApiClient(builder.build(), CLONE_URL);
+        GiteaApiClient client = new GiteaApiClient(builder.build());
 
         server.expect(requestTo("https://gitea.example.com/api/v1/repos/owner/repo/pulls/7/reviews"))
                 .andExpect(method(HttpMethod.POST))
@@ -453,7 +418,7 @@ class GiteaApiClientTest {
     void assignIssue_patchesAssigneesAndVerifiesAssignment() {
         RestClient.Builder builder = RestClient.builder().baseUrl("https://gitea.example.com");
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
-        GiteaApiClient client = new GiteaApiClient(builder.build(), CLONE_URL);
+        GiteaApiClient client = new GiteaApiClient(builder.build());
 
         server.expect(requestTo("https://gitea.example.com/api/v1/repos/owner/repo/issues/42"))
                 .andExpect(method(HttpMethod.PATCH))
@@ -473,7 +438,7 @@ class GiteaApiClientTest {
     void assignIssue_throwsWhenGiteaSilentlyDropsAssignee() {
         RestClient.Builder builder = RestClient.builder().baseUrl("https://gitea.example.com");
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
-        GiteaApiClient client = new GiteaApiClient(builder.build(), CLONE_URL);
+        GiteaApiClient client = new GiteaApiClient(builder.build());
 
         server.expect(requestTo("https://gitea.example.com/api/v1/repos/owner/repo/issues/42"))
                 .andExpect(method(HttpMethod.PATCH))
@@ -492,7 +457,7 @@ class GiteaApiClientTest {
     void addPullRequestReaction_postsEyesReactionToThePullRequest() {
         RestClient.Builder builder = RestClient.builder().baseUrl("https://gitea.example.com");
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
-        GiteaApiClient client = new GiteaApiClient(builder.build(), CLONE_URL);
+        GiteaApiClient client = new GiteaApiClient(builder.build());
 
         server.expect(requestTo("https://gitea.example.com/api/v1/repos/owner/repo/issues/42/reactions"))
                 .andExpect(method(HttpMethod.POST))
@@ -508,7 +473,7 @@ class GiteaApiClientTest {
     void addIssueReaction_postsEyesReactionToTheIssue() {
         RestClient.Builder builder = RestClient.builder().baseUrl("https://gitea.example.com");
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
-        GiteaApiClient client = new GiteaApiClient(builder.build(), CLONE_URL);
+        GiteaApiClient client = new GiteaApiClient(builder.build());
 
         server.expect(requestTo("https://gitea.example.com/api/v1/repos/owner/repo/issues/12/reactions"))
                 .andExpect(method(HttpMethod.POST))
@@ -529,7 +494,7 @@ class GiteaApiClientTest {
                 .andRespond(withSuccess("{\"id\":17,\"login\":\"ai_bot\",\"full_name\":\"AI Bot\","
                         + "\"email\":\"bot@example.com\"}", MediaType.APPLICATION_JSON));
 
-        RepositoryUser user = new GiteaApiClient(builder.build(), CLONE_URL).getAuthenticatedUser();
+        RepositoryUser user = new GiteaApiClient(builder.build()).getAuthenticatedUser();
 
         assertEquals(new RepositoryUser("17", "ai_bot", "AI Bot", "bot@example.com"), user);
         server.verify();

@@ -3,6 +3,7 @@ package org.remus.giteabot.agent.validation;
 import lombok.extern.slf4j.Slf4j;
 import org.remus.giteabot.repository.RepositoryApiClient;
 import org.remus.giteabot.repository.RepositoryConnection;
+import org.remus.giteabot.repository.RepositoryRemoteResolver;
 import org.remus.giteabot.repository.model.RepositoryUser;
 import org.remus.giteabot.repository.model.PullRequestHead;
 import org.remus.giteabot.repository.model.RepositoryCredentials;
@@ -65,7 +66,8 @@ public class WorkspaceService {
         final RepositoryApiClient repositoryClient = connection.getClient();
         final CheckoutConfig checkout;
         try {
-            checkout = resolveCheckout(repositoryClient, connection.getCredentials(), owner, repo);
+            checkout = resolveCheckout(connection::getRepositoryRemote, connection.usesGitAuthorizationHeader(),
+                    connection.getCredentials(), owner, repo);
         } catch (RuntimeException e) {
             String message = e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage();
             log.error("Failed to resolve repository checkout for {}/{}: {}", owner, repo, message, e);
@@ -266,15 +268,18 @@ public class WorkspaceService {
     /**
      * Creates a workspace without a checkout: an initialized repository that knows how to
      * authenticate against the remote, for commands that fetch only what they need.
+     * The workspace cannot commit: it has no commit identity.
      *
      * @throws IOException      when the workspace cannot be created or initialized
-     * @throws RuntimeException when the repository client cannot resolve the checkout
+     * @throws RuntimeException when the remote cannot be resolved
      */
-    Workspace createEmptyWorkspace(RepositoryApiClient repositoryClient, RepositoryCredentials credentials,
-                                   String owner, String repo)
+    Workspace createEmptyWorkspace(RepositoryRemoteResolver remoteResolver, boolean usesAuthorizationHeader,
+                                   RepositoryCredentials credentials, String owner, String repo)
             throws IOException {
-        CheckoutConfig checkout = resolveCheckout(repositoryClient, credentials, owner, repo);
-        Workspace workspace = createWorkspace(repositoryClient::getAuthenticatedUser);
+        CheckoutConfig checkout = resolveCheckout(remoteResolver, usesAuthorizationHeader, credentials, owner, repo);
+        Workspace workspace = createWorkspace(() -> {
+            throw new IllegalStateException("A workspace without a checkout does not commit");
+        });
         try {
             workspace.setAuthentication(checkout.remote(), checkout.credentials(), checkout.usesAuthorizationHeader());
             CommandResult init = workspace.init();
@@ -295,12 +300,11 @@ public class WorkspaceService {
      * of one checkout. Runs before a workspace is allocated, so a provider failure
      * leaves no directory behind.
      */
-    private CheckoutConfig resolveCheckout(RepositoryApiClient repositoryClient, RepositoryCredentials credentials,
-                                           String owner, String repo) {
-        String repositoryRemote = repositoryClient.getRepositoryRemote(owner, repo);
-        boolean usesAuthorizationHeader = repositoryClient.usesGitAuthorizationHeader();
+    private CheckoutConfig resolveCheckout(RepositoryRemoteResolver remoteResolver, boolean usesAuthorizationHeader,
+                                           RepositoryCredentials credentials, String owner, String repo) {
+        String repositoryRemote = remoteResolver.resolve(owner, repo);
         if (repositoryRemote == null || repositoryRemote.isBlank() || credentials == null) {
-            throw new IllegalStateException("Repository client returned incomplete checkout configuration");
+            throw new IllegalStateException("Repository connection returned incomplete checkout configuration");
         }
         return new CheckoutConfig(repositoryRemote, credentials, usesAuthorizationHeader);
     }
