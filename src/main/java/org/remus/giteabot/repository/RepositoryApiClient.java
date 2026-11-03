@@ -29,10 +29,22 @@ import java.util.Optional;
 public interface RepositoryApiClient {
 
     /**
-     * Fetches the account this client's token authenticates as. Callers that know the integration
-     * and ask often should go through {@link RepositoryConnection#getUser()}, which caches the result for a limited time.
+     * Fetches the account this client's token authenticates as, asked where the repositories of
+     * {@code owner} live. Only Azure DevOps needs that: an integration on {@code https://dev.azure.com}
+     * serves many organizations, and a token scoped to one of them can only be identified inside it.
+     * Every other provider ignores {@code owner}. Callers should go through
+     * {@link RepositoryConnection#getUser(String)}, which caches the result for a limited time.
      */
-    RepositoryUser getAuthenticatedUser();
+    RepositoryUser getAuthenticatedUser(String owner);
+
+    /**
+     * Returns the key the account asked for {@code owner} is cached under: owners with the same
+     * key share one account. By default the whole integration shares one, see
+     * {@link #getAuthenticatedUser(String)} for the exception.
+     */
+    default String identityScope(String owner) {
+        return "";
+    }
 
     /**
      * Returns the name users type after {@code @} to address the bot, for providers that

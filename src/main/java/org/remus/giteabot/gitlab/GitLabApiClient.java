@@ -55,7 +55,7 @@ public class GitLabApiClient implements RepositoryApiClient {
     }
 
     @Override
-    public RepositoryUser getAuthenticatedUser() {
+    public RepositoryUser getAuthenticatedUser(String owner) {
         GitLabUserPublic user = gitlabRestClient.get().uri("/api/v4/user")
                 .retrieve().body(GitLabUserPublic.class);
         if (user == null) {

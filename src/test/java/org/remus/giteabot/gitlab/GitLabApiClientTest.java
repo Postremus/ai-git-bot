@@ -398,7 +398,7 @@ class GitLabApiClientTest {
                         + "\"email\":\"private@example.com\",\"commit_email\":\"commits@example.com\"}",
                         MediaType.APPLICATION_JSON));
 
-        RepositoryUser user = new GitLabApiClient(builder.build()).getAuthenticatedUser();
+        RepositoryUser user = new GitLabApiClient(builder.build()).getAuthenticatedUser("owner");
 
         assertEquals(new RepositoryUser("7", "ai_bot", "AI Bot", "commits@example.com"), user);
         server.verify();

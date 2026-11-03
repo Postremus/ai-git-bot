@@ -4,7 +4,7 @@ package org.remus.giteabot.repository.model;
  * The account a Git integration's token authenticates as, i.e. the bot's identity on the provider.
  * <p>
  * Display name and e-mail can be changed on the provider at any time, so this is only cached for
- * a limited time (see {@code RepositoryConnection#getUser()}).
+ * a limited time (see {@code RepositoryConnection#getUser(String)}).
  *
  * @param id          the provider's stable account id (Azure DevOps: the identity GUID, which webhook
  *                    payloads identify the bot by)

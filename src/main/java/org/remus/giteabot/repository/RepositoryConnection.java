@@ -9,6 +9,8 @@ import org.remus.giteabot.repository.model.SshCredentials;
 
 import java.time.Clock;
 import java.time.Duration;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Supplier;
 
 /**
@@ -30,7 +32,9 @@ public final class RepositoryConnection {
     private final @Nullable Supplier<SshCredentials> sshCredentials;
     @Getter
     private final RepositoryApiClient client;
-    private final CachedRepositoryUser user;
+    private final Duration userTtl;
+    /** The account per {@linkplain RepositoryApiClient#identityScope identity scope}. */
+    private final Map<String, CachedRepositoryUser> users = new ConcurrentHashMap<>();
 
     /**
      * @param baseUrl                    the API base URL (e.g. {@code https://api.github.com})
@@ -55,16 +59,21 @@ public final class RepositoryConnection {
         this.httpCredentials = httpCredentials;
         this.sshCredentials = sshCredentials;
         this.client = client;
-        this.user = new CachedRepositoryUser(client::getAuthenticatedUser, userTtl, Clock.systemUTC());
+        this.userTtl = userTtl;
     }
 
     /**
-     * Returns the account the token authenticates as, i.e. the bot's identity on the provider.
+     * Returns the account the token authenticates as where the repositories of {@code owner} live,
+     * i.e. the bot's identity on the provider. See {@link RepositoryApiClient#getAuthenticatedUser(String)}
+     * for why it depends on the owner.
      *
      * @throws IllegalStateException when the provider cannot be asked and nothing is cached
      */
-    public RepositoryUser getUser() {
-        return user.get();
+    public RepositoryUser getUser(String owner) {
+        String scope = client.identityScope(owner);
+        return users.computeIfAbsent(scope == null ? "" : scope,
+                key -> new CachedRepositoryUser(() -> client.getAuthenticatedUser(owner), userTtl, Clock.systemUTC()))
+                .get();
     }
 
     /**

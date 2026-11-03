@@ -494,7 +494,7 @@ class GiteaApiClientTest {
                 .andRespond(withSuccess("{\"id\":17,\"login\":\"ai_bot\",\"full_name\":\"AI Bot\","
                         + "\"email\":\"bot@example.com\"}", MediaType.APPLICATION_JSON));
 
-        RepositoryUser user = new GiteaApiClient(builder.build()).getAuthenticatedUser();
+        RepositoryUser user = new GiteaApiClient(builder.build()).getAuthenticatedUser("owner");
 
         assertEquals(new RepositoryUser("17", "ai_bot", "AI Bot", "bot@example.com"), user);
         server.verify();

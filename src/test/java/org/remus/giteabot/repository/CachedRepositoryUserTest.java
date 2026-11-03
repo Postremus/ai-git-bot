@@ -16,6 +16,8 @@ import java.time.ZoneOffset;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -34,26 +36,26 @@ class CachedRepositoryUserTest {
 
     @BeforeEach
     void setUp() {
-        user = new CachedRepositoryUser(() -> client.getAuthenticatedUser(), Duration.ofMinutes(10), clock);
+        user = new CachedRepositoryUser(() -> client.getAuthenticatedUser("owner"), Duration.ofMinutes(10), clock);
     }
 
     @Test
     void cachesTheUserUntilTheTtlExpires() {
-        when(client.getAuthenticatedUser()).thenReturn(BOT, new RepositoryUser("17", "renamed", null, "bot@example.com"));
+        when(client.getAuthenticatedUser("owner")).thenReturn(BOT, new RepositoryUser("17", "renamed", null, "bot@example.com"));
 
         assertEquals(BOT, user.get());
         clock.advance(Duration.ofMinutes(9));
         assertEquals(BOT, user.get());
-        verify(client, times(1)).getAuthenticatedUser();
+        verify(client, times(1)).getAuthenticatedUser("owner");
 
         clock.advance(Duration.ofMinutes(2));
         assertEquals("renamed", user.get().username());
-        verify(client, times(2)).getAuthenticatedUser();
+        verify(client, times(2)).getAuthenticatedUser("owner");
     }
 
     @Test
     void keepsServingTheExpiredUserWhenTheRefreshFails() {
-        when(client.getAuthenticatedUser()).thenReturn(BOT).thenThrow(new IllegalStateException("503"));
+        when(client.getAuthenticatedUser("owner")).thenReturn(BOT).thenThrow(new IllegalStateException("503"));
         user.get();
         clock.advance(Duration.ofMinutes(11));
 
@@ -62,23 +64,23 @@ class CachedRepositoryUserTest {
 
     @Test
     void waitsTheRetryDelayBeforeAskingTheProviderAgainAfterAFailedRefresh() {
-        when(client.getAuthenticatedUser()).thenReturn(BOT).thenThrow(new IllegalStateException("503"));
+        when(client.getAuthenticatedUser("owner")).thenReturn(BOT).thenThrow(new IllegalStateException("503"));
         user.get();
         clock.advance(Duration.ofMinutes(11));
         user.get();
 
         clock.advance(CachedRepositoryUser.RETRY_DELAY.minusSeconds(1));
         assertEquals(BOT, user.get());
-        verify(client, times(2)).getAuthenticatedUser();
+        verify(client, times(2)).getAuthenticatedUser("owner");
 
         clock.advance(Duration.ofSeconds(1));
         assertEquals(BOT, user.get());
-        verify(client, times(3)).getAuthenticatedUser();
+        verify(client, times(3)).getAuthenticatedUser("owner");
     }
 
     @Test
     void failsWhenNothingIsCachedAndTheProviderCannotBeAsked() {
-        when(client.getAuthenticatedUser()).thenThrow(new IllegalStateException("401 Unauthorized"));
+        when(client.getAuthenticatedUser("owner")).thenThrow(new IllegalStateException("401 Unauthorized"));
 
         IllegalStateException error = assertThrows(IllegalStateException.class, () -> user.get());
 
@@ -91,12 +93,48 @@ class CachedRepositoryUserTest {
                 RepositoryRemoteResolver.http("https://git.example.com"), false,
                 () -> new HttpCredentials(null, "token"), null, client, Duration.ofMinutes(10));
         verifyNoInteractions(client);
-        when(client.getAuthenticatedUser()).thenReturn(BOT);
+        when(client.getAuthenticatedUser("owner")).thenReturn(BOT);
 
-        assertEquals(BOT, connection.getUser());
-        assertEquals(BOT, connection.getUser());
+        assertEquals(BOT, connection.getUser("owner"));
+        assertEquals(BOT, connection.getUser("owner"));
 
-        verify(client, times(1)).getAuthenticatedUser();
+        verify(client, times(1)).getAuthenticatedUser("owner");
+    }
+
+    @Test
+    void connection_sharesOneUserAcrossOwnersByDefault() {
+        when(client.identityScope(anyString())).thenReturn("");
+        when(client.getAuthenticatedUser("first")).thenReturn(BOT);
+        RepositoryConnection connection = connection();
+
+        assertEquals(BOT, connection.getUser("first"));
+        assertEquals(BOT, connection.getUser("second"));
+
+        verify(client, times(1)).getAuthenticatedUser(anyString());
+    }
+
+    @Test
+    void connection_asksOncePerIdentityScope() {
+        // Azure DevOps scopes the identity per organization.
+        when(client.identityScope(anyString())).thenAnswer(invocation -> invocation.<String>getArgument(0).toLowerCase());
+        RepositoryUser other = new RepositoryUser("17", "bot", null, "bot@fabrikam.com");
+        when(client.getAuthenticatedUser("contoso")).thenReturn(BOT);
+        when(client.getAuthenticatedUser("fabrikam")).thenReturn(other);
+        RepositoryConnection connection = connection();
+
+        assertEquals(BOT, connection.getUser("contoso"));
+        assertEquals(BOT, connection.getUser("Contoso"));
+        assertEquals(other, connection.getUser("fabrikam"));
+
+        verify(client, times(1)).getAuthenticatedUser("contoso");
+        verify(client, times(1)).getAuthenticatedUser("fabrikam");
+        verify(client, never()).getAuthenticatedUser("Contoso");
+    }
+
+    private RepositoryConnection connection() {
+        return new RepositoryConnection("https://git.example.com", "https://git.example.com",
+                RepositoryRemoteResolver.http("https://git.example.com"), false,
+                () -> new HttpCredentials(null, "token"), null, client, Duration.ofMinutes(10));
     }
 
     private static final class MutableClock extends Clock {

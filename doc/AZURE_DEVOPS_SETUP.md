@@ -19,14 +19,13 @@ This guide explains how to configure AI-Git-Bot to work with Azure DevOps Servic
 1. In Azure DevOps, open **User settings** (top-right avatar) → **Personal access tokens**.
 2. Click **New Token**.
 3. Give it a name (e.g. "AI Code Review Bot") and an expiration.
-   Under **Organization**, pick **All accessible organizations** if the integration should
-   use `https://dev.azure.com` (see the URL table below); a token for a single organization
-   only works with an integration URL that names that organization.
+   Under **Organization**, pick the organization you connect, or **All accessible
+   organizations** if one integration on `https://dev.azure.com` should serve several of them
+   (see the URL table below).
 4. Under **Scopes**, select **Custom defined** and grant:
    - **Code** — Read & write
    - **Pull Request Threads** — Read & write
-   - **Identity** — Read, for an integration URL naming an organization or server
-   - **User Profile** — Read, for `https://dev.azure.com`
+   - **Identity** — Read
 5. Click **Create**.
 6. **Important**: Copy the generated token immediately — you won't be able to see it again!
 
@@ -49,7 +48,7 @@ ignores its own comments.
 
 | Deployment | URL to enter | Organizations per integration |
 |---|---|---|
-| Azure DevOps Services | `https://dev.azure.com` | Many (token for all accessible organizations) |
+| Azure DevOps Services | `https://dev.azure.com` | Many (every organization the token can access) |
 | Azure DevOps Services, one organization | `https://dev.azure.com/contoso` | One (`contoso`) |
 | Azure DevOps Services, legacy host | `https://contoso.visualstudio.com` | One (`contoso`) |
 | Azure DevOps Server (on-premises), without collection | `https://tfs.example.com/tfs` | Many (every collection on the server) |
@@ -62,9 +61,11 @@ virtual directory — keep whatever prefix your server uses (some installations 
 
 **On `https://dev.azure.com`, one integration serves many organizations.** The
 organization is resolved per-event from the incoming webhook payload, so a single
-integration can serve pull requests from any number of organizations. This needs a token
-scoped to **all accessible organizations**. An Azure DevOps Server URL without a collection
-behaves the same way, with the collection resolved from the payload.
+integration can serve pull requests from any number of organizations. The token only has to
+reach the organizations that send events: scope it to **all accessible organizations**, or to
+the one organization you connect. The bot asks for everything inside the event's organization,
+its own identity included. An Azure DevOps Server URL without a collection behaves the same
+way, with the collection resolved from the payload.
 
 **`https://dev.azure.com/contoso`, the legacy host and a Server URL with a collection pin
 the organization into the URL**, so they need one integration each — use one of these with
@@ -236,5 +237,4 @@ The minimum required scopes for the Personal Access Token:
 |---|---|
 | Code (Read & write) | Fetching PR diffs, reading file contents, pushing commits (e.g. generated tests) |
 | Pull Request Threads (Read & write) | Reading PR/thread information, posting review comments and inline comments |
-| Identity (Read) | Reading the bot's e-mail address, which links its commits to its profile, when the integration URL names an organization or server. Without it, the bot commits as `ai-agent@bot.local` |
-| User Profile (Read) | The same, when the integration URL is `https://dev.azure.com` |
+| Identity (Read) | Reading the bot's e-mail address, which links its commits to its profile. Without it, the bot commits as `ai-agent@bot.local` |

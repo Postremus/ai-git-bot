@@ -77,7 +77,7 @@ public class BitbucketApiClient implements RepositoryApiClient {
      * without permission for that yields no e-mail, see {@link RepositoryUser#FALLBACK_EMAIL}.
      */
     @Override
-    public RepositoryUser getAuthenticatedUser() {
+    public RepositoryUser getAuthenticatedUser(String owner) {
         BitbucketAccount account = fetchAuthenticatedAccount();
         String username = account.nickname() != null ? account.nickname() : account.displayName();
         return new RepositoryUser(account.accountId(), username, account.displayName(), fetchPrimaryEmail());

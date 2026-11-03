@@ -151,7 +151,7 @@ public class GiteaApiClient implements RepositoryApiClient {
     }
 
     @Override
-    public RepositoryUser getAuthenticatedUser() {
+    public RepositoryUser getAuthenticatedUser(String owner) {
         GiteaUser user = fetchAuthenticatedUser();
         if (user == null) {
             throw new IllegalStateException("Gitea returned no authenticated user");

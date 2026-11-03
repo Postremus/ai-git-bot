@@ -79,7 +79,7 @@ public class WorkspaceService {
 
         Workspace workspace = null;
         try {
-            workspace = createWorkspace(connection::getUser);
+            workspace = createWorkspace(() -> connection.getUser(owner));
             Path workspaceDir = workspace.path();
             log.info("Cloning repository to {} for workspace", workspaceDir);
 
@@ -105,7 +105,7 @@ public class WorkspaceService {
                 if (!workspace.cleanup()) {
                     return WorkspaceResult.failure("Failed to clean up the initial clone attempt");
                 }
-                workspace = createWorkspace(connection::getUser);
+                workspace = createWorkspace(() -> connection.getUser(owner));
                 workspaceDir = workspace.path();
                 workspace.setAuthentication(repositoryRemote, credentials, usesAuthorizationHeader);
 

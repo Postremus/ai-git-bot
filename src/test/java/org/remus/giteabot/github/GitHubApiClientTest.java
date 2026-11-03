@@ -296,7 +296,7 @@ class GitHubApiClientTest {
                 .andRespond(withSuccess("{\"id\":42,\"login\":\"ai-bot\",\"name\":\"AI Bot\",\"email\":\"public@example.com\"}",
                         MediaType.APPLICATION_JSON));
 
-        RepositoryUser user = new GitHubApiClient(builder.build()).getAuthenticatedUser();
+        RepositoryUser user = new GitHubApiClient(builder.build()).getAuthenticatedUser("owner");
 
         assertEquals(new RepositoryUser("42", "ai-bot", "AI Bot", "public@example.com"), user);
         server.verify();
@@ -314,7 +314,7 @@ class GitHubApiClientTest {
                         + "{\"email\":\"bot@example.com\",\"primary\":true,\"verified\":true}]",
                         MediaType.APPLICATION_JSON));
 
-        RepositoryUser user = new GitHubApiClient(builder.build()).getAuthenticatedUser();
+        RepositoryUser user = new GitHubApiClient(builder.build()).getAuthenticatedUser("owner");
 
         assertEquals(new RepositoryUser("42", "ai-bot", "AI Bot", "bot@example.com"), user);
         server.verify();
@@ -329,7 +329,7 @@ class GitHubApiClientTest {
         server.expect(requestTo(API_URL + "/user/emails"))
                 .andRespond(withStatus(HttpStatus.FORBIDDEN));
 
-        RepositoryUser user = new GitHubApiClient(builder.build()).getAuthenticatedUser();
+        RepositoryUser user = new GitHubApiClient(builder.build()).getAuthenticatedUser("owner");
 
         assertEquals(RepositoryUser.FALLBACK_EMAIL, user.email());
         server.verify();

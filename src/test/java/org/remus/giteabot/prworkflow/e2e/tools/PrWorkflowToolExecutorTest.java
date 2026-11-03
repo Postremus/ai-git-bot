@@ -414,7 +414,7 @@ class PrWorkflowToolExecutorTest {
         }
 
         // ---- unused contract members ----
-        @Override public RepositoryUser getAuthenticatedUser() {
+        @Override public RepositoryUser getAuthenticatedUser(String o) {
             throw new UnsupportedOperationException();
         }
         @Override public String getPullRequestDiff(String o, String r, Long p) { return ""; }

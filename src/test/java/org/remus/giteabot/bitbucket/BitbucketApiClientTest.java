@@ -192,7 +192,7 @@ class BitbucketApiClientTest {
                 .andRespond(withSuccess("{\"values\":[{\"email\":\"old@example.com\",\"is_primary\":false},"
                         + "{\"email\":\"bot@example.com\",\"is_primary\":true}]}", MediaType.APPLICATION_JSON));
 
-        RepositoryUser user = new BitbucketApiClient(builder.build(), CLONE_URL).getAuthenticatedUser();
+        RepositoryUser user = new BitbucketApiClient(builder.build(), CLONE_URL).getAuthenticatedUser("owner");
 
         assertEquals(new RepositoryUser("557058:abc", "ai-bot", "AI Bot", "bot@example.com"), user);
         server.verify();
@@ -208,7 +208,7 @@ class BitbucketApiClientTest {
         server.expect(requestTo("https://api.bitbucket.org/2.0/user/emails"))
                 .andRespond(withStatus(HttpStatus.FORBIDDEN));
 
-        RepositoryUser user = new BitbucketApiClient(builder.build(), CLONE_URL).getAuthenticatedUser();
+        RepositoryUser user = new BitbucketApiClient(builder.build(), CLONE_URL).getAuthenticatedUser("owner");
 
         assertEquals(RepositoryUser.FALLBACK_EMAIL, user.email());
         server.verify();

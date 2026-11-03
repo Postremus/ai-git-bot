@@ -62,14 +62,6 @@ public class ConnectionData {
         private List<Identity> value;
     }
 
-    /** API response model for {@code _apis/profile/profiles/me}. */
-    @Data
-    @JsonIgnoreProperties(ignoreUnknown = true)
-    public static class Profile {
-
-        private String emailAddress;
-    }
-
     @Data
     @JsonIgnoreProperties(ignoreUnknown = true)
     public static class PropertyValue {

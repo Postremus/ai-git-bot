@@ -29,9 +29,10 @@ import org.remus.giteabot.repository.model.ReviewComment;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClient;
-import org.springframework.web.client.RestClientException;
+import org.springframework.web.util.UriUtils;
 
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
@@ -64,9 +65,6 @@ public class AzureDevopsApiClient implements RepositoryApiClient {
     /** {@code connectionData} exists only as a preview API and rejects a release version. */
     static final String API_VERSION_CONNECTION_DATA = "6.0-preview.1";
 
-    /** Account-level {@code connectionData}, answering for tokens scoped to all accessible organizations. */
-    static final String ACCOUNT_CONNECTION_DATA_URL = "https://app.vssps.visualstudio.com/_apis/connectionData";
-    private static final String ACCOUNT_PROFILE_URL = "https://app.vssps.visualstudio.com/_apis/profile/profiles/me";
     private static final String API_VERSION_EMAIL = "6.0";
 
     private static final int VOTE_APPROVE = 10;
@@ -205,10 +203,14 @@ public class AzureDevopsApiClient implements RepositoryApiClient {
 
     /** The path prefix addressing the organization itself, for organization-level APIs. */
     private Scope organizationScope(AzureDevopsAddress addr) {
-        if (scopesOrganization(baseUrl, addr.organization())) {
+        return organizationScope(addr.organization());
+    }
+
+    private Scope organizationScope(String organization) {
+        if (scopesOrganization(baseUrl, organization)) {
             return new Scope("/_apis", new Object[0]);
         }
-        return new Scope("/{org}/_apis", new Object[]{addr.organization()});
+        return new Scope("/{org}/_apis", new Object[]{organization});
     }
 
     /** Appends trailing URI template values to a scope's leading ones. */
@@ -896,74 +898,77 @@ public class AzureDevopsApiClient implements RepositoryApiClient {
     }
 
     /**
-     * Resolves the identity from {@code connectionData}. Its {@code id} is the same at account
-     * and organization level and is what webhook payloads and {@code @<id>} mentions identify the
+     * The identity is asked per organization, see {@link #getAuthenticatedUser(String)}.
+     * Its id is the same in every organization, but the e-mail is read from each
+     * organization's identity service, which may answer differently or not at all.
+     */
+    @Override
+    public String identityScope(String owner) {
+        return owner == null ? "" : owner.toLowerCase(Locale.ROOT);
+    }
+
+    /**
+     * Resolves the identity from {@code connectionData} inside the organization {@code owner}
+     * (the collection on Azure DevOps Server). Its {@code id} is the same at account and
+     * organization level and is what webhook payloads and {@code @<id>} mentions identify the
      * bot by. The username is the {@code Account} property, which on Azure DevOps Server lacks
      * the domain of the {@code uniqueName}, so it is only informational. It is a UPN or an account
      * name rather than a mailbox, so the e-mail address is read separately. A token without permission for that yields no
      * e-mail, see {@link RepositoryUser#FALLBACK_EMAIL}.
      * <p>
-     * {@code connectionData} only answers inside a scope the token may access. An integration on
-     * bare {@code https://dev.azure.com} serves any organization, so it asks the account-level
-     * host, which only accepts tokens scoped to all accessible organizations. Every other
-     * integration URL already names its organization or server, so it asks that.
+     * {@code connectionData} only answers inside a scope the token may access. Asking inside the
+     * event's organization, rather than at account level, is what lets an integration on bare
+     * {@code https://dev.azure.com} work with a token scoped to the organizations it serves
+     * instead of to all accessible organizations.
+     *
+     * @throws IllegalStateException when {@code owner} names no organization or the token has no identity there
      */
     @Override
-    public RepositoryUser getAuthenticatedUser() {
-        boolean accountLevel = servesAnyOrganization(baseUrl);
-        RestClient.RequestHeadersSpec<?> request = accountLevel
-                ? restClient.get().uri(URI.create(
-                        ACCOUNT_CONNECTION_DATA_URL + "?api-version=" + API_VERSION_CONNECTION_DATA))
-                : restClient.get().uri(builder -> builder
-                        .path("/_apis/connectionData")
-                        .queryParam("api-version", API_VERSION_CONNECTION_DATA)
-                        .build());
-        ConnectionData data;
-        try {
-            data = request.retrieve().body(ConnectionData.class);
-        } catch (RestClientException e) {
-            if (accountLevel) {
-                throw new IllegalStateException("Azure DevOps did not identify the token on "
-                        + "https://dev.azure.com: use a token scoped to all accessible organizations, "
-                        + "or add the organization to the integration URL (" + e.getMessage() + ")", e);
-            }
-            throw e;
+    public RepositoryUser getAuthenticatedUser(String owner) {
+        if (owner == null || owner.isBlank()) {
+            throw new IllegalStateException("Azure DevOps identifies the token per organization, but none was given");
         }
+        Scope scope = organizationScope(owner);
+        ConnectionData data = restClient.get()
+                .uri(builder -> builder
+                        .path(scope.path() + "/connectionData")
+                        .queryParam("api-version", API_VERSION_CONNECTION_DATA)
+                        .build(scope.vars()))
+                .retrieve()
+                .body(ConnectionData.class);
         ConnectionData.Identity identity = data == null ? null : data.getAuthenticatedUser();
         if (identity != null && identity.getId() != null && !identity.getId().isBlank()
                 && identity.getDisplayName() != null) {
             return new RepositoryUser(identity.getId(), identity.getDisplayName(), identity.getProviderDisplayName(),
-                    accountLevel ? fetchProfileEmail() : fetchIdentityEmail(identity.getId()));
+                    fetchIdentityEmail(owner, identity.getId()));
         }
-        throw new IllegalStateException("Azure DevOps returned no authenticated identity");
+        throw new IllegalStateException("Azure DevOps returned no authenticated identity in organization '"
+                + owner + "'");
     }
 
-    /** Reads the e-mail address where a token scoped to all accessible organizations may ask. */
-    private String fetchProfileEmail() {
-        try {
-            ConnectionData.Profile profile = restClient.get()
-                    .uri(URI.create(ACCOUNT_PROFILE_URL + "?api-version=" + API_VERSION_EMAIL))
-                    .retrieve()
-                    .body(ConnectionData.Profile.class);
-            return profile == null ? null : profile.getEmailAddress();
-        } catch (HttpClientErrorException.Unauthorized | HttpClientErrorException.Forbidden e) {
-            log.warn("The Azure DevOps token may not read the account e-mail, so commits will not link to the "
-                    + "profile: give it the User Profile (Read) scope");
-            return null;
-        }
-    }
-
-    /** Reads the e-mail address from the identity service of the organization or server. */
-    private String fetchIdentityEmail(String identityId) {
-        String query = "/_apis/identities?identityIds=" + identityId
-                + "&queryMembership=None&api-version=" + API_VERSION_EMAIL;
+    /** Reads the e-mail address from the identity service of the organization. */
+    private String fetchIdentityEmail(String organization, String identityId) {
         try {
             String identityHost = identityServiceUrl(baseUrl);
-            ConnectionData.Identities identities = (identityHost != null
-                    ? restClient.get().uri(URI.create(identityHost + query))
-                    : restClient.get().uri(query))
-                    .retrieve()
-                    .body(ConnectionData.Identities.class);
+            RestClient.RequestHeadersSpec<?> request;
+            if (identityHost != null) {
+                // Services: the identity service lives on its own host and is addressed like the
+                // integration URL, so the organization is added exactly where that URL lacks it.
+                String organizationSegment = scopesOrganization(baseUrl, organization)
+                        ? "" : "/" + UriUtils.encodePathSegment(organization, StandardCharsets.UTF_8);
+                request = restClient.get().uri(URI.create(identityHost + organizationSegment
+                        + "/_apis/identities?identityIds=" + UriUtils.encodeQueryParam(identityId, StandardCharsets.UTF_8)
+                        + "&queryMembership=None&api-version=" + API_VERSION_EMAIL));
+            } else {
+                Scope scope = organizationScope(organization);
+                request = restClient.get().uri(builder -> builder
+                        .path(scope.path() + "/identities")
+                        .queryParam("identityIds", identityId)
+                        .queryParam("queryMembership", "None")
+                        .queryParam("api-version", API_VERSION_EMAIL)
+                        .build(scope.vars()));
+            }
+            ConnectionData.Identities identities = request.retrieve().body(ConnectionData.Identities.class);
             if (identities == null || identities.getValue() == null || identities.getValue().isEmpty()) {
                 return null;
             }
@@ -990,18 +995,6 @@ public class AzureDevopsApiClient implements RepositoryApiClient {
                     + ".vssps.visualstudio.com";
         }
         return null;
-    }
-
-    /** Whether {@code url} is bare {@code https://dev.azure.com}, which names no organization. */
-    private static boolean servesAnyOrganization(String url) {
-        URI uri;
-        try {
-            uri = URI.create(url);
-        } catch (IllegalArgumentException e) {
-            return false;
-        }
-        String path = uri.getPath();
-        return "dev.azure.com".equalsIgnoreCase(uri.getHost()) && (path == null || path.isBlank() || "/".equals(path));
     }
 
     record DiffRange(String baseSha, String headSha) {

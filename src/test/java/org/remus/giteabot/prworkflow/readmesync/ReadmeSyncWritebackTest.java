@@ -61,7 +61,7 @@ class ReadmeSyncWritebackTest {
         git(seed, "push", "origin", "feature/docs");
 
         client = mock(RepositoryApiClient.class, CALLS_REAL_METHODS);
-        doReturn(RepositoryConnections.USER).when(client).getAuthenticatedUser();
+        doReturn(RepositoryConnections.USER).when(client).getAuthenticatedUser("acme");
         when(client.getPullRequestDiff("acme", "repo", 42L)).thenReturn("diff --git a/x b/x\n+changed");
         when(client.getPullRequestDetails("acme", "repo", 42L))
                 .thenReturn(Optional.of(details(PullRequestState.OPEN)));

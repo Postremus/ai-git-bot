@@ -733,16 +733,18 @@ class AzureDevopsApiClientTest {
             + "\"properties\":{\"Mail\":{\"$type\":\"System.String\",\"$value\":\"bot@example.com\"}}}]}";
 
     @Test
-    void getAuthenticatedUser_asksTheAccountLevelHostForBareDevAzureCom() {
-        RestClient.Builder builder = RestClient.builder().baseUrl("https://dev.azure.com");
+    void getAuthenticatedUser_asksInsideTheEventsOrganizationOnBareDevAzureCom() {
+        // No account-level lookup: a token scoped to the event's organization is enough.
+        RestClient.Builder builder = RestClient.builder().baseUrl(URL);
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
-        server.expect(requestTo("https://app.vssps.visualstudio.com/_apis/connectionData?api-version=6.0-preview.1"))
+        server.expect(requestTo("https://dev.azure.com/contoso/_apis/connectionData?api-version=6.0-preview.1"))
                 .andExpect(method(HttpMethod.GET))
                 .andRespond(withSuccess(IDENTITY, MediaType.APPLICATION_JSON));
-        server.expect(requestTo("https://app.vssps.visualstudio.com/_apis/profile/profiles/me?api-version=6.0"))
-                .andRespond(withSuccess("{\"emailAddress\":\"bot@example.com\"}", MediaType.APPLICATION_JSON));
+        server.expect(requestTo("https://vssps.dev.azure.com/contoso/_apis/identities"
+                        + "?identityIds=guid-1&queryMembership=None&api-version=6.0"))
+                .andRespond(withSuccess(IDENTITIES, MediaType.APPLICATION_JSON));
 
-        RepositoryUser user = newClient(builder.build(), URL, URL, null).getAuthenticatedUser();
+        RepositoryUser user = newClient(builder.build(), URL, URL, null).getAuthenticatedUser("contoso");
 
         assertEquals(new RepositoryUser("guid-1", "bot@contoso.com", "AI Bot", "bot@example.com"), user);
         server.verify();
@@ -759,7 +761,7 @@ class AzureDevopsApiClientTest {
                         + "?identityIds=guid-1&queryMembership=None&api-version=6.0"))
                 .andRespond(withSuccess(IDENTITIES, MediaType.APPLICATION_JSON));
 
-        RepositoryUser user = newClient(builder.build(), base, base, null).getAuthenticatedUser();
+        RepositoryUser user = newClient(builder.build(), base, base, null).getAuthenticatedUser("contoso");
 
         assertEquals("bot@contoso.com", user.username());
         assertEquals("bot@example.com", user.email());
@@ -767,8 +769,43 @@ class AzureDevopsApiClientTest {
     }
 
     @Test
-    void getAuthenticatedUser_asksTheServerUrl() {
+    void getAuthenticatedUser_asksTheLegacyHost() {
+        String base = "https://contoso.visualstudio.com";
+        RestClient.Builder builder = RestClient.builder().baseUrl(base);
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        server.expect(requestTo(base + "/_apis/connectionData?api-version=6.0-preview.1"))
+                .andRespond(withSuccess(IDENTITY, MediaType.APPLICATION_JSON));
+        server.expect(requestTo("https://contoso.vssps.visualstudio.com/_apis/identities"
+                        + "?identityIds=guid-1&queryMembership=None&api-version=6.0"))
+                .andRespond(withSuccess(IDENTITIES, MediaType.APPLICATION_JSON));
+
+        RepositoryUser user = newClient(builder.build(), base, base, null).getAuthenticatedUser("contoso");
+
+        assertEquals("bot@example.com", user.email());
+        server.verify();
+    }
+
+    @Test
+    void getAuthenticatedUser_asksTheEventsCollectionOnAServerWithoutCollection() {
         String base = "https://tfs.example.com/tfs";
+        RestClient.Builder builder = RestClient.builder().baseUrl(base);
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        server.expect(requestTo(base + "/DefaultCollection/_apis/connectionData?api-version=6.0-preview.1"))
+                .andRespond(withSuccess(IDENTITY, MediaType.APPLICATION_JSON));
+        server.expect(requestTo(base + "/DefaultCollection/_apis/identities"
+                        + "?identityIds=guid-1&queryMembership=None&api-version=6.0"))
+                .andRespond(withSuccess(IDENTITIES, MediaType.APPLICATION_JSON));
+
+        RepositoryUser user = newClient(builder.build(), base, base, null).getAuthenticatedUser("DefaultCollection");
+
+        assertEquals("bot@contoso.com", user.username());
+        assertEquals("bot@example.com", user.email());
+        server.verify();
+    }
+
+    @Test
+    void getAuthenticatedUser_asksTheServerCollectionNamedInTheUrl() {
+        String base = "https://tfs.example.com/tfs/DefaultCollection";
         RestClient.Builder builder = RestClient.builder().baseUrl(base);
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
         server.expect(requestTo(base + "/_apis/connectionData?api-version=6.0-preview.1"))
@@ -776,9 +813,8 @@ class AzureDevopsApiClientTest {
         server.expect(requestTo(base + "/_apis/identities?identityIds=guid-1&queryMembership=None&api-version=6.0"))
                 .andRespond(withSuccess(IDENTITIES, MediaType.APPLICATION_JSON));
 
-        RepositoryUser user = newClient(builder.build(), base, base, null).getAuthenticatedUser();
+        RepositoryUser user = newClient(builder.build(), base, base, null).getAuthenticatedUser("DefaultCollection");
 
-        assertEquals("bot@contoso.com", user.username());
         assertEquals("bot@example.com", user.email());
         server.verify();
     }
@@ -794,23 +830,10 @@ class AzureDevopsApiClientTest {
                         + "?identityIds=guid-1&queryMembership=None&api-version=6.0"))
                 .andRespond(withStatus(HttpStatus.FORBIDDEN));
 
-        RepositoryUser user = newClient(builder.build(), base, base, null).getAuthenticatedUser();
+        RepositoryUser user = newClient(builder.build(), base, base, null).getAuthenticatedUser("contoso");
 
         assertEquals(RepositoryUser.FALLBACK_EMAIL, user.email());
         server.verify();
-    }
-
-    @Test
-    void getAuthenticatedUser_explainsAnOrganizationScopedTokenOnBareDevAzureCom() {
-        RestClient.Builder builder = RestClient.builder().baseUrl("https://dev.azure.com");
-        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
-        server.expect(requestTo("https://app.vssps.visualstudio.com/_apis/connectionData?api-version=6.0-preview.1"))
-                .andRespond(withStatus(HttpStatus.UNAUTHORIZED));
-
-        IllegalStateException error = assertThrows(IllegalStateException.class,
-                () -> newClient(builder.build(), URL, URL, null).getAuthenticatedUser());
-
-        assertTrue(error.getMessage().contains("all accessible organizations"), error.getMessage());
     }
 
     @Test
@@ -822,6 +845,23 @@ class AzureDevopsApiClientTest {
                 .andRespond(withSuccess("{}", MediaType.APPLICATION_JSON));
 
         assertThrows(IllegalStateException.class,
-                () -> newClient(builder.build(), base, base, null).getAuthenticatedUser());
+                () -> newClient(builder.build(), base, base, null).getAuthenticatedUser("contoso"));
+    }
+
+    @Test
+    void getAuthenticatedUser_failsWithoutAnOrganization() {
+        AzureDevopsApiClient client = newClient(null, URL, URL, null);
+
+        assertThrows(IllegalStateException.class, () -> client.getAuthenticatedUser(null));
+        assertThrows(IllegalStateException.class, () -> client.getAuthenticatedUser(" "));
+    }
+
+    @Test
+    void identityScope_isTheOrganizationIgnoringCase() {
+        AzureDevopsApiClient client = newClient(null, URL, URL, null);
+
+        assertEquals("contoso", client.identityScope("Contoso"));
+        assertEquals(client.identityScope("contoso"), client.identityScope("CONTOSO"));
+        assertNotEquals(client.identityScope("contoso"), client.identityScope("fabrikam"));
     }
 }

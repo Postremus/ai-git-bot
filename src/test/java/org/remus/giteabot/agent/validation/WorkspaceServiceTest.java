@@ -287,7 +287,7 @@ class WorkspaceServiceTest {
                 .thenReturn(new PullRequestHead("contributor", "project", "main", forkBefore));
         when(remotes.resolve("contributor", "project"))
                 .thenReturn(forkRemote.toString());
-        when(repositoryClient.getAuthenticatedUser()).thenReturn(RepositoryConnections.USER);
+        when(repositoryClient.getAuthenticatedUser("contributor")).thenReturn(RepositoryConnections.USER);
 
         WorkspaceResult result = workspaceService.preparePullRequestWorkspace(
                 RepositoryConnections.of(repositoryClient, remotes), "base", "project", "main", 7L,

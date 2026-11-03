@@ -54,7 +54,7 @@ public class GitHubApiClient implements RepositoryApiClient {
      * yields no e-mail, see {@link RepositoryUser#FALLBACK_EMAIL}.
      */
     @Override
-    public RepositoryUser getAuthenticatedUser() {
+    public RepositoryUser getAuthenticatedUser(String owner) {
         GitHubPrivateUser user = restClient.get().uri("/user").retrieve().body(GitHubPrivateUser.class);
         if (user == null) {
             throw new IllegalStateException("GitHub returned no authenticated user");

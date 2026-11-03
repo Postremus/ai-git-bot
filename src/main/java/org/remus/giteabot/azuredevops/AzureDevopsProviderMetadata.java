@@ -33,8 +33,9 @@ import java.util.function.Supplier;
  * https://{host}/tfs/{collection}                Azure DevOps Server, with collection (one collection)
  * </pre>
  * The first and fourth carry no organization (collection), so one integration serves any
- * number of them, each resolved per event from the webhook payload; on {@code https://dev.azure.com}
- * that needs a token scoped to all accessible organizations. The other shapes pin the
+ * number of them, each resolved per event from the webhook payload. The token only has to reach
+ * the organizations that send events: everything, the bot's own identity included, is asked
+ * inside the event's organization. The other shapes pin the
  * organization (or collection) into the URL itself and therefore need one integration each —
  * {@code AzureDevopsApiClient#scopesOrganization} detects this and omits the organization from
  * request paths so it is not addressed twice.
