@@ -68,10 +68,16 @@ request:
 
 | Setting | Default | Effect |
 |---|---|---|
-| Bot is requested as reviewer | Always on | Runs when a developer requests the bot as a reviewer on the PR. |
+| Bot is requested as reviewer | Always on | Runs when the PR is opened with the bot as a reviewer, or when a developer requests the bot as a reviewer later. |
+| Bot is assigned to the PR | Always on | Runs when the PR is opened with the bot as an assignee, or when the bot is assigned to the PR later (Gitea, GitHub, GitLab). |
 | **Run workflow when PR is opened** | Off | Runs on every new or reopened PR, no reviewer request needed. |
-| **Run workflow when PR head is updated** | Off | Runs configured workflows on every `synchronized` event (new commits pushed to the PR branch). GitHub and Gitea only. |
+| **Run workflow when PR head is updated** | Off | Runs configured workflows whenever new commits are pushed to the PR branch. Title and description edits, label changes and reviewer votes do not count. |
 | **Branch Filter** | Blank (all refs allowed) | Restricts triggering to PRs whose target (base) branch matches the comma-separated glob list — e.g. `releases/*` runs workflows only on PRs into a release branch. A non-matching PR is ignored — no workflow, no PR comment — and the skip is logged at `INFO`. |
+
+Opening a PR with the bot as reviewer or assignee makes most providers send several
+events at once (opened, review requested, assigned). They all ask for the same commit, so
+only the first one starts a run; further automatic triggers for that commit within a
+minute are dropped. An explicit "review again" comment always runs.
 
 Turn on **Run workflow when PR is opened** if you want a workflow to run for
 every PR unconditionally.
@@ -90,6 +96,46 @@ branches: the filter is matched against the PR's target (base) branch, falling
 back to the source (head) branch only when no base ref is present. The filter only
 affects whether a PR workflow *starts*; it does not change the workflow's
 behaviour once it runs, and it does not affect issue/agent workflows.
+
+#### Triggers per Git provider
+
+Every provider's webhooks go through the same rules, so the settings above mean the same
+thing everywhere. What differs is which events a provider can send at all:
+
+| Trigger | Gitea | GitHub | GitLab | Bitbucket Cloud | Azure DevOps |
+|---|---|---|---|---|---|
+| PR opened | ✅ | ✅ | ✅ | ✅ | ✅ |
+| New commits pushed (**Run workflow when PR head is updated**) | ✅ | ✅ | ✅ | ✅ ¹ | ✅ ¹ |
+| Bot requested as reviewer after the PR was opened | ✅ | ✅ | ✅ | ✅ ¹ | ✅ ¹ |
+| Bot assigned to the PR | ✅ | ✅ | ✅ | — | — |
+| PR reopened | ✅ | ✅ | ✅ | — | ✅ (reactivated) ¹ |
+| PR closed or merged (ends the bot's session for the PR) | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Comment or inline code comment mentioning the bot | ✅ | ✅ | ✅ | ✅ ² | ✅ |
+| "Review again" comment from the PR author | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Review submitted on the PR | ✅ | ✅ | — | — | — |
+| Issue assigned to the bot, issue opened, issue comment | ✅ | ✅ | ✅ | — | — |
+
+¹ Bitbucket Cloud and Azure DevOps send one "pull request updated" event for pushes,
+edits, reviewer changes and votes alike, without saying what changed. The bot tells them
+apart by comparing each event with the previous one it saw for that PR. That memory is
+not kept across restarts: the first event for an existing PR after a restart counts as a
+push, and — when the bot is a listed reviewer — as a review request, so it can cause one
+extra review per PR, but never a missed one. The other providers mark pushes themselves:
+Gitea and GitHub with a `synchronized`/`synchronize` action, GitLab with `oldrev`.
+
+² Mentions must be picked from Bitbucket's `@` autocomplete; see
+[Bitbucket Setup](BITBUCKET_SETUP.md).
+
+A comment that mentions the bot on a PR the bot created from an issue continues that
+issue's agent session; on any other PR it runs the matching slash command, or the review
+when no command matches. Who may trigger the bot from a PR comment depends on the kind of
+comment and on the bot's **User Whitelist**:
+
+| Comment mentioning the bot | Without a whitelist | With a whitelist |
+|---|---|---|
+| Conversation comment | Anyone | The listed users |
+| Inline code comment | The PR author | The PR author, if listed |
+| "Review again" | The PR author | The PR author, if listed |
 
 ### 4. (Optional) trigger it by hand
 

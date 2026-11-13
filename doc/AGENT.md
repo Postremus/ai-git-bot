@@ -32,7 +32,7 @@ flowchart LR
 
 Both agents post visible progress, error, and completion comments on the issue. Repository context gathering is not posted publicly. For the coding agent, build/test output may be posted when validation fails so users can understand why the bot is retrying.
 
-Treat the model's text in those comments as unreviewed output: an answer is published verbatim, so a model that read a file (a `.env`, a config with credentials) can quote it, and any `@name` it writes lands in a public comment. The bot ignores webhook events from its own user (`BotWebhookService#isBotUser`, checked in every platform handler), so a self-mention cannot make it respond to its own comment.
+Treat the model's text in those comments as unreviewed output: an answer is published verbatim, so a model that read a file (a `.env`, a config with credentials) can quote it, and any `@name` it writes lands in a public comment. The bot ignores webhook events from its own user (`BotIdentity#triggered`, set by every provider's webhook translator and enforced once in `WebhookEventDispatcher`), so a self-mention cannot make it respond to its own comment.
 
 ## How a coding run ends
 

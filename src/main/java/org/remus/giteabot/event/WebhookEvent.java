@@ -1,0 +1,54 @@
+package org.remus.giteabot.event;
+
+import lombok.Builder;
+import org.remus.giteabot.event.model.WebhookPayload;
+
+/**
+ * A webhook after provider translation: what happened, the provider-neutral payload,
+ * and the facts about the bot that only the provider can establish.
+ * <p>
+ * Translators fill in every bot-relative fact ({@code fromBot}, {@code botIsReviewer},
+ * {@code botIsAssignee}, {@code botMentioned}) because matching the bot's identity differs per provider —
+ * a login on Gitea/GitHub/GitLab, an {@code account_id} on Bitbucket, a
+ * {@code uniqueName} on Azure DevOps. The dispatcher never inspects raw payloads
+ * or compares users itself.
+ *
+ * @param kind          what happened
+ * @param payload       the translated payload; {@code null} only for {@link WebhookEventKind#IGNORED}
+ * @param fromBot       the event was triggered by the bot itself and must not be acted on
+ * @param botIsReviewer the bot is currently among the pull request's requested reviewers
+ * @param botIsAssignee the bot is currently among the pull request's assignees
+ * @param botMentioned  the comment body addresses the bot (only meaningful for comment kinds)
+ * @param botAlias      the readable alias the bot is addressed by, e.g. {@code @claude_bot};
+ *                      Bitbucket rewrites its {@code @{account_id}} markup to this before
+ *                      the payload reaches the dispatcher
+ * @param ignoreReason  why the event is ignored, for logging; only set for {@link WebhookEventKind#IGNORED}
+ */
+@Builder
+public record WebhookEvent(
+        WebhookEventKind kind,
+        WebhookPayload payload,
+        boolean fromBot,
+        boolean botIsReviewer,
+        boolean botIsAssignee,
+        boolean botMentioned,
+        String botAlias,
+        String ignoreReason) {
+
+    public WebhookEvent {
+        if (kind == null) {
+            throw new IllegalArgumentException("kind must not be null");
+        }
+        if (kind != WebhookEventKind.IGNORED && payload == null) {
+            throw new IllegalArgumentException("payload must not be null for " + kind);
+        }
+    }
+
+    /** An event the bot does not react to. */
+    public static WebhookEvent ignored(String reason) {
+        return WebhookEvent.builder()
+                .kind(WebhookEventKind.IGNORED)
+                .ignoreReason(reason)
+                .build();
+    }
+}

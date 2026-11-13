@@ -63,11 +63,14 @@ Note the **Webhook Secret** that is generated — you'll need this for the next 
      - Replace `{webhook_secret}` with your bot's webhook secret
    - **Triggers**: Select the following:
      - Pull request: Created
-     - Pull request: Updated (for reviewer-list changes only; pushes alone are ignored)
+     - Pull request: Updated (the bot being added as a reviewer; new commits, when **Run workflow when PR head is updated** is enabled)
+     - Pull request: Merged and Declined (ends the bot's session for the pull request)
      - Pull request: Comment created (for bot commands and comment-based re-review)
 5. Click **Save**
 
 ## Review Workflow
+
+See [Trigger conditions](PR_WORKFLOWS.md#trigger-conditions) for every trigger per provider.
 
 - First review: create the pull request with the bot already listed as a reviewer, or add the bot as a reviewer after opening the PR.
 - Re-review: Bitbucket Cloud does not provide the same reviewer re-request workflow as GitHub/Gitea. The PR author can request another review by adding a PR comment that mentions the bot and asks for another review, for example:
@@ -78,8 +81,8 @@ Note the **Webhook Secret** that is generated — you'll need this for the next 
 
 - Mentions must be created with Bitbucket's `@` autocomplete, so that Bitbucket stores them as an account mention (`@{account_id}` in the comment's raw markup). Plain text such as `@ai_bot` that was not picked from the autocomplete is not recognised.
 
-- New commits: pushing to the PR does not run another review. Add the comment above when you want a fresh review.
-- PR and inline comments that mention the bot are handled only when they are written by the pull request author.
+- New commits: pushing to the PR runs another review only when **Run workflow when PR head is updated** is enabled on the bot. Otherwise add the comment above when you want a fresh review.
+- Comments: a PR comment that mentions the bot is answered whoever wrote it; an inline code comment, and a "review again" request, only when written by the pull request author. With a **User Whitelist** on the bot, the commenter must be listed in every case.
 
 ## Step 5: Test the Integration
 

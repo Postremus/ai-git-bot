@@ -170,7 +170,7 @@ class BotWebhookServiceTest {
         // M1: the CodeReviewService construction was extracted into
         // CodeReviewServiceFactory. Reproduce the legacy behaviour (real
         // CodeReviewService built from mocked AI/Git/session deps) here so
-        // the existing handlePrComment / handleBotCommand routing tests
+        // the existing handlePrComment routing tests
         // keep observing the same downstream side-effects on `sessionService`.
         lenient().when(codeReviewServiceFactory.create(any(Bot.class),
                         any(RepositoryApiClient.class), eq(120000), eq(8), eq(60000), any()))
@@ -192,51 +192,6 @@ class BotWebhookServiceTest {
         lenient().when(repositoryPlatformFactory.getApiClient(any())).thenReturn(repositoryApiClient);
         repositoryPlatform = org.mockito.Mockito.spy(TestPlatforms.of(repositoryApiClient));
         lenient().when(repositoryPlatformFactory.getPlatform(any())).thenReturn(repositoryPlatform);
-    }
-
-    // ---- isBotUser tests ----
-
-    @Test
-    void isBotUser_senderMatchesBotUsername_returnsTrue() {
-        Bot bot = createBot("test-bot", "ai_bot");
-        WebhookPayload payload = new WebhookPayload();
-        WebhookPayload.Owner sender = new WebhookPayload.Owner();
-        sender.setLogin("ai_bot");
-        payload.setSender(sender);
-
-        assertTrue(botWebhookService.isBotUser(bot, payload));
-    }
-
-    @Test
-    void isBotUser_senderDoesNotMatch_returnsFalse() {
-        Bot bot = createBot("test-bot", "ai_bot");
-        WebhookPayload payload = new WebhookPayload();
-        WebhookPayload.Owner sender = new WebhookPayload.Owner();
-        sender.setLogin("human_user");
-        payload.setSender(sender);
-
-        assertFalse(botWebhookService.isBotUser(bot, payload));
-    }
-
-    @Test
-    void isBotUser_commentUserMatchesBotUsername_returnsTrue() {
-        Bot bot = createBot("test-bot", "ai_bot");
-        WebhookPayload payload = new WebhookPayload();
-        WebhookPayload.Comment comment = new WebhookPayload.Comment();
-        WebhookPayload.Owner user = new WebhookPayload.Owner();
-        user.setLogin("ai_bot");
-        comment.setUser(user);
-        payload.setComment(comment);
-
-        assertTrue(botWebhookService.isBotUser(bot, payload));
-    }
-
-    // ---- getBotAlias tests ----
-
-    @Test
-    void getBotAlias_returnsMentionFormat() {
-        Bot bot = createBot("test-bot", "ai_bot");
-        assertEquals("@ai_bot", botWebhookService.getBotAlias(bot));
     }
 
     @Test
@@ -515,6 +470,65 @@ class BotWebhookServiceTest {
             Bot bot = createBot("b", "ai_bot");
             bot.setBranchFilter("develop");
             botWebhookService.reviewPullRequest(bot, prPayloadNoBase());
+            verify(prWorkflowOrchestrator, never()).runAll(any(Bot.class), any(WebhookPayload.class));
+        }
+
+        /** A "review again" comment on GitHub: the pull request is derived from the issue. */
+        private WebhookPayload prPayloadWithoutHeadAndBase() {
+            WebhookPayload payload = new WebhookPayload();
+            WebhookPayload.Repository repository = new WebhookPayload.Repository();
+            repository.setName("my-repo");
+            repository.setOwner(owner("Test"));
+            payload.setRepository(repository);
+            WebhookPayload.PullRequest pr = new WebhookPayload.PullRequest();
+            pr.setNumber(42L);
+            payload.setPullRequest(pr);
+            return payload;
+        }
+
+        private void stubPullRequestDetails(String baseRef) {
+            when(repositoryApiClient.getPullRequestDetails("Test", "my-repo", 42L))
+                    .thenReturn(Optional.of(new org.remus.giteabot.repository.model.PullRequestDetails(
+                            "title", "body", org.remus.giteabot.repository.model.PullRequestState.OPEN,
+                            "feature/x", "abc123", baseRef, "def456")));
+        }
+
+        @Test
+        void payloadWithoutHeadAndBase_isHydratedBeforeTheFilter_andProceedsOnAMatch() {
+            Bot bot = createBot("b", "ai_bot");
+            bot.setBranchFilter("main");
+            stubPullRequestDetails("main");
+            WebhookPayload payload = prPayloadWithoutHeadAndBase();
+
+            botWebhookService.reviewPullRequest(bot, payload);
+
+            verify(prWorkflowOrchestrator).runAll(bot, payload);
+            assertEquals("feature/x", payload.getPullRequest().getHead().getRef());
+            assertEquals("abc123", payload.getPullRequest().getHead().getSha());
+            assertEquals("main", payload.getPullRequest().getBase().getRef());
+        }
+
+        @Test
+        void payloadWithoutHeadAndBase_isHydratedBeforeTheFilter_andSkippedOnAMismatch() {
+            Bot bot = createBot("b", "ai_bot");
+            bot.setBranchFilter("releases/*");
+            stubPullRequestDetails("main");
+
+            botWebhookService.reviewPullRequest(bot, prPayloadWithoutHeadAndBase());
+
+            verify(prWorkflowOrchestrator, never()).runAll(any(Bot.class), any(WebhookPayload.class));
+        }
+
+        @Test
+        void callerOutsideTheWhitelist_isRejectedWithoutFetchingThePullRequest() {
+            Bot bot = createBot("b", "ai_bot");
+            when(botService.getAllowedUsernames(bot)).thenReturn(Set.of("alice"));
+            WebhookPayload payload = prPayloadWithoutHeadAndBase();
+            payload.setSender(owner("mallory"));
+
+            botWebhookService.reviewPullRequest(bot, payload);
+
+            verify(repositoryApiClient, never()).getPullRequestDetails(any(), any(), any());
             verify(prWorkflowOrchestrator, never()).runAll(any(Bot.class), any(WebhookPayload.class));
         }
 
@@ -1147,7 +1161,7 @@ class BotWebhookServiceTest {
 
         @Test
         void noAgentSession_whitelist_nonAuthorNotInWhitelist_isIgnored() {
-            // Whitelist configured and commenter is neither PR author nor in whitelist → rejected.
+            // Whitelist configured and commenter is not in it → rejected.
             WebhookPayload nonAuthorPayload = buildPrCommentPayload(OWNER, REPO, PR_NUMBER, COMMENT_ID,
                     "@claude_bot please review");
             nonAuthorPayload.getComment().getUser().setLogin("stranger");
@@ -1166,27 +1180,23 @@ class BotWebhookServiceTest {
         }
 
         @Test
-        void noAgentSession_whitelist_prAuthorNotInWhitelist_isAllowed() {
-            // Whitelist configured but commenter IS the PR author (not in whitelist) → allowed.
+        void noAgentSession_whitelist_prAuthorNotInWhitelist_isIgnored() {
+            // The whitelist is strict: being the PR author does not get a commenter past it.
             WebhookPayload authorPayload = buildPrCommentPayload(OWNER, REPO, PR_NUMBER, COMMENT_ID,
                     "@claude_bot please review");
             // PR author is "tom" (default), commenter is also "tom"
             // Whitelist does NOT contain "tom"
 
-            when(agentSessionService.getSessionByIssue(OWNER, REPO, PR_NUMBER))
-                    .thenReturn(Optional.empty());
-            when(agentSessionService.getSessionByPr(OWNER, REPO, PR_NUMBER))
-                    .thenReturn(Optional.empty());
-
             Bot bot = createBot("bot", "claude_bot");
             bot.setUserWhitelist("alice, bob");
             Set<String> allowedSet = Set.of("alice", "bob");
             when(botService.getAllowedUsernames(bot)).thenReturn(allowedSet);
+            when(botService.isUsernameInSet(eq(allowedSet), eq("tom"))).thenReturn(false);
 
             botWebhookService.handlePrComment(bot, authorPayload);
 
-            // PR author is allowed even though not in the whitelist
-            verify(sessionService).getOrCreateSession(OWNER, REPO, PR_NUMBER, "system-prompt:1");
+            verify(sessionService, never()).getOrCreateSession(any(), any(), any(), any());
+            verify(agentSessionService, never()).getSessionByPr(any(), any(), any());
         }
 
         @Test

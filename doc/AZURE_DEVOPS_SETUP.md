@@ -166,6 +166,8 @@ Service Hook subscription's configuration (and the URL/secret combination) as se
 
 ## Review Workflow
 
+See [Trigger conditions](PR_WORKFLOWS.md#trigger-conditions) for every trigger per provider.
+
 - First review: create the pull request with the bot already listed as a reviewer, or add
   the bot as a reviewer after opening the PR. Both work without **Run on PR creation** or
   **Run on PR update**; adding the bot as a reviewer is an explicit request for a review,

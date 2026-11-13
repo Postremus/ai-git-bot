@@ -84,7 +84,7 @@ You'll enter this token when creating a **Git Integration** in the bot's web UI.
 
 Webhooks tell GitLab to notify the bot when merge request events occur. Each bot has a unique webhook URL.
 
-Code reviews are explicit-request only: pushes to an existing merge request do not trigger another review by themselves.
+By default, a review runs when a merge request is opened with the bot as a reviewer, or when the bot is requested as a reviewer or assigned later; pushes to an existing merge request trigger another review only when **Run workflow when PR head is updated** is enabled. See [Trigger conditions](PR_WORKFLOWS.md#trigger-conditions) for every trigger per provider.
 
 ### Getting the Webhook URL
 
@@ -101,7 +101,7 @@ Code reviews are explicit-request only: pushes to an existing merge request do n
    - **URL:** Paste the bot's webhook URL
    - **Secret token:** Set a strong random secret here and enter the same value as **Webhook signing secret** on the bot. AI-Git-Bot then compares the `X-Gitlab-Token` header of every delivery and rejects forged events. (Leave empty only on fully trusted networks — authentication then relies solely on the URL path secret.)
 4. Under **Trigger**, enable:
-   - ✅ **Merge request events** (MR opened, reviewer added/re-requested, MR closed/merged)
+   - ✅ **Merge request events** (MR opened/reopened, new commits, reviewer added/re-requested, bot assigned, MR closed/merged)
    - ✅ **Comments** (for bot commands in MR comments and review-request fallback comments)
    - ✅ **Issues events** (only if using the agent feature)
 5. Ensure **Enable SSL verification** is checked (if applicable)
@@ -141,9 +141,9 @@ In the bot's web UI:
 ## Review Workflow
 
 - First review: create the merge request with the bot already listed as a reviewer, or add the bot as a reviewer after opening the MR.
-- Re-review: re-request the bot as reviewer. If your GitLab version or workflow cannot re-request a reviewer, the MR author can comment with the bot mention and review intent, for example `@ai-code-reviewer please review this again`.
-- New commits: pushing to the MR does not run another review. Re-request the bot when you want a fresh review.
-- MR and inline comments that mention the bot are handled only when they are written by the merge request author.
+- Re-review: re-request the bot as reviewer, or, as the MR author, comment with the bot mention and review intent, for example `@ai-code-reviewer please review this again`.
+- New commits: pushing to the MR runs another review only when **Run workflow when PR head is updated** is enabled on the bot. Otherwise re-request the bot when you want a fresh review.
+- Comments: a MR comment that mentions the bot is answered whoever wrote it; an inline code comment, and a "review again" request, only when written by the merge request author. With a **User Whitelist** on the bot, the commenter must be listed in every case.
 
 ### Post-review Action
 
@@ -182,8 +182,8 @@ Self-managed GitLab instances may have different rate limits than gitlab.com. Mo
 After setup, create a test merge request. The bot should:
 
 1. Post an AI-generated code review when the bot is requested as reviewer
-2. Ignore pushes to the MR until the bot is explicitly re-requested
-3. Respond when the MR author mentions the bot in MR comments (e.g., `@ai-code-reviewer explain this`)
+2. Ignore pushes to the MR until the bot is explicitly re-requested (unless **Run workflow when PR head is updated** is enabled)
+3. Respond when mentioned in MR comments (e.g., `@ai-code-reviewer explain this`)
 4. Respond to inline discussion comments from the MR author that mention the bot
 
 > **Note:** The bot will **not** add 👀 reaction acknowledgements due to the GitLab API limitation mentioned above.
